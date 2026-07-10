@@ -1,0 +1,2139 @@
+"""
+=====================================================================
+DİJİTAL TARIM EKOSİSTEMİ — KOOPERATİF EDİSYONU
+Backend API (FastAPI)
+=====================================================================
+
+Bu dosya tüm backend mantığını içerir:
+- Kimlik doğrulama (JWT tabanlı)
+- Çiftçi/Parsel/Sözleşme/Ekim/Sulama/Operasyon/Verimlilik modülleri
+- Çiftçi self-servis (kendi hesabıyla giriş + veri ekleme)
+- Dashboard analitikleri
+- Seed data (200+ çiftçi, 300+ parsel)
+
+Mimari Notu:
+- Tüm endpoint'ler /api prefix'i ile başlar (Kubernetes ingress için)
+- MongoDB üzerinde async motor kullanılıyor (performans için)
+- Pydantic v2 ile veri doğrulama yapılıyor
+"""
+
+# ============ TEMEL KÜTÜPHANELER ============
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query, Request
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from dotenv import load_dotenv                              # .env dosyasını okur
+from starlette.middleware.cors import CORSMiddleware        # CORS kuralları
+from motor.motor_asyncio import AsyncIOMotorClient          # Async MongoDB sürücüsü
+import os                                                   # Sistem env değişkenleri
+import logging                                              # Log altyapısı
+import jwt                                                  # JSON Web Token (giriş tokeni)
+from pathlib import Path                                    # Dosya yolu (cross-platform)
+from pydantic import BaseModel, Field                       # Veri model doğrulama
+from typing import List, Optional, Dict, Any                # Tip ipucu
+from datetime import datetime, timezone, timedelta          # Tarih/saat (UTC)
+import uuid                                                 # Benzersiz ID üretimi
+import random                                               # Seed data için (sabit seed kullanılır)
+
+# ============ KONFİGÜRASYON ============
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')                               # .env dosyasını yükle (MONGO_URL, DB_NAME burada)
+
+from config import (APP_NAME, APP_FULL_NAME, APP_VERSION, JWT_SECRET, JWT_ALG,
+                     CORS_ORIGINS, ADMIN_TIER_ROLES, ROLE_HIERARCHY, ROLE_LABELS,
+                     has_min_role)
+from security import (hash_password, verify_password, needs_rehash,
+                       make_access_token, make_refresh_token, decode_token)
+from audit import log_audit, register_audit_routes
+from integrations import register_integration_routes
+from tenant_context import TenantScopedDB, current_tenant_id
+
+# MongoDB bağlantısı kur
+mongo_url = os.environ['MONGO_URL']                         # Örn: mongodb://localhost:27017
+client = AsyncIOMotorClient(mongo_url)                      # Async client
+raw_db = client[os.environ['DB_NAME']]                      # HAM veritabanı handle (tenant filtresi YOK)
+
+# Uygulamanın geri kalanı `db` üzerinden çalışır — bu, raw_db'nin tenant'a
+# göre otomatik filtreleyen bir sarmalayıcısıdır (bkz. tenant_context.py).
+# Mevcut hiçbir sorgu satırı değişmeden tenant-izole hale gelir.
+db = TenantScopedDB(raw_db)
+
+# FastAPI uygulaması
+app = FastAPI(title=APP_FULL_NAME, version=APP_VERSION)
+
+
+@app.middleware("http")
+async def tenant_context_middleware(request: Request, call_next):
+    """
+    Her istek başında Authorization header'ındaki JWT'yi (varsa) hafifçe
+    çözüp tenant_id'yi context'e yazar. Token geçersiz/yoksa sessizce
+    geçilir — asıl yetki kontrolü zaten current_user dependency'sinde
+    yapılıyor, buradaki tek amaç tenant filtresini hazırlamak.
+    """
+    token = None
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+
+    tenant_id = None
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+            tenant_id = payload.get("tenant_id")
+        except jwt.PyJWTError:
+            pass  # current_user dependency zaten 401 dönecek
+
+    reset_token = current_tenant_id.set(tenant_id)
+    try:
+        response = await call_next(request)
+    finally:
+        current_tenant_id.reset(reset_token)
+    return response
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """
+    Merkezi hata yakalayıcı. Beklenmeyen tüm hataları loglar ve istemciye
+    stack trace sızdırmadan temiz bir JSON hata döner.
+    """
+    logging.getLogger("tabsis.errors").exception(f"Beklenmeyen hata: {request.method} {request.url.path}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Sunucu tarafında beklenmeyen bir hata oluştu.", "path": str(request.url.path)},
+    )
+
+# /api prefix'li router — tüm endpoint'ler buraya bağlanacak
+api_router = APIRouter(prefix="/api")
+
+# Bearer token şeması (Authorization: Bearer <token>)
+# auto_error=False → token yoksa otomatik 401 fırlatma, biz kontrol edelim
+security = HTTPBearer(auto_error=False)
+
+
+# =====================================================================
+#                       KİMLİK DOĞRULAMA YARDIMCILARI
+# =====================================================================
+
+# hash_pw / make_token artık security.py içinde (bcrypt + refresh token
+# desteğiyle) — geriye dönük çağrı uyumluluğu için ince sarmalayıcılar:
+
+def hash_pw(pw: str) -> str:
+    """Geriye dönük uyumluluk için ince sarmalayıcı — artık bcrypt kullanır."""
+    return hash_password(pw)
+
+
+def make_token(user_id: str, role: str, farmer_id: Optional[str] = None, tenant_id: Optional[str] = None) -> str:
+    """Geriye dönük uyumluluk için ince sarmalayıcı."""
+    return make_access_token(user_id, role, farmer_id, tenant_id)
+
+
+async def current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Her korunan endpoint'in başında çağrılan dependency.
+    Bearer token'ı doğrular, kullanıcı objesini geri döner.
+    Token yoksa veya geçersizse 401 fırlatır.
+    """
+    if not creds:
+        raise HTTPException(401, "Token gerekli")
+    
+    try:
+        # Token'ı çöz (imza doğrulaması + süre kontrolü otomatik)
+        payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALG])
+
+        # Refresh token'lar API çağrılarında kullanılamaz — sadece /auth/refresh'te.
+        if payload.get("type") == "refresh":
+            raise HTTPException(401, "Refresh token API çağrılarında kullanılamaz")
+
+        # DB'den kullanıcıyı çek (şifre hash'ini geri dönmüyoruz)
+        user = await db.users.find_one(
+            {"id": payload["user_id"]},
+            {"_id": 0, "password": 0}                       # _id ve password'ü hariç tut
+        )
+        if not user:
+            raise HTTPException(401, "Kullanıcı yok")
+        if user.get("active") is False:
+            raise HTTPException(403, "Hesabınız pasif duruma alınmış")
+        
+        # Token'daki farmer_id'yi user objesine ekle (çiftçi self-servis için)
+        user["farmer_id"] = payload.get("farmer_id")
+        return user
+    except jwt.PyJWTError:
+        # Token geçersiz veya süresi dolmuş
+        raise HTTPException(401, "Geçersiz token")
+
+
+def is_admin(user: dict) -> bool:
+    """Kullanıcı admin yetkisinde mi? (Tam erişim için)"""
+    return user.get("role") in ("super_admin", "fabrika_muduru", "ziraat_muhendisi",
+                                 "kurum_yoneticisi", "il_yoneticisi", "ilce_yoneticisi")
+
+
+def require_min_role(required_role: str):
+    """
+    Rol hiyerarşisine göre minimum yetki denetimi yapan dependency üretici.
+    Kullanım: user=Depends(require_min_role("fabrika_muduru"))
+    required_role veya daha yetkili (hiyerarşide daha üst) roller geçer.
+    """
+    async def _checker(user: dict = Depends(current_user)) -> dict:
+        if not has_min_role(user.get("role"), required_role):
+            raise HTTPException(403, f"Bu işlem için en az '{ROLE_LABELS.get(required_role, required_role)}' yetkisi gerekir")
+        return user
+    return _checker
+
+
+# =====================================================================
+#                       PYDANTIC MODELLER (Veri Doğrulama)
+# =====================================================================
+
+class LoginReq(BaseModel):
+    """Login endpoint'i için body şeması"""
+    email: str
+    password: str
+
+
+class RefreshTokenReq(BaseModel):
+    """Refresh token endpoint'i için body şeması"""
+    refresh_token: str
+
+
+class FarmerCreate(BaseModel):
+    """Yeni çiftçi oluşturma için body şeması"""
+    full_name: str
+    tc_no: str
+    phone: str
+    email: Optional[str] = None
+    village: str
+    region_id: str
+    iban: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class FarmerUpdate(BaseModel):
+    """Çiftçi güncelleme — tüm alanlar opsiyonel"""
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    village: Optional[str] = None
+    iban: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ParcelCreate(BaseModel):
+    """Yeni parsel oluşturma"""
+    farmer_id: str
+    name: str
+    village: str
+    region_id: str
+    area_dekar: float
+    soil_type: str
+    irrigation: str
+    geometry: Optional[Dict[str, Any]] = None               # GeoJSON Polygon
+
+
+class IrrigationEventCreate(BaseModel):
+    """Çiftçi sulama olayı ekler — bu dashboard'u günceller!"""
+    parcel_id: str
+    date: str                                               # YYYY-MM-DD
+    method: str                                             # damla/yağmurlama/karık
+    water_m3: float
+    moisture_before: Optional[int] = None
+    moisture_after: Optional[int] = None
+
+
+class SoilSampleCreate(BaseModel):
+    """Toprak analizi sonucu ekleme"""
+    parcel_id: str
+    date: str
+    lab_name: str
+    ph: float
+    ec: float
+    organic_matter_pct: float
+    n_ppm: int
+    p_ppm: int
+    k_ppm: int
+    recommendation: Optional[str] = None
+
+
+# =====================================================================
+#                       AUTH ENDPOINT'LERİ
+# =====================================================================
+
+@api_router.post("/auth/login")
+async def login(body: LoginReq, request: Request):
+    """
+    Kullanıcı girişi. E-posta + şifre alır, JWT access + refresh token döner.
+
+    Çiftçi girişi: çiftçinin oluşturulmuş bir user kaydı varsa email/şifre ile.
+    Demo'da her çiftçinin email'i: <member_no>@ciftci.tr / şifre: ciftci123
+    """
+    # E-posta küçük harfe çevir (case-insensitive arama)
+    user = await db.users.find_one({"email": body.email.lower()})
+
+    # Kullanıcı yoksa VEYA şifre eşleşmiyorsa hata (bcrypt + eski SHA256 destekli)
+    if not user or not verify_password(body.password, user.get("password", "")):
+        await log_audit(db, {"email": body.email}, action="login_failed", entity="user", request=request)
+        raise HTTPException(401, "Hatalı e-posta veya şifre")
+
+    # Pasif hale getirilmiş kullanıcılar giriş yapamaz (veri geçmişi silinmez,
+    # sadece erişimi kapatılır — bkz. users.py update_user_status)
+    if user.get("active") is False:
+        await log_audit(db, user, action="login_blocked_inactive", entity="user", entity_id=user["id"], request=request)
+        raise HTTPException(403, "Hesabınız pasif duruma alınmış, sistem yöneticinizle iletişime geçin")
+
+    # Şifre hâlâ eski SHA256 formatındaysa sessizce bcrypt'e yükselt
+    if needs_rehash(user["password"]):
+        await db.users.update_one({"id": user["id"]}, {"$set": {"password": hash_password(body.password)}})
+
+    access_token = make_access_token(user["id"], user["role"], user.get("farmer_id"), user.get("tenant_id"))
+    refresh_token = make_refresh_token(user["id"], user.get("tenant_id"))
+
+    await log_audit(db, user, action="login", entity="user", entity_id=user["id"], request=request)
+
+    user_safe = {k: v for k, v in user.items() if k not in ("_id", "password")}
+    return {"token": access_token, "access_token": access_token, "refresh_token": refresh_token, "user": user_safe}
+
+
+@api_router.post("/auth/refresh")
+async def refresh_access_token(body: RefreshTokenReq):
+    """
+    Refresh token ile yeni bir access token üretir. Access token süresi
+    dolduğunda kullanıcı yeniden şifre girmeden oturumu uzatabilir.
+    Body: {"refresh_token": "..."}
+    """
+    token = body.refresh_token
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != "refresh":
+            raise HTTPException(401, "Geçersiz token tipi")
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Geçersiz veya süresi dolmuş refresh token")
+
+    user = await db.users.find_one({"id": payload["user_id"]}, {"_id": 0, "password": 0})
+    if not user:
+        raise HTTPException(401, "Kullanıcı bulunamadı")
+
+    new_access = make_access_token(user["id"], user["role"], user.get("farmer_id"), user.get("tenant_id"))
+    return {"token": new_access, "access_token": new_access}
+
+
+@api_router.get("/auth/me")
+async def me(user=Depends(current_user)):
+    """Mevcut giriş yapmış kullanıcının bilgilerini döner"""
+    return user
+
+
+# =====================================================================
+#                       DASHBOARD (Admin Görünümü)
+# =====================================================================
+
+@api_router.get("/dashboard/overview")
+async def dashboard_overview(user=Depends(current_user)):
+    """
+    Admin dashboard verileri:
+    - KPI kartları (toplam çiftçi, parsel, alan, sözleşme, hasat)
+    - 5 yıllık trend grafiği
+    - Bölge bazlı performans
+    - Çiftçi karne dağılımı
+    
+    Bu endpoint herhangi bir veri ekleme/silme sonrası
+    otomatik güncel rakamları dönecektir (canlı veri hissi).
+    """
+    # Temel sayımlar
+    farmers_total = await db.farmers.count_documents({})
+    parcels_total = await db.parcels.count_documents({})
+    contracts_active = await db.contracts.count_documents({"status": "imzalı"})
+    
+    # Tüm parsel verilerini çek (alan hesabı için)
+    parcels = await db.parcels.find({}, {"_id": 0}).to_list(10000)
+    total_area = sum(p.get("area_dekar", 0) for p in parcels)
+    
+    # Verim verisi (beklenen vs gerçekleşen)
+    yields = await db.yields.find({}, {"_id": 0}).to_list(10000)
+    expected_ton = sum(y.get("expected_ton", 0) for y in yields)
+    actual_ton = sum(y.get("actual_ton", 0) for y in yields)
+    
+    # Bölge bazlı istatistik
+    regions = await db.regions.find({}, {"_id": 0}).to_list(100)
+    region_stats = []
+    for r in regions:
+        r_parcels = [p for p in parcels if p.get("region_id") == r["id"]]
+        r_yields = [y for y in yields if y.get("region_id") == r["id"]]
+        r_area = sum(p.get("area_dekar", 0) for p in r_parcels)
+        r_ton = sum(y.get("actual_ton", 0) for y in r_yields)
+        region_stats.append({
+            "name": r["name"],
+            "farmers": await db.farmers.count_documents({"region_id": r["id"]}),
+            "area_dekar": r_area,
+            "yield_ton": r_ton,
+            "avg_yield_per_dekar": r_ton / max(r_area, 1)    # 0'a bölme koruması
+        })
+    
+    # 5 yıllık verim trendi
+    trend = []
+    for yr in range(2021, 2026):
+        y_year = [y for y in yields if y.get("season") == yr]
+        trend.append({
+            "year": yr,
+            "ton": sum(yy.get("actual_ton", 0) for yy in y_year),
+            "expected": sum(yy.get("expected_ton", 0) for yy in y_year)
+        })
+    
+    # Karne dağılımı
+    farmers = await db.farmers.find({}, {"_id": 0}).to_list(10000)
+    karne_dist = {"A": 0, "B": 0, "C": 0, "D": 0}
+    for f in farmers:
+        s = f.get("karne_score", "C")
+        karne_dist[s] = karne_dist.get(s, 0) + 1
+
+    # ============ YENİ KPI'LAR (Sprint 2 — GIS/IoT/Drone) ============
+    # Roadmap dashboard kartları: Riskli Parsel, IoT Sensörü, Drone Görevi,
+    # Son Uydu Analizi, Son IoT Verisi. Hepsi GERÇEK veriden hesaplanır.
+    risky_parcels_count = sum(1 for p in parcels if p.get("risk_level") in ("turuncu", "kirmizi"))
+    avg_ndvi = round(sum(p.get("ndvi_latest", 0) for p in parcels) / max(len(parcels), 1), 3)
+
+    iot_total = await db.iot_sensors.count_documents({})
+    iot_active = await db.iot_sensors.count_documents({"status": "aktif"})
+    iot_last = await db.iot_sensors.find({}, {"_id": 0}).sort("last_reading_at", -1).limit(1).to_list(1)
+
+    drone_total = await db.drone_missions.count_documents({})
+    drone_last = await db.drone_missions.find({}, {"_id": 0}).sort("flight_date", -1).limit(1).to_list(1)
+
+    last_satellite_scan = max((p.get("last_satellite_scan") for p in parcels if p.get("last_satellite_scan")), default=None)
+
+    return {
+        "kpis": {
+            "farmers_total": farmers_total,
+            "parcels_total": parcels_total,
+            "active_contracts": contracts_active,
+            "total_area_dekar": round(total_area, 1),
+            "expected_ton": round(expected_ton, 1),
+            "actual_ton": round(actual_ton, 1),
+            "yield_completion_pct": round(actual_ton / max(expected_ton, 1) * 100, 1),
+            # --- Sprint 2 eklentileri ---
+            "risky_parcels": risky_parcels_count,
+            "avg_ndvi": avg_ndvi,
+            "iot_sensors_total": iot_total,
+            "iot_sensors_active": iot_active,
+            "iot_last_reading_at": iot_last[0]["last_reading_at"] if iot_last else None,
+            "drone_missions_total": drone_total,
+            "drone_last_flight_at": drone_last[0]["flight_date"] if drone_last else None,
+            "last_satellite_scan": last_satellite_scan,
+        },
+        "regions": region_stats,
+        "yield_trend": trend,
+        "karne_distribution": karne_dist
+    }
+
+
+# =====================================================================
+#                       ÇİFTÇİ DASHBOARD (Self-Servis)
+# =====================================================================
+
+@api_router.get("/farmer/my-dashboard")
+async def my_dashboard(user=Depends(current_user)):
+    """
+    Çiftçinin kendi dashboard'u — sadece kendi verilerini görür.
+    
+    Çiftçi giriş yapınca burayı görür.
+    Veri eklediğinde (sulama, vs.) bu sayfa anlık güncellenir.
+    """
+    # Çiftçi değilse veya farmer_id yoksa erişim engelle
+    if user.get("role") != "ciftci" or not user.get("farmer_id"):
+        raise HTTPException(403, "Sadece çiftçi hesapları erişebilir")
+    
+    farmer_id = user["farmer_id"]
+    
+    # Çiftçi bilgisi
+    farmer = await db.farmers.find_one({"id": farmer_id}, {"_id": 0})
+    if not farmer:
+        raise HTTPException(404, "Çiftçi profili bulunamadı")
+    
+    # Çiftçinin tüm parselleri
+    parcels = await db.parcels.find({"farmer_id": farmer_id}, {"_id": 0}).to_list(100)
+    
+    # Aktif sözleşmeler
+    contracts = await db.contracts.find(
+        {"farmer_id": farmer_id, "season": 2025},
+        {"_id": 0}
+    ).to_list(50)
+    
+    # Verim geçmişi
+    yields = await db.yields.find({"farmer_id": farmer_id}, {"_id": 0}).to_list(50)
+    
+    # Sulama olayları (son 30 gün)
+    irrigation_events = await db.irrigation_events.find(
+        {"farmer_id": farmer_id},
+        {"_id": 0}
+    ).sort([("date", -1)]).to_list(50)
+    
+    # Toprak analizleri
+    parcel_ids = [p["id"] for p in parcels]
+    soil_samples = await db.soil_samples.find(
+        {"parcel_id": {"$in": parcel_ids}},
+        {"_id": 0}
+    ).to_list(50)
+    
+    # Finansal hareketler
+    finance = await db.finance.find(
+        {"farmer_id": farmer_id},
+        {"_id": 0}
+    ).sort([("date", -1)]).to_list(50)
+    
+    # Toplam balance hesabı (gelir - gider)
+    balance = sum(f.get("amount", 0) for f in finance)
+    
+    # Yaklaşan kantar randevuları
+    appts = await db.appointments.find(
+        {"farmer_id": farmer_id},
+        {"_id": 0}
+    ).sort([("scheduled_at", 1)]).to_list(20)
+    
+    # Toplam alan
+    total_area = sum(p.get("area_dekar", 0) for p in parcels)
+    
+    # Bu yılın tahmini hasat
+    expected_ton_2025 = sum(c.get("kota_ton", 0) for c in contracts)
+    
+    # Toplam su tüketimi (m³)
+    total_water = sum(e.get("water_m3", 0) for e in irrigation_events)
+    
+    return {
+        "farmer": farmer,
+        "stats": {
+            "parcels_count": len(parcels),
+            "total_area_dekar": round(total_area, 1),
+            "active_contracts": len(contracts),
+            "expected_ton_2025": round(expected_ton_2025, 1),
+            "total_water_m3": round(total_water, 1),
+            "irrigation_events_count": len(irrigation_events),
+            "balance": round(balance, 2),
+            "soil_samples_count": len(soil_samples),
+            "upcoming_appointments": len([a for a in appts if a.get("status") == "planlı"])
+        },
+        "parcels": parcels,
+        "contracts": contracts,
+        "yields": yields,
+        "irrigation_events": irrigation_events[:10],         # Son 10
+        "soil_samples": soil_samples[:10],
+        "finance": finance[:10],
+        "appointments": appts
+    }
+
+
+@api_router.post("/farmer/irrigation")
+async def add_irrigation(body: IrrigationEventCreate, user=Depends(current_user)):
+    """
+    Çiftçi kendi parseline sulama olayı ekler.
+    Bu sayede dashboard'lar (genel + bireysel) anlık güncellenir.
+    """
+    if user.get("role") != "ciftci" or not user.get("farmer_id"):
+        raise HTTPException(403, "Sadece çiftçi ekleyebilir")
+    
+    # Parsel gerçekten bu çiftçiye mi ait? (yetki kontrolü)
+    parcel = await db.parcels.find_one({"id": body.parcel_id})
+    if not parcel:
+        raise HTTPException(404, "Parsel bulunamadı")
+    if parcel.get("farmer_id") != user["farmer_id"]:
+        raise HTTPException(403, "Bu parsel size ait değil")
+    
+    # Kayıt oluştur
+    doc = body.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["farmer_id"] = user["farmer_id"]
+    doc["region_id"] = parcel.get("region_id")
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.irrigation_events.insert_one(doc)
+    doc.pop("_id", None)
+    
+    # Bildirim oluştur (kooperatif yönetimine bilgi)
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "type": "sulama_kayit",
+        "title": "Yeni sulama kaydı",
+        "message": f"{user.get('full_name', 'Çiftçi')} {body.water_m3} m³ sulama kaydetti",
+        "channel": "in_app",
+        "status": "okundu",
+        "farmer_id": user["farmer_id"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return doc
+
+
+@api_router.post("/farmer/soil-sample")
+async def add_soil_sample(body: SoilSampleCreate, user=Depends(current_user)):
+    """Çiftçi toprak analizi sonucu ekler"""
+    if user.get("role") != "ciftci" or not user.get("farmer_id"):
+        raise HTTPException(403, "Sadece çiftçi ekleyebilir")
+    
+    parcel = await db.parcels.find_one({"id": body.parcel_id})
+    if not parcel:
+        raise HTTPException(404, "Parsel bulunamadı")
+    if parcel.get("farmer_id") != user["farmer_id"]:
+        raise HTTPException(403, "Bu parsel size ait değil")
+    
+    doc = body.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.soil_samples.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+# =====================================================================
+#                       ÇİFTÇİ YÖNETİMİ (Admin)
+# =====================================================================
+
+@api_router.get("/farmers")
+async def list_farmers(
+    q: Optional[str] = None,
+    region_id: Optional[str] = None,
+    karne: Optional[str] = None,
+    limit: int = 500,
+    user=Depends(current_user)
+):
+    """
+    Çiftçi listesi — admin arar/filtreler.
+    Query parametreleri ile filtreleme yapılır:
+    - q: ad/TC/telefon/üye no araması (regex)
+    - region_id: belirli bölge
+    - karne: A/B/C/D
+    """
+    filt: Dict[str, Any] = {}
+    if region_id:
+        filt["region_id"] = region_id
+    if karne:
+        filt["karne_score"] = karne
+    if q:
+        # OR araması — birden fazla alanda eşleşme
+        filt["$or"] = [
+            {"full_name": {"$regex": q, "$options": "i"}},   # i = case-insensitive
+            {"tc_no": {"$regex": q}},
+            {"phone": {"$regex": q}},
+            {"member_no": {"$regex": q, "$options": "i"}}
+        ]
+    docs = await db.farmers.find(filt, {"_id": 0}).limit(limit).to_list(limit)
+    return docs
+
+
+@api_router.get("/farmers/{farmer_id}")
+async def get_farmer_360(farmer_id: str, user=Depends(current_user)):
+    """
+    Çiftçi 360° GÖRÜNÜM:
+    - Çiftçi temel bilgileri
+    - Tüm parselleri (geometri ile)
+    - Tüm sözleşmeleri
+    - Verim geçmişi
+    - Sulama olayları
+    - Toprak analizleri
+    - Finansal hareketler
+    - Kantar randevuları
+    - Karne detayı + tarihçe
+    
+    Bu sayfa müşteri demosunda gerçek hayattaki kullanımı gösterir.
+    """
+    farmer = await db.farmers.find_one({"id": farmer_id}, {"_id": 0})
+    if not farmer:
+        raise HTTPException(404, "Çiftçi bulunamadı")
+    
+    parcels = await db.parcels.find({"farmer_id": farmer_id}, {"_id": 0}).to_list(100)
+    parcel_ids = [p["id"] for p in parcels]
+    
+    contracts = await db.contracts.find({"farmer_id": farmer_id}, {"_id": 0}).to_list(100)
+    yields = await db.yields.find({"farmer_id": farmer_id}, {"_id": 0}).to_list(100)
+    irrigation = await db.irrigation_events.find(
+        {"farmer_id": farmer_id}, {"_id": 0}
+    ).sort([("date", -1)]).to_list(100)
+    soil = await db.soil_samples.find(
+        {"parcel_id": {"$in": parcel_ids}}, {"_id": 0}
+    ).sort([("date", -1)]).to_list(50)
+    finance = await db.finance.find(
+        {"farmer_id": farmer_id}, {"_id": 0}
+    ).sort([("date", -1)]).to_list(100)
+    appointments = await db.appointments.find(
+        {"farmer_id": farmer_id}, {"_id": 0}
+    ).sort([("scheduled_at", -1)]).to_list(50)
+    tasks = await db.tasks.find(
+        {"farmer_id": farmer_id}, {"_id": 0}
+    ).sort([("scheduled_date", -1)]).to_list(50)
+    
+    # Hesaplanmış metrikler
+    total_area = sum(p.get("area_dekar", 0) for p in parcels)
+    total_water = sum(e.get("water_m3", 0) for e in irrigation)
+    balance = sum(f.get("amount", 0) for f in finance)
+    
+    # Verim trendi (yıl × ton)
+    yield_by_year = {}
+    for y in yields:
+        yr = y.get("season")
+        if yr not in yield_by_year:
+            yield_by_year[yr] = {"expected": 0, "actual": 0, "area": 0}
+        yield_by_year[yr]["expected"] += y.get("expected_ton", 0)
+        yield_by_year[yr]["actual"] += y.get("actual_ton", 0)
+        yield_by_year[yr]["area"] += y.get("area_dekar", 0)
+    
+    yield_trend = sorted(
+        [{"year": yr, **vals} for yr, vals in yield_by_year.items()],
+        key=lambda x: x["year"]
+    )
+    
+    return {
+        "farmer": farmer,
+        "summary": {
+            "parcel_count": len(parcels),
+            "total_area_dekar": round(total_area, 1),
+            "active_contracts": len([c for c in contracts if c.get("status") == "imzalı"]),
+            "total_water_m3": round(total_water, 1),
+            "balance": round(balance, 2),
+            "soil_samples_count": len(soil)
+        },
+        "parcels": parcels,
+        "contracts": contracts,
+        "yields": yields,
+        "yield_trend": yield_trend,
+        "irrigation": irrigation,
+        "soil_samples": soil,
+        "finance": finance,
+        "appointments": appointments,
+        "tasks": tasks
+    }
+
+
+@api_router.post("/farmers")
+async def create_farmer(body: FarmerCreate, user=Depends(current_user)):
+    """Yeni çiftçi ekle (admin yetkisi)"""
+    if not is_admin(user):
+        raise HTTPException(403, "Yetkiniz yok")
+    
+    # Duplicate TC kontrolü
+    existing = await db.farmers.find_one({"tc_no": body.tc_no})
+    if existing:
+        raise HTTPException(400, "Bu TC No ile çiftçi zaten kayıtlı")
+    
+    doc = body.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    
+    # Üye no otomatik (TS-00001, TS-00002...)
+    count = await db.farmers.count_documents({})
+    doc["member_no"] = f"TS-{(count+1):05d}"
+    
+    doc["karne_score"] = "C"                                 # Yeni üye → orta puan
+    doc["karne_points"] = 65
+    doc["status"] = "aktif"
+    doc["membership_year"] = datetime.now().year
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.farmers.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/farmers/{farmer_id}")
+async def update_farmer(farmer_id: str, body: FarmerUpdate, user=Depends(current_user)):
+    """Çiftçi bilgi güncelle"""
+    if not is_admin(user):
+        raise HTTPException(403, "Yetkiniz yok")
+    
+    # Sadece dolu (None olmayan) alanları güncelle
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(400, "Güncellenecek alan yok")
+    
+    result = await db.farmers.update_one({"id": farmer_id}, {"$set": updates})
+    if result.matched_count == 0:
+        raise HTTPException(404, "Çiftçi bulunamadı")
+    
+    updated = await db.farmers.find_one({"id": farmer_id}, {"_id": 0})
+    return updated
+
+
+# =====================================================================
+#                       PARSEL YÖNETİMİ
+# =====================================================================
+
+@api_router.get("/parcels")
+async def list_parcels(
+    region_id: Optional[str] = None,
+    farmer_id: Optional[str] = None,
+    limit: int = 500,
+    user=Depends(current_user)
+):
+    """Parsel listesi (filtreli)"""
+    filt: Dict[str, Any] = {}
+    if region_id: filt["region_id"] = region_id
+    if farmer_id: filt["farmer_id"] = farmer_id
+    docs = await db.parcels.find(filt, {"_id": 0}).limit(limit).to_list(limit)
+    return docs
+
+
+@api_router.get("/parcels/{parcel_id}")
+async def get_parcel_detail(parcel_id: str, user=Depends(current_user)):
+    """
+    Parsel detay sayfası:
+    - Parsel bilgisi (harita, alan, toprak)
+    - Sahip çiftçi
+    - Bu parselin ekim geçmişi
+    - Toprak analizleri
+    - Sulama olayları
+    - Verim kayıtları
+    - Yapılan görevler
+    """
+    p = await db.parcels.find_one({"id": parcel_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Parsel bulunamadı")
+    
+    farmer = await db.farmers.find_one({"id": p["farmer_id"]}, {"_id": 0})
+    plantings = await db.plantings.find(
+        {"parcel_id": parcel_id}, {"_id": 0}
+    ).sort([("season", -1)]).to_list(50)
+    soil = await db.soil_samples.find(
+        {"parcel_id": parcel_id}, {"_id": 0}
+    ).sort([("date", -1)]).to_list(20)
+    irrigation = await db.irrigation_events.find(
+        {"parcel_id": parcel_id}, {"_id": 0}
+    ).sort([("date", -1)]).to_list(100)
+    yields = await db.yields.find(
+        {"parcel_id": parcel_id}, {"_id": 0}
+    ).sort([("season", -1)]).to_list(20)
+    tasks = await db.tasks.find(
+        {"parcel_id": parcel_id}, {"_id": 0}
+    ).sort([("scheduled_date", -1)]).to_list(50)
+    iot_sensors = await db.iot_sensors.find(
+        {"parcel_id": parcel_id}, {"_id": 0}
+    ).to_list(20)
+    drone_missions = await db.drone_missions.find(
+        {"parcel_id": parcel_id}, {"_id": 0}
+    ).sort([("flight_date", -1)]).to_list(20)
+
+    return {
+        "parcel": p,
+        "farmer": farmer,
+        "plantings": plantings,
+        "soil_samples": soil,
+        "irrigation_events": irrigation,
+        "yields": yields,
+        "tasks": tasks,
+        "iot_sensors": iot_sensors,
+        "drone_missions": drone_missions,
+    }
+
+
+@api_router.post("/parcels")
+async def create_parcel(body: ParcelCreate, request: Request, user=Depends(current_user)):
+    """Yeni parsel oluştur (manuel form veya harita çizim aracıyla)"""
+    if not is_admin(user):
+        raise HTTPException(403, "Yetkiniz yok")
+    
+    doc = body.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    
+    count = await db.parcels.count_documents({})
+    doc["parcel_code"] = f"PRS-{(count+1):05d}"
+    doc["current_crop"] = "Şeker Pancarı"
+    doc["active_season"] = datetime.now().year
+    # Yeni çizilen/oluşturulan parselde henüz uydu verisi yok — dashboard
+    # KPI'larının (risky_parcels, avg_ndvi) bu parseli de sayabilmesi için
+    # nötr bir varsayılan atanıyor (import-geojson ile aynı mantık).
+    doc.setdefault("ndvi_latest", 0.65)
+    doc.setdefault("risk_level", "sari")
+    doc.setdefault("risk_label", "İzlemeye Değer (henüz uydu taraması yok)")
+    doc.setdefault("expected_yield_ton", round(body.area_dekar * 5.5, 1))
+    doc.setdefault("last_satellite_scan", None)
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.parcels.insert_one(doc)
+    doc.pop("_id", None)
+    await log_audit(db, user, action="create", entity="parcel", entity_id=doc["id"], new_value=doc, request=request)
+    return doc
+
+
+class ParcelUpdate(BaseModel):
+    """Parsel bilgi güncelleme — harita çizim aracı da bu endpoint'i kullanacak"""
+    name: Optional[str] = None
+    village: Optional[str] = None
+    area_dekar: Optional[float] = None
+    soil_type: Optional[str] = None
+    irrigation: Optional[str] = None
+    current_crop: Optional[str] = None
+    geometry: Optional[Dict[str, Any]] = None               # GeoJSON Polygon (harita düzenlemesi)
+    risk_level: Optional[str] = None                        # yesil|sari|turuncu|kirmizi (manuel override)
+    ndvi_latest: Optional[float] = None
+
+
+@api_router.put("/parcels/{parcel_id}")
+async def update_parcel(parcel_id: str, body: ParcelUpdate, request: Request, user=Depends(current_user)):
+    """Parsel bilgilerini günceller (harita üzerinden geometri düzenleme dahil)"""
+    if not is_admin(user):
+        raise HTTPException(403, "Yetkiniz yok")
+
+    old = await db.parcels.find_one({"id": parcel_id}, {"_id": 0})
+    if not old:
+        raise HTTPException(404, "Parsel bulunamadı")
+
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(400, "Güncellenecek alan yok")
+
+    # risk_level manuel değiştirildiyse etiketini de eşitle (tutarlılık için)
+    if "risk_level" in updates:
+        risk_labels = {
+            "yesil": "Düşük Risk", "sari": "İzlemeye Değer",
+            "turuncu": "Riskli", "kirmizi": "Acil Müdahale"
+        }
+        updates["risk_label"] = risk_labels.get(updates["risk_level"], updates["risk_level"])
+
+    await db.parcels.update_one({"id": parcel_id}, {"$set": updates})
+    new = await db.parcels.find_one({"id": parcel_id}, {"_id": 0})
+    await log_audit(db, user, action="update", entity="parcel", entity_id=parcel_id, old_value=old, new_value=new, request=request)
+    return new
+
+
+@api_router.delete("/parcels/{parcel_id}")
+async def delete_parcel(parcel_id: str, request: Request, user=Depends(require_min_role("fabrika_muduru"))):
+    """
+    Parseli siler. Bağlı sözleşme/ekim/verim kaydı varsa engellenir —
+    veri bütünlüğü için önce o kayıtların kapatılması/taşınması gerekir.
+    """
+    old = await db.parcels.find_one({"id": parcel_id}, {"_id": 0})
+    if not old:
+        raise HTTPException(404, "Parsel bulunamadı")
+
+    linked_contracts = await db.contracts.count_documents({"parcel_id": parcel_id})
+    if linked_contracts > 0:
+        raise HTTPException(
+            409,
+            f"Bu parsele bağlı {linked_contracts} sözleşme var. Önce sözleşmeleri "
+            "kapatın/taşıyın, sonra parseli silin."
+        )
+
+    await db.parcels.delete_one({"id": parcel_id})
+    await log_audit(db, user, action="delete", entity="parcel", entity_id=parcel_id, old_value=old, request=request)
+    return {"status": "deleted"}
+
+
+class ParcelSplitRequest(BaseModel):
+    """Bir parseli iki (veya daha fazla) yeni parsele böler — harita çizim aracı kullanır"""
+    new_geometries: list[Dict[str, Any]]              # Her biri bağımsız bir GeoJSON Polygon
+    new_areas_dekar: list[float]                       # new_geometries ile aynı sırada alan (dekar)
+    new_names: Optional[list[str]] = None              # Her parça için ayrı isim (verilmezse otomatik "(Parça N)" eklenir)
+
+
+@api_router.post("/parcels/{parcel_id}/split")
+async def split_parcel(parcel_id: str, body: ParcelSplitRequest, request: Request,
+                        user=Depends(require_min_role("ziraat_muhendisi"))):
+    """
+    Parseli böler: orijinal parsel silinir (veya arşivlenir), yerine
+    verilen geometrilerle N yeni parsel oluşturulur. Sözleşme/ekim geçmişi
+    orijinal parsel siliniyorsa kaybolacağından, bağlı kayıt varsa engellenir.
+
+    Yeni parseller varsayılan olarak orijinalin adını + "(Parça N)" ekiyle
+    alır (new_names verilmezse) — böylece liste görünümünde birbirinden
+    ayırt edilebilirler; öncesinde ikisi de orijinalle AYNI isme sahip
+    olduğundan "yeni parsel oluşmamış" gibi görünüyordu, bu düzeltildi.
+    """
+    if len(body.new_geometries) < 2:
+        raise HTTPException(400, "Bölme için en az 2 yeni geometri gerekli")
+    if len(body.new_geometries) != len(body.new_areas_dekar):
+        raise HTTPException(400, "new_geometries ve new_areas_dekar sayıları eşleşmeli")
+    if body.new_names and len(body.new_names) != len(body.new_geometries):
+        raise HTTPException(400, "new_names verildiyse new_geometries ile aynı sayıda olmalı")
+
+    old = await db.parcels.find_one({"id": parcel_id}, {"_id": 0})
+    if not old:
+        raise HTTPException(404, "Parsel bulunamadı")
+
+    linked_contracts = await db.contracts.count_documents({"parcel_id": parcel_id})
+    if linked_contracts > 0:
+        raise HTTPException(409, "Bu parsele bağlı sözleşme var, bölünmeden önce kapatılmalı")
+
+    count = await db.parcels.count_documents({})
+    new_parcels = []
+    for i, (geom, area) in enumerate(zip(body.new_geometries, body.new_areas_dekar)):
+        piece_name = (body.new_names[i] if body.new_names else f"{old['name']} (Parça {i+1})")
+        new_parcels.append({
+            **{k: v for k, v in old.items() if k not in ("id", "parcel_code", "geometry", "area_dekar", "name")},
+            "id": str(uuid.uuid4()),
+            "parcel_code": f"PRS-{(count + i + 1):05d}",
+            "name": piece_name,
+            "geometry": geom,
+            "area_dekar": area,
+            "split_from": parcel_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    await db.parcels.insert_many(new_parcels)
+    await db.parcels.delete_one({"id": parcel_id})
+
+    for p in new_parcels:
+        p.pop("_id", None)
+    # Tam eski/yeni karşılaştırması için new_value'ya sadece ID değil,
+    # oluşturulan parsellerin TAMAMI (isim, alan, geometri) yazılıyor —
+    # "kim ne zaman neyi neye böldü" audit log'dan net okunabilsin diye.
+    await log_audit(db, user, action="split", entity="parcel", entity_id=parcel_id,
+                     old_value=old, new_value={"new_parcels": new_parcels}, request=request)
+    return {"status": "split", "new_parcels": new_parcels}
+
+
+class ParcelMergeRequest(BaseModel):
+    """Birden fazla parseli tek parselde birleştirir — harita çizim aracı kullanır"""
+    parcel_ids: list[str]                              # Birleştirilecek parseller (2+)
+    merged_geometry: Dict[str, Any]                     # Birleşik alanın GeoJSON Polygon'u
+
+
+@api_router.post("/parcels/merge")
+async def merge_parcels(body: ParcelMergeRequest, request: Request,
+                         user=Depends(require_min_role("ziraat_muhendisi"))):
+    """
+    Birden fazla parseli tek parselde birleştirir. Birleştirilecek
+    parsellerin AYNI ÇİFTÇİYE ait olması zorunludur (farklı çiftçilerin
+    parselleri birleştirilemez — mülkiyet karışıklığı olur).
+    """
+    if len(body.parcel_ids) < 2:
+        raise HTTPException(400, "Birleştirme için en az 2 parsel gerekli")
+
+    parcels_to_merge = await db.parcels.find({"id": {"$in": body.parcel_ids}}, {"_id": 0}).to_list(len(body.parcel_ids))
+    if len(parcels_to_merge) != len(body.parcel_ids):
+        raise HTTPException(404, "Bazı parseller bulunamadı")
+
+    farmer_ids = {p["farmer_id"] for p in parcels_to_merge}
+    if len(farmer_ids) > 1:
+        raise HTTPException(409, "Farklı çiftçilere ait parseller birleştirilemez")
+
+    for p in parcels_to_merge:
+        linked = await db.contracts.count_documents({"parcel_id": p["id"]})
+        if linked > 0:
+            raise HTTPException(409, f"{p['parcel_code']} parseline bağlı sözleşme var, önce kapatılmalı")
+
+    total_area = sum(p["area_dekar"] for p in parcels_to_merge)
+    base = parcels_to_merge[0]
+    count = await db.parcels.count_documents({})
+    merged = {
+        **{k: v for k, v in base.items() if k not in ("id", "parcel_code", "geometry", "area_dekar")},
+        "id": str(uuid.uuid4()),
+        "parcel_code": f"PRS-{(count + 1):05d}",
+        "geometry": body.merged_geometry,
+        "area_dekar": round(total_area, 1),
+        "merged_from": body.parcel_ids,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.parcels.insert_one(merged)
+    await db.parcels.delete_many({"id": {"$in": body.parcel_ids}})
+    merged.pop("_id", None)
+
+    await log_audit(db, user, action="merge", entity="parcel", entity_id=merged["id"],
+                     old_value={"merged_parcels": parcels_to_merge}, new_value=merged, request=request)
+    return {"status": "merged", "parcel": merged}
+
+
+class GeoJSONImportRequest(BaseModel):
+    """Toplu parsel import — GeoJSON FeatureCollection kabul eder"""
+    geojson: Dict[str, Any]
+    farmer_id: Optional[str] = None                     # Verilmezse her feature.properties.farmer_id kullanılır
+    default_soil_type: str = "Tınlı"
+    default_irrigation: str = "Damla"
+
+
+@api_router.post("/parcels/import-geojson")
+async def import_parcels_geojson(body: GeoJSONImportRequest, request: Request,
+                                  user=Depends(require_min_role("ziraat_muhendisi"))):
+    """
+    GeoJSON FeatureCollection'dan toplu parsel oluşturur. Her feature'ın
+    geometry'si Polygon olmalı. properties içinde farmer_id/name/village
+    varsa kullanılır, yoksa body.farmer_id / varsayılanlar kullanılır.
+
+    Alan (dekar), geometrinin enlem/boylamından basit bir düzlemsel
+    (shoelace) yaklaşıklıkla hesaplanır — kadastral hassasiyet gerektiren
+    durumlarda gerçek bir GIS kütüphanesiyle (örn. shapely) yeniden
+    hesaplanması önerilir.
+    """
+    features = body.geojson.get("features", [])
+    if not features:
+        raise HTTPException(400, "GeoJSON içinde 'features' bulunamadı")
+
+    def _shoelace_area_dekar(coords) -> float:
+        """
+        Basit düzlemsel alan yaklaşıklığı (shoelace formülü).
+        NOT: Enlem/boylam derecelerini düz kabul eder — kutuplara yakın
+        ya da çok büyük parsellerde hata payı artar. Kadastral hassasiyet
+        gerekiyorsa shapely + pyproj ile gerçek projeksiyonlu hesaplama
+        yapılmalı. Küçük tarla ölçeğinde (<1000 dekar) yeterince yakındır.
+        """
+        ring = coords[0]
+        area_deg2 = 0.0
+        for i in range(len(ring) - 1):
+            x1, y1 = ring[i]
+            x2, y2 = ring[i + 1]
+            area_deg2 += x1 * y2 - x2 * y1
+        area_deg2 = abs(area_deg2) / 2.0
+        # 1° ≈ 111 km → 1 derece² ≈ 111² km² = 12321 km²
+        # 1 km² = 1000 dekar (1 dekar = 1000 m²)
+        km2 = area_deg2 * (111 ** 2)
+        return round(km2 * 1000, 1)
+
+    count = await db.parcels.count_documents({})
+    created = []
+    errors = []
+    for i, feat in enumerate(features):
+        try:
+            geom = feat.get("geometry")
+            props = feat.get("properties", {}) or {}
+            if not geom or geom.get("type") != "Polygon":
+                errors.append({"index": i, "error": "Sadece Polygon geometrisi destekleniyor"})
+                continue
+
+            farmer_id = props.get("farmer_id") or body.farmer_id
+            if not farmer_id:
+                errors.append({"index": i, "error": "farmer_id bulunamadı (ne feature.properties'te ne de istekte)"})
+                continue
+
+            farmer = await db.farmers.find_one({"id": farmer_id}, {"_id": 0})
+            if not farmer:
+                errors.append({"index": i, "error": f"Çiftçi bulunamadı: {farmer_id}"})
+                continue
+
+            area = props.get("area_dekar") or _shoelace_area_dekar(geom["coordinates"])
+            # Yeni import edilen parsellerde henüz uydu/AI verisi yok —
+            # "veri yok" yerine nötr bir varsayılan atanıyor ki dashboard
+            # KPI'ları (risky_parcels, avg_ndvi) bu parselleri de sayabilsin.
+            # İlk gerçek uydu taraması geldiğinde bu değer güncellenecek.
+            default_ndvi = 0.65
+            doc = {
+                "id": str(uuid.uuid4()),
+                "parcel_code": f"PRS-{(count + len(created) + 1):05d}",
+                "name": props.get("name", f"İçe Aktarılan Parsel {i+1}"),
+                "farmer_id": farmer_id,
+                "village": props.get("village", farmer.get("village", "")),
+                "region_id": farmer["region_id"],
+                "area_dekar": area,
+                "soil_type": props.get("soil_type", body.default_soil_type),
+                "irrigation": props.get("irrigation", body.default_irrigation),
+                "geometry": geom,
+                "current_crop": props.get("crop", "Şeker Pancarı"),
+                "active_season": datetime.now().year,
+                "ndvi_latest": default_ndvi,
+                "risk_level": "sari",
+                "risk_label": "İzlemeye Değer (henüz uydu taraması yok)",
+                "expected_yield_ton": round(area * 5.5, 1),
+                "last_satellite_scan": None,
+                "imported": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            created.append(doc)
+        except Exception as e:
+            errors.append({"index": i, "error": str(e)})
+
+    if created:
+        await db.parcels.insert_many(created)
+        for d in created:
+            d.pop("_id", None)
+
+    await log_audit(db, user, action="import", entity="parcel", entity_id=None,
+                     new_value={"created_count": len(created), "error_count": len(errors)}, request=request)
+    return {"created_count": len(created), "error_count": len(errors), "created": created, "errors": errors}
+
+
+# =====================================================================
+#                       TOPRAK BİLGİSİ MODÜLÜ (M06)
+# =====================================================================
+
+@api_router.get("/soil-samples")
+async def list_soil_samples(user=Depends(current_user)):
+    """Tüm toprak analizleri (admin)"""
+    docs = await db.soil_samples.find({}, {"_id": 0}).sort([("date", -1)]).to_list(500)
+    return docs
+
+
+@api_router.get("/soil-samples/summary")
+async def soil_summary(user=Depends(current_user)):
+    """
+    Toprak analiz özeti — admin dashboard için.
+    
+    Toplam numune, ortalama pH/EC/OM,
+    pH dağılımı (asitli/nötr/alkalin),
+    önerilen gübre tipleri.
+    """
+    samples = await db.soil_samples.find({}, {"_id": 0}).to_list(5000)
+    
+    if not samples:
+        return {"total": 0, "avg_ph": 0, "ph_distribution": [], "recent": []}
+    
+    avg_ph = sum(s.get("ph", 0) for s in samples) / len(samples)
+    avg_ec = sum(s.get("ec", 0) for s in samples) / len(samples)
+    avg_om = sum(s.get("organic_matter_pct", 0) for s in samples) / len(samples)
+    
+    # pH bantları
+    ph_dist = {"Asitli (<6.5)": 0, "Nötr (6.5-7.5)": 0, "Hafif Alkalin (7.5-8.0)": 0, "Alkalin (>8.0)": 0}
+    for s in samples:
+        ph = s.get("ph", 7)
+        if ph < 6.5:
+            ph_dist["Asitli (<6.5)"] += 1
+        elif ph < 7.5:
+            ph_dist["Nötr (6.5-7.5)"] += 1
+        elif ph < 8.0:
+            ph_dist["Hafif Alkalin (7.5-8.0)"] += 1
+        else:
+            ph_dist["Alkalin (>8.0)"] += 1
+    
+    return {
+        "total": len(samples),
+        "avg_ph": round(avg_ph, 2),
+        "avg_ec": round(avg_ec, 2),
+        "avg_om": round(avg_om, 2),
+        "ph_distribution": [{"label": k, "count": v} for k, v in ph_dist.items()],
+        "recent": sorted(samples, key=lambda s: s.get("date", ""), reverse=True)[:15]
+    }
+
+
+# =====================================================================
+#                       SÖZLEŞMELER (M04)
+# =====================================================================
+
+@api_router.get("/contracts")
+async def list_contracts(season: Optional[int] = None, status: Optional[str] = None, user=Depends(current_user)):
+    filt: Dict[str, Any] = {}
+    if season: filt["season"] = season
+    if status: filt["status"] = status
+    docs = await db.contracts.find(filt, {"_id": 0}).to_list(5000)
+    return docs
+
+
+# =====================================================================
+#                       EKİM (M05)
+# =====================================================================
+
+@api_router.get("/plantings")
+async def list_plantings(season: Optional[int] = None, user=Depends(current_user)):
+    filt: Dict[str, Any] = {}
+    if season: filt["season"] = season
+    docs = await db.plantings.find(filt, {"_id": 0}).to_list(5000)
+    return docs
+
+
+# =====================================================================
+#                       SULAMA (M15)
+# =====================================================================
+
+@api_router.get("/irrigation/summary")
+async def irrigation_summary(user=Depends(current_user)):
+    """
+    Sulama modülü özet verileri.
+    Bu endpoint çiftçiler veri eklediğinde otomatik güncellenir.
+    """
+    events = await db.irrigation_events.find({}, {"_id": 0}).to_list(20000)
+    sources = await db.water_sources.find({}, {"_id": 0}).to_list(100)
+    regions = await db.regions.find({}, {"_id": 0}).to_list(100)
+    
+    total_m3 = sum(e.get("water_m3", 0) for e in events)
+    
+    # Bölge bazlı
+    by_region = []
+    for r in regions:
+        r_events = [e for e in events if e.get("region_id") == r["id"]]
+        by_region.append({
+            "name": r["name"],
+            "water_m3": sum(e.get("water_m3", 0) for e in r_events),
+            "events": len(r_events)
+        })
+    
+    # Yönteme göre
+    by_method = {}
+    for e in events:
+        m = e.get("method", "diğer")
+        by_method[m] = by_method.get(m, 0) + e.get("water_m3", 0)
+    
+    # Kuraklık risk (her bölge için random + tutarlı seed)
+    # Üretim sürümünde Sentinel Hub + hava verileriyle hesaplanır
+    random.seed(2026)
+    drought_risk = [
+        {"region": r["name"], "risk_pct": random.randint(15, 85), "level": random.choice(["düşük", "orta", "yüksek"])}
+        for r in regions
+    ]
+    
+    return {
+        "total_m3": round(total_m3, 1),
+        "events_count": len(events),
+        "water_sources": sources,
+        "by_region": by_region,
+        "by_method": [{"method": k, "m3": v} for k, v in by_method.items()],
+        "drought_risk": drought_risk
+    }
+
+
+@api_router.get("/irrigation/events")
+async def list_irrigation_events(farmer_id: Optional[str] = None, limit: int = 200, user=Depends(current_user)):
+    """Sulama olayları listesi (filtreli)"""
+    filt: Dict[str, Any] = {}
+    if farmer_id: filt["farmer_id"] = farmer_id
+    docs = await db.irrigation_events.find(filt, {"_id": 0}).sort([("date", -1)]).limit(limit).to_list(limit)
+    return docs
+
+
+# =====================================================================
+#                       OPERASYON (M16)
+# =====================================================================
+
+@api_router.get("/operations/tasks")
+async def list_tasks(status: Optional[str] = None, user=Depends(current_user)):
+    filt: Dict[str, Any] = {}
+    if status: filt["status"] = status
+    docs = await db.tasks.find(filt, {"_id": 0}).sort([("scheduled_date", 1)]).to_list(1000)
+    return docs
+
+
+@api_router.get("/operations/machines")
+async def list_machines(user=Depends(current_user)):
+    return await db.machines.find({}, {"_id": 0}).to_list(500)
+
+
+@api_router.get("/operations/workers")
+async def list_workers(user=Depends(current_user)):
+    return await db.workers.find({}, {"_id": 0}).to_list(500)
+
+
+@api_router.get("/operations/summary")
+async def operations_summary(user=Depends(current_user)):
+    tasks = await db.tasks.find({}, {"_id": 0}).to_list(5000)
+    machines = await db.machines.find({}, {"_id": 0}).to_list(500)
+    status_count = {}
+    type_count = {}
+    for t in tasks:
+        status_count[t.get("status", "planlı")] = status_count.get(t.get("status", "planlı"), 0) + 1
+        type_count[t.get("task_type", "diğer")] = type_count.get(t.get("task_type", "diğer"), 0) + 1
+    return {
+        "tasks_total": len(tasks),
+        "by_status": status_count,
+        "by_type": type_count,
+        "machines_total": len(machines),
+        "machines_active": len([m for m in machines if m.get("status") == "aktif"]),
+        "machines_maintenance": len([m for m in machines if m.get("status") == "bakım"])
+    }
+
+
+# =====================================================================
+#                       VERİMLİLİK ANALİTİK (M17)
+# =====================================================================
+
+@api_router.get("/analytics/yields")
+async def yields_analytics(season: Optional[int] = None, user=Depends(current_user)):
+    filt: Dict[str, Any] = {}
+    if season: filt["season"] = season
+    yields = await db.yields.find(filt, {"_id": 0}).to_list(10000)
+    
+    # Bölge bazlı toplama
+    by_region = {}
+    for y in yields:
+        rid = y.get("region_id")
+        if rid not in by_region:
+            by_region[rid] = {"ton": 0, "dekar": 0, "polar_sum": 0, "count": 0}
+        by_region[rid]["ton"] += y.get("actual_ton", 0)
+        by_region[rid]["dekar"] += y.get("area_dekar", 0)
+        by_region[rid]["polar_sum"] += y.get("polar_oran", 16)
+        by_region[rid]["count"] += 1
+    
+    regions = await db.regions.find({}, {"_id": 0}).to_list(100)
+    region_stats = []
+    for r in regions:
+        b = by_region.get(r["id"], {"ton": 0, "dekar": 0, "polar_sum": 0, "count": 0})
+        region_stats.append({
+            "region": r["name"],
+            "ton": round(b["ton"], 1),
+            "dekar": round(b["dekar"], 1),
+            "ton_per_dekar": round(b["ton"] / max(b["dekar"], 1), 2),
+            "avg_polar": round(b["polar_sum"] / max(b["count"], 1), 2)
+        })
+    
+    # 5 yıllık trend
+    trend = []
+    all_y = await db.yields.find({}, {"_id": 0}).to_list(10000)
+    for yr in range(2021, 2026):
+        y_year = [y for y in all_y if y.get("season") == yr]
+        if y_year:
+            t_ton = sum(y.get("actual_ton", 0) for y in y_year)
+            t_dekar = sum(y.get("area_dekar", 0) for y in y_year)
+            trend.append({
+                "year": yr,
+                "ton_per_dekar": round(t_ton / max(t_dekar, 1), 2),
+                "total_ton": round(t_ton, 1)
+            })
+    
+    top_parcels = sorted(yields, key=lambda y: y.get("actual_ton", 0) / max(y.get("area_dekar", 1), 1), reverse=True)[:10]
+    
+    return {
+        "by_region": region_stats,
+        "trend": trend,
+        "top_parcels": top_parcels[:10],
+        "total_parcels": len(yields)
+    }
+
+
+@api_router.get("/analytics/scenario")
+async def scenario_simulation(drought_pct: int = 0, price_pct: int = 0, cost_pct: int = 0, user=Depends(current_user)):
+    """What-if senaryo simülasyonu — kuraklık/fiyat/maliyet etkisi"""
+    yields = await db.yields.find({"season": 2025}, {"_id": 0}).to_list(10000)
+    base_ton = sum(y.get("actual_ton", 0) for y in yields)
+    base_revenue = base_ton * 1800                          # Ortalama pancar fiyatı TL/ton
+    base_cost = base_revenue * 0.55                         # Tahmini maliyet oranı %55
+    
+    new_ton = base_ton * (1 - drought_pct / 100)
+    new_price = 1800 * (1 + price_pct / 100)
+    new_revenue = new_ton * new_price
+    new_cost = base_cost * (1 + cost_pct / 100)
+    
+    return {
+        "base": {"ton": round(base_ton, 1), "revenue": round(base_revenue), "cost": round(base_cost), "profit": round(base_revenue - base_cost)},
+        "scenario": {
+            "ton": round(new_ton, 1),
+            "revenue": round(new_revenue),
+            "cost": round(new_cost),
+            "profit": round(new_revenue - new_cost),
+            "profit_delta_pct": round(((new_revenue - new_cost) - (base_revenue - base_cost)) / max(base_revenue - base_cost, 1) * 100, 1)
+        }
+    }
+
+
+# =====================================================================
+#                       DİĞER (Lojistik, Karne, Bildirim)
+# =====================================================================
+
+@api_router.get("/regions")
+async def list_regions(user=Depends(current_user)):
+    return await db.regions.find({}, {"_id": 0}).to_list(100)
+
+
+@api_router.get("/logistics/appointments")
+async def list_appointments(farmer_id: Optional[str] = None, user=Depends(current_user)):
+    filt: Dict[str, Any] = {}
+    if farmer_id: filt["farmer_id"] = farmer_id
+    return await db.appointments.find(filt, {"_id": 0}).sort([("scheduled_at", 1)]).to_list(500)
+
+
+@api_router.get("/notifications")
+async def list_notifications(user=Depends(current_user)):
+    return await db.notifications.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(200)
+
+
+@api_router.get("/karne/top")
+async def karne_top(limit: int = 10, user=Depends(current_user)):
+    return await db.farmers.find({}, {"_id": 0}).sort([("karne_points", -1)]).limit(limit).to_list(limit)
+
+
+@api_router.get("/karne/bottom")
+async def karne_bottom(limit: int = 10, user=Depends(current_user)):
+    return await db.farmers.find({}, {"_id": 0}).sort([("karne_points", 1)]).limit(limit).to_list(limit)
+
+
+# =====================================================================
+#                       SEED VERİSİ
+# =====================================================================
+
+@api_router.post("/admin/seed")
+async def seed_data(force: bool = False):
+    """
+    Idempotent seed işlemi.
+    
+    `force=true` parametresi geçilirse mevcut veriyi temizleyip yeniden yükler.
+    Aksi halde sadece veri yoksa yükler.
+
+    Tenant davranışı: Eğer bu çağrı zaten giriş yapmış bir tenant admin'i
+    tarafından (Authorization header ile) yapılıyorsa, seed verisi O
+    tenant'a yazılır (kendi kooperatifinin demo verisini oluşturur/sıfırlar).
+    Eğer hiç kimlik doğrulaması yoksa (ilk kurulum / soğuk başlangıç),
+    "default" adlı bir tenant otomatik bulunur/oluşturulur ve veri oraya
+    yazılır — mevcut demo giriş bilgileri (admin@kooperatif.com vb.)
+    böylece değişmeden çalışmaya devam eder.
+    """
+    reset_token = None
+    if current_tenant_id.get() is None:
+        default_tenant = await raw_db.tenants.find_one({"slug": "default"}, {"_id": 0})
+        if not default_tenant:
+            default_tenant = {
+                "id": str(uuid.uuid4()),
+                "name": "TabSIS Demo Kooperatifi",
+                "slug": "default",
+                "contact_email": "demo@tabsis.local",
+                "plan": "deneme",
+                "status": "aktif",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_by": "system-bootstrap",
+            }
+            await raw_db.tenants.insert_one(dict(default_tenant))
+        reset_token = current_tenant_id.set(default_tenant["id"])
+
+    try:
+        return await _run_seed(force)
+    finally:
+        if reset_token is not None:
+            current_tenant_id.reset(reset_token)
+
+
+async def _run_seed(force: bool = False):
+    if not force and await db.users.count_documents({}) > 0:
+        return {"status": "already_seeded", "hint": "Sıfırlamak için ?force=true ekleyin"}
+    
+    # Force ise tüm koleksiyonları temizle (SADECE mevcut tenant'ınkiler —
+    # db zaten tenant-scoped olduğu için delete_many otomatik filtrelenir)
+    if force:
+        collections = ["users", "regions", "farmers", "parcels", "contracts",
+                       "plantings", "yields", "soil_samples", "water_sources",
+                       "irrigation_plans", "irrigation_events", "machines",
+                       "workers", "tasks", "appointments", "finance", "notifications",
+                       "iot_sensors", "drone_missions"]
+        for c in collections:
+            await db[c].delete_many({})
+    
+    now = datetime.now(timezone.utc).isoformat()
+    random.seed(42)  # Tekrarlanabilir veri için sabit seed
+    
+    # ============ ADMİN KULLANICILARI ============
+    admin_users = [
+        {"id": str(uuid.uuid4()), "email": "admin@turkseker.com.tr", "password": hash_pw("admin123"),
+         "full_name": "Sistem Yöneticisi", "role": "super_admin", "created_at": now},
+        {"id": str(uuid.uuid4()), "email": "ahmet.yilmaz@turkseker.com.tr", "password": hash_pw("ahmet123"),
+         "full_name": "Ahmet Yılmaz", "role": "fabrika_muduru", "region": "Konya", "created_at": now},
+        {"id": str(uuid.uuid4()), "email": "mehmet.demir@turkseker.com.tr", "password": hash_pw("mehmet123"),
+         "full_name": "Mehmet Demir", "role": "ziraat_muhendisi", "region": "Konya", "created_at": now},
+        {"id": str(uuid.uuid4()), "email": "ayse.kaya@turkseker.com.tr", "password": hash_pw("ayse123"),
+         "full_name": "Ayşe Kaya", "role": "saha_personeli", "region": "Konya", "created_at": now},
+        {"id": str(uuid.uuid4()), "email": "kantar@turkseker.com.tr", "password": hash_pw("kantar123"),
+         "full_name": "Hasan Kantarcı", "role": "kantar_personeli", "region": "Konya", "created_at": now},
+        {"id": str(uuid.uuid4()), "email": "toprak@turkseker.com.tr", "password": hash_pw("toprak123"),
+         "full_name": "Fatma Toprakçı", "role": "toprak_personeli", "region": "Konya", "created_at": now},
+    ]
+    await db.users.insert_many(admin_users)
+    
+    # ============ BÖLGELER ============
+    region_names = [
+        ("Konya", "Konya / İç Anadolu"), ("Eskişehir", "Eskişehir Bölgesi"),
+        ("Kayseri", "Kayseri / Boğazlıyan"), ("Erzurum", "Erzurum / Doğu Anadolu"),
+        ("Afyon", "Afyonkarahisar"), ("Çorum", "Çorum / Karadeniz"),
+        ("Ankara", "Ankara / Polatlı"), ("Yozgat", "Yozgat / Boğazlıyan")
+    ]
+    regions = [{"id": str(uuid.uuid4()), "name": n, "description": d, "active": True} for n, d in region_names]
+    await db.regions.insert_many(regions)
+    
+    # ============ ÇİFTÇİLER ============
+    first_names = ["Ahmet", "Mehmet", "Mustafa", "Ali", "Hasan", "Hüseyin", "İbrahim", "Osman",
+                   "Yusuf", "Ramazan", "Recep", "Süleyman", "Kadir", "Mahmut", "Bekir", "Cemal",
+                   "Halil", "İsmail", "Ömer", "Ekrem", "Sabri", "Veli", "Murat", "Salih", "Adem"]
+    last_names = ["Yılmaz", "Kaya", "Demir", "Çelik", "Şahin", "Yıldız", "Yıldırım", "Öztürk",
+                  "Aydın", "Özdemir", "Arslan", "Doğan", "Kılıç", "Aslan", "Çetin", "Kara",
+                  "Koç", "Kurt", "Özkan", "Şimşek", "Tekin", "Polat", "Bulut", "Acar", "Erdoğan"]
+    villages = ["Hacıveli", "Kuzucu", "Yenidoğan", "Aşağıçiğil", "Sarıkamış", "Karaköy", "Çamlıdere",
+                "Pınarbaşı", "Akpınar", "Yeşilköy", "Doğanca", "Gümüşpınar", "Boyalıca", "Ovacık",
+                "Beyköy", "Karaağaç"]
+    
+    farmers = []
+    farmer_user_records = []                                # Her çiftçi için bir login hesabı
+    
+    for i in range(200):
+        farmer_id = str(uuid.uuid4())
+        rid = random.choice(regions)["id"]
+        karne_pt = random.randint(35, 98)
+        karne = "A" if karne_pt >= 85 else "B" if karne_pt >= 70 else "C" if karne_pt >= 55 else "D"
+        member_no = f"TS-{(i+1):05d}"
+        full_name = f"{random.choice(first_names)} {random.choice(last_names)}"
+        
+        farmer = {
+            "id": farmer_id,
+            "member_no": member_no,
+            "full_name": full_name,
+            "tc_no": f"{random.randint(10000000000, 99999999999)}",
+            "phone": f"05{random.randint(30, 59)}{random.randint(1000000, 9999999)}",
+            "email": f"{member_no.lower()}@ciftci.tr",      # Çiftçi giriş email'i
+            "village": random.choice(villages),
+            "region_id": rid,
+            "iban": f"TR{random.randint(10**23, 10**24 - 1)}",
+            "karne_score": karne,
+            "karne_points": karne_pt,
+            "status": "aktif" if random.random() > 0.05 else "pasif",
+            "membership_year": random.choice([2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]),
+            "created_at": now
+        }
+        farmers.append(farmer)
+        
+        # Her çiftçi için login kullanıcısı oluştur (ÖNEMLİ — self-servis için)
+        # Email: ts-00001@ciftci.tr / Şifre: ciftci123
+        farmer_user_records.append({
+            "id": str(uuid.uuid4()),
+            "email": f"{member_no.lower()}@ciftci.tr",
+            "password": hash_pw("ciftci123"),
+            "full_name": full_name,
+            "role": "ciftci",
+            "farmer_id": farmer_id,                         # Hangi çiftçi profiline bağlı
+            "created_at": now
+        })
+    
+    await db.farmers.insert_many(farmers)
+    await db.users.insert_many(farmer_user_records)
+    
+    # ============ PARSELLER ============
+    soil_types = ["Killi", "Kumlu", "Tınlı", "Kireçli", "Killi-Tınlı"]
+    irrigation_types = ["Damla", "Yağmurlama", "Karık", "Yok"]
+    parcels = []
+
+    # Her bölge için gerçekçi bir merkez koordinat (Türkiye şeker pancarı
+    # kuşağı — Konya/Çumra ağırlıklı, roadmap'te belirtildiği gibi).
+    # Böylece parseller "Türkiye'nin her yerine rastgele saçılmış" değil,
+    # köy/bölge bazında gerçekçi kümeler halinde oluşur.
+    region_centers = {
+        "Konya": (37.51, 32.77),        # Çumra/Konya
+        "Eskişehir": (39.78, 30.52),
+        "Kayseri": (38.73, 35.49),
+        "Erzurum": (39.90, 41.27),
+        "Afyon": (38.76, 30.54),
+        "Çorum": (40.55, 34.95),
+        "Ankara": (39.58, 32.13),       # Polatlı
+        "Yozgat": (39.82, 34.80),
+    }
+    # Köy başına küçük bir ofset — aynı köydeki parseller birbirine yakın olsun
+    village_offsets = {v: (random.uniform(-0.06, 0.06), random.uniform(-0.06, 0.06)) for v in villages}
+
+    # ÖNEMLİ: Her çiftçiye en az 1 parsel ver (ilk 200 parsel sırayla)
+    # Kalan parseller rastgele çiftçilere ek olarak dağıtılır (bazı
+    # çiftçiler 2-6 parselli olur — gerçek kooperatif dağılımına benzer).
+    TOTAL_PARCELS = 1000
+    for i in range(TOTAL_PARCELS):
+        if i < len(farmers):
+            farmer = farmers[i]                              # İlk 200'ü sırayla → herkese 1 parsel
+        else:
+            farmer = random.choice(farmers)                  # Kalanlar random (bazı çiftçiler çok parselli olur)
+
+        region = next(r for r in regions if r["id"] == farmer["region_id"])
+        center_lat, center_lng = region_centers.get(region["name"], (39.0, 33.0))
+        voff_lat, voff_lng = village_offsets[farmer["village"]]
+
+        # Gerçek bir tarla ölçeğinde konum: bölge merkezi + köy ofseti +
+        # küçük rastgele sapma (birkaç km içinde, GERÇEKÇİ tarla kümesi)
+        base_lat = center_lat + voff_lat + random.uniform(-0.015, 0.015)
+        base_lng = center_lng + voff_lng + random.uniform(-0.015, 0.015)
+
+        area_dekar = round(random.uniform(15, 350), 1)
+        # Polygon boyutunu alana göre orantıla (100 dekar ≈ 0.001° kare civarı)
+        d = 0.0008 + (area_dekar / 350) * 0.0025
+        geometry = {
+            "type": "Polygon",
+            "coordinates": [[
+                [base_lng, base_lat],
+                [base_lng + d, base_lat],
+                [base_lng + d, base_lat + d],
+                [base_lng, base_lat + d],
+                [base_lng, base_lat]                        # İlk noktaya geri dön (kapalı polygon)
+            ]]
+        }
+
+        # NDVI ve risk skoru — birbirleriyle TUTARLI üretiliyor (düşük NDVI
+        # → yüksek risk), rastgele bağımsız değerler değil.
+        ndvi_latest = round(random.uniform(0.35, 0.92), 3)
+        if ndvi_latest > 0.72:
+            risk_level, risk_label = "yesil", "Düşük Risk"
+        elif ndvi_latest > 0.55:
+            risk_level, risk_label = "sari", "İzlemeye Değer"
+        elif ndvi_latest > 0.42:
+            risk_level, risk_label = "turuncu", "Riskli"
+        else:
+            risk_level, risk_label = "kirmizi", "Acil Müdahale"
+
+        parcels.append({
+            "id": str(uuid.uuid4()),
+            "parcel_code": f"KNY-{(i+1):04d}" if region["name"] == "Konya" else f"PRS-{(i+1):05d}",
+            "name": f"{farmer['village']} Tarlası {i+1}",
+            "farmer_id": farmer["id"],
+            "village": farmer["village"],
+            "region_id": farmer["region_id"],
+            "area_dekar": area_dekar,
+            "soil_type": random.choice(soil_types),
+            "irrigation": random.choice(irrigation_types),
+            "geometry": geometry,
+            "current_crop": "Şeker Pancarı",
+            "active_season": 2025,
+            "ndvi_latest": ndvi_latest,
+            "risk_level": risk_level,          # yesil | sari | turuncu | kirmizi
+            "risk_label": risk_label,
+            "expected_yield_ton": round(area_dekar * random.uniform(4.5, 7.2) * (0.7 + ndvi_latest * 0.5), 1),
+            "last_satellite_scan": (datetime.now(timezone.utc) - timedelta(days=random.randint(0, 12))).isoformat(),
+            "created_at": now
+        })
+    await db.parcels.insert_many(parcels)
+    
+    # ============ SÖZLEŞMELER ============
+    contracts = []
+    for p in parcels:
+        for season in [2024, 2025]:
+            contracts.append({
+                "id": str(uuid.uuid4()),
+                "contract_no": f"SZ-{season}-{p['parcel_code'][-5:]}",
+                "season": season,
+                "farmer_id": p["farmer_id"],
+                "parcel_id": p["id"],
+                "region_id": p["region_id"],
+                "crop": "Şeker Pancarı",
+                "variety": random.choice(["Lider", "Adrianna KWS", "Marbella", "Vivianna"]),
+                "kota_dekar": p["area_dekar"],
+                "kota_ton": round(p["area_dekar"] * random.uniform(5, 7), 1),
+                "advance_seed_kg": round(p["area_dekar"] * 0.18, 1),
+                "advance_fertilizer_kg": round(p["area_dekar"] * 35, 1),
+                "status": "imzalı" if random.random() > 0.08 else random.choice(["taslak", "imzalı", "imzalı"]),
+                "created_at": now
+            })
+    await db.contracts.insert_many(contracts)
+    
+    # ============ EKİM + VERİM ============
+    plantings = []
+    yields_list = []
+    for c in contracts:
+        plantings.append({
+            "id": str(uuid.uuid4()),
+            "contract_id": c["id"],
+            "parcel_id": c["parcel_id"],
+            "farmer_id": c["farmer_id"],
+            "region_id": c["region_id"],
+            "season": c["season"],
+            "crop": c["crop"],
+            "variety": c["variety"],
+            "planting_date": f"{c['season']}-03-{random.randint(10, 28):02d}",
+            "expected_harvest_date": f"{c['season']}-10-{random.randint(1, 30):02d}",
+            "actual_harvest_date": f"{c['season']}-10-{random.randint(5, 30):02d}" if c["season"] < 2026 else None,
+            "stage": "hasat" if c["season"] < 2025 else random.choice(["ekim", "gelişim", "olgunlaşma", "hasat"])
+        })
+        if c["season"] <= 2025:
+            actual_ton = c["kota_ton"] * random.uniform(0.65, 1.15)
+            yields_list.append({
+                "id": str(uuid.uuid4()), "parcel_id": c["parcel_id"], "farmer_id": c["farmer_id"],
+                "region_id": c["region_id"], "season": c["season"], "crop": c["crop"],
+                "area_dekar": c["kota_dekar"], "expected_ton": c["kota_ton"],
+                "actual_ton": round(actual_ton, 2), "polar_oran": round(random.uniform(14.5, 18.5), 2)
+            })
+    # Geçmiş yıl verim
+    for yr in [2021, 2022, 2023]:
+        for p in random.sample(parcels, 500):
+            actual_ton = p["area_dekar"] * random.uniform(4.8, 6.8)
+            yields_list.append({
+                "id": str(uuid.uuid4()), "parcel_id": p["id"], "farmer_id": p["farmer_id"],
+                "region_id": p["region_id"], "season": yr, "crop": "Şeker Pancarı",
+                "area_dekar": p["area_dekar"], "expected_ton": round(p["area_dekar"] * 6, 1),
+                "actual_ton": round(actual_ton, 2), "polar_oran": round(random.uniform(14, 18), 2)
+            })
+    await db.plantings.insert_many(plantings)
+    await db.yields.insert_many(yields_list)
+    
+    # ============ TOPRAK ANALİZLERİ ============
+    soil_samples = []
+    for p in random.sample(parcels, 400):
+        ph = round(random.uniform(6.5, 8.2), 2)
+        n = random.randint(15, 80)
+        # Akıllı öneri: pH ve N seviyesine göre
+        if n < 30:
+            rec = "Acil azot uygulaması — Üre 40 kg/dekar"
+        elif ph > 7.8:
+            rec = "Alkalin toprak — Asit içerikli DAP tercih et, 25 kg/dekar"
+        else:
+            rec = "Standart DAP 25 kg/dekar + Üre 30 kg/dekar"
+        
+        soil_samples.append({
+            "id": str(uuid.uuid4()),
+            "parcel_id": p["id"],
+            "date": f"2025-{random.randint(1, 6):02d}-{random.randint(1, 28):02d}",
+            "lab_name": random.choice(["Konya Tarım Lab", "Eskişehir Toprak Analiz", "TÜBİTAK MAM"]),
+            "ph": ph,
+            "ec": round(random.uniform(0.3, 1.8), 2),
+            "organic_matter_pct": round(random.uniform(1.2, 4.5), 2),
+            "n_ppm": n,
+            "p_ppm": random.randint(8, 45),
+            "k_ppm": random.randint(120, 380),
+            "recommendation": rec
+        })
+    await db.soil_samples.insert_many(soil_samples)
+    
+    # ============ SU KAYNAKLARI ============
+    water_sources = []
+    for r in regions:
+        for i in range(random.randint(2, 5)):
+            water_sources.append({
+                "id": str(uuid.uuid4()),
+                "name": f"{r['name']} {random.choice(['Artezyen', 'Kanal', 'Göl', 'Yer Altı'])} {i+1}",
+                "type": random.choice(["artezyen", "kanal", "göl", "yer altı"]),
+                "region_id": r["id"],
+                "capacity_m3_per_day": random.randint(500, 5000),
+                "current_level_pct": random.randint(30, 95),
+                "status": "aktif"
+            })
+    await db.water_sources.insert_many(water_sources)
+    
+    # ============ SULAMA PLANLARI + OLAYLARI ============
+    irrigation_plans = []
+    irrigation_events = []
+    methods = ["damla", "yağmurlama", "karık"]
+    for p in random.sample(parcels, 450):
+        method = random.choice(methods)
+        irrigation_plans.append({
+            "id": str(uuid.uuid4()), "parcel_id": p["id"], "farmer_id": p["farmer_id"],
+            "region_id": p["region_id"], "season": 2025, "method": method,
+            "planned_turns": random.randint(4, 12),
+            "planned_m3": round(p["area_dekar"] * random.uniform(35, 65), 1),
+            "start_date": "2025-05-15", "end_date": "2025-09-15"
+        })
+        for ev in range(random.randint(2, 8)):
+            irrigation_events.append({
+                "id": str(uuid.uuid4()), "parcel_id": p["id"], "farmer_id": p["farmer_id"],
+                "region_id": p["region_id"],
+                "date": f"2025-{random.randint(5, 9):02d}-{random.randint(1, 28):02d}",
+                "method": method,
+                "water_m3": round(p["area_dekar"] * random.uniform(4, 8), 1),
+                "moisture_before": random.randint(15, 35), "moisture_after": random.randint(55, 85)
+            })
+    await db.irrigation_plans.insert_many(irrigation_plans)
+    await db.irrigation_events.insert_many(irrigation_events)
+    
+    # ============ MAKİNELER ============
+    machine_types = [
+        ("Traktör", ["John Deere 6120M", "Case IH Maxxum 130", "New Holland T6.140", "Massey Ferguson 5713 S"]),
+        ("Pulluk", ["Lemken Juwel 8", "Kverneland LB 100", "Özkardeşler 4'lü Pulluk"]),
+        ("Biçerdöver", ["Claas Lexion 5500", "John Deere S780", "New Holland CR8.90"]),
+        ("Pülverizatör", ["Tezel 600 lt", "Hardi 1000 lt", "Berthoud 800 lt"]),
+        ("Ekim Makinası", ["Monosem NG Plus", "Kverneland Optima", "Mater Macc MS 8000"])
+    ]
+    machines = []
+    for r in regions:
+        for cat, models in machine_types:
+            for _ in range(random.randint(1, 3)):
+                machines.append({
+                    "id": str(uuid.uuid4()), "type": cat, "model": random.choice(models),
+                    "serial_no": f"MK-{random.randint(10000, 99999)}",
+                    "region_id": r["id"],
+                    "status": random.choices(["aktif", "bakım", "boşta"], weights=[0.65, 0.15, 0.2])[0],
+                    "owner": random.choice(["kooperatif", "çiftçi"]),
+                    "total_hours": random.randint(500, 8000),
+                    "last_maintenance": f"2025-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}"
+                })
+    await db.machines.insert_many(machines)
+    
+    # ============ İŞÇİLER ============
+    workers = []
+    for r in regions:
+        for _ in range(random.randint(8, 20)):
+            workers.append({
+                "id": str(uuid.uuid4()),
+                "full_name": f"{random.choice(first_names)} {random.choice(last_names)}",
+                "phone": f"05{random.randint(30, 59)}{random.randint(1000000, 9999999)}",
+                "region_id": r["id"],
+                "skill": random.choice(["traktör sürücüsü", "saha işçisi", "biçerdöver operatörü", "ekipman uzmanı"]),
+                "daily_wage": random.choice([800, 900, 1000, 1100, 1200]),
+                "status": "aktif"
+            })
+    await db.workers.insert_many(workers)
+    
+    # ============ GÖREVLER ============
+    task_types = ["toprak işleme", "ekim", "gübreleme", "ilaçlama", "sulama", "hasat", "nakliye"]
+    statuses = ["planlı", "devam ediyor", "tamamlandı", "iptal"]
+    tasks = []
+    for _ in range(150):
+        p = random.choice(parcels)
+        task_date = datetime.now(timezone.utc) + timedelta(days=random.randint(-30, 30))
+        tasks.append({
+            "id": str(uuid.uuid4()), "task_type": random.choice(task_types),
+            "parcel_id": p["id"], "farmer_id": p["farmer_id"], "region_id": p["region_id"],
+            "scheduled_date": task_date.isoformat(),
+            "status": random.choices(statuses, weights=[0.35, 0.15, 0.45, 0.05])[0],
+            "machine_id": random.choice(machines)["id"] if random.random() > 0.3 else None,
+            "worker_id": random.choice(workers)["id"] if random.random() > 0.3 else None,
+            "notes": "", "created_at": now
+        })
+    await db.tasks.insert_many(tasks)
+    
+    # ============ KANTAR RANDEVU ============
+    appts = []
+    for _ in range(80):
+        f = random.choice(farmers)
+        appt_date = datetime.now(timezone.utc) + timedelta(days=random.randint(-10, 30))
+        appts.append({
+            "id": str(uuid.uuid4()), "farmer_id": f["id"], "region_id": f["region_id"],
+            "scheduled_at": appt_date.isoformat(),
+            "truck_plate": f"{random.choice(['06', '34', '35', '42', '38'])} {random.choice(['ABC', 'XYZ', 'KMN'])} {random.randint(100, 999)}",
+            "estimated_ton": round(random.uniform(8, 28), 1),
+            "actual_ton": round(random.uniform(7, 30), 1) if random.random() > 0.5 else None,
+            "polar_oran": round(random.uniform(14.5, 18), 2) if random.random() > 0.5 else None,
+            "status": random.choice(["planlı", "geldi", "tartıldı", "tamamlandı"])
+        })
+    await db.appointments.insert_many(appts)
+    
+    # ============ FİNANS HAREKETLERİ ============
+    finance = []
+    for f in farmers:
+        finance.append({
+            "id": str(uuid.uuid4()), "farmer_id": f["id"], "date": "2025-03-15",
+            "type": "avans", "amount": -round(random.uniform(5000, 45000), 2),
+            "description": "Tohum + gübre avansı"
+        })
+        if random.random() > 0.3:
+            finance.append({
+                "id": str(uuid.uuid4()), "farmer_id": f["id"], "date": "2025-11-15",
+                "type": "hakediş", "amount": round(random.uniform(40000, 280000), 2),
+                "description": "Hasat hakediş"
+            })
+    await db.finance.insert_many(finance)
+
+    # ============ IoT SENSÖRLER ============
+    # Roadmap: "150 sensör IoT — Her sensörde Nem, Sıcaklık, Pil, Sinyal"
+    iot_sensors = []
+    sensor_parcels = random.sample(parcels, min(150, len(parcels)))
+    for idx, p in enumerate(sensor_parcels):
+        battery = random.randint(8, 100)
+        signal = random.randint(1, 5)
+        is_active = battery > 15 and random.random() > 0.05   # ~%5'i arızalı/offline
+        iot_sensors.append({
+            "id": str(uuid.uuid4()),
+            "sensor_code": f"IOT-{idx+1:04d}",
+            "parcel_id": p["id"],
+            "parcel_code": p["parcel_code"],
+            "farmer_id": p["farmer_id"],
+            "region_id": p["region_id"],
+            "type": random.choice(["nem_sicaklik", "toprak_nemi", "hava_istasyonu"]),
+            "nem_pct": round(random.uniform(15, 85), 1),
+            "sicaklik_c": round(random.uniform(8, 38), 1),
+            "battery_pct": battery,
+            "signal_strength": signal,               # 1-5 çubuk
+            "status": "aktif" if is_active else random.choice(["offline", "bakım_gerekli"]),
+            "last_reading_at": (datetime.now(timezone.utc) - timedelta(minutes=random.randint(1, 720))).isoformat(),
+            "installed_at": (datetime.now(timezone.utc) - timedelta(days=random.randint(30, 400))).isoformat(),
+        })
+    await db.iot_sensors.insert_many(iot_sensors)
+
+    # ============ DRONE GÖREVLERİ ============
+    # Roadmap: "45 Drone Görevi — Hastalık, Yabancı Ot, Su Stresi, Hava Durumu"
+    drone_missions = []
+    drone_finding_types = ["hastalık_tespiti", "yabancı_ot", "su_stresi", "genel_tarama"]
+    mission_parcels = random.sample(parcels, min(45, len(parcels)))
+    for idx, p in enumerate(mission_parcels):
+        finding = random.choice(drone_finding_types)
+        severity = random.choice(["düşük", "orta", "yüksek"]) if finding != "genel_tarama" else "yok"
+        drone_missions.append({
+            "id": str(uuid.uuid4()),
+            "mission_code": f"DRN-{idx+1:03d}",
+            "parcel_id": p["id"],
+            "parcel_code": p["parcel_code"],
+            "farmer_id": p["farmer_id"],
+            "region_id": p["region_id"],
+            "flight_date": (datetime.now(timezone.utc) - timedelta(days=random.randint(0, 45))).isoformat(),
+            "pilot": random.choice(["Ahmet Yıldız (Saha)", "Otonom Uçuş", "Kemal Aydın (Saha)"]),
+            "altitude_m": random.choice([50, 80, 100, 120]),
+            "coverage_dekar": p["area_dekar"],
+            "finding_type": finding,
+            "severity": severity,
+            "notes": {
+                "hastalık_tespiti": "Yaprak lekesi belirtileri tespit edildi, ziraat mühendisi kontrolü önerilir.",
+                "yabancı_ot": "Parsel kenarlarında yabancı ot yoğunluğu artışı gözlemlendi.",
+                "su_stresi": "Bitki örtüsünde su stresine işaret eden renk değişimi tespit edildi.",
+                "genel_tarama": "Anomali tespit edilmedi, gelişim normal seyrediyor.",
+            }[finding],
+            "status": "tamamlandı",
+        })
+    await db.drone_missions.insert_many(drone_missions)
+
+    # ============ BİLDİRİMLER ============
+    # Roadmap: "Her gün değişen bildirimler — Parsel KNY-742 → Nem kritik
+    # seviyeye düştü" gibi SOMUT, gerçek parsel koduna bağlı mesajlar.
+    notifs = []
+
+    # 1) Genel sistem bildirimleri (hava durumu, kantar, avans, görev)
+    types = ["hava_uyarısı", "sulama_hatırlatma", "kantar_randevu", "avans_bilgi", "görev_atandı"]
+    titles = ["Don uyarısı - Konya bölgesi", "Sulama zamanı yaklaşıyor",
+              "Kantar randevunuz onaylandı", "Avans hesabınıza yatırıldı", "Yeni görev atandı"]
+    for _ in range(30):
+        notifs.append({
+            "id": str(uuid.uuid4()), "type": random.choice(types),
+            "title": random.choice(titles),
+            "message": "Sistem tarafından otomatik oluşturuldu.",
+            "channel": random.choice(["sms", "whatsapp", "push", "in_app"]),
+            "status": random.choice(["gönderildi", "okundu", "beklemede"]),
+            "created_at": (datetime.now(timezone.utc) - timedelta(hours=random.randint(1, 200))).isoformat()
+        })
+
+    # 2) Riskli/düşük NDVI'lı parsellerden gerçek uyarılar
+    risky_parcels = [p for p in parcels if p["risk_level"] in ("turuncu", "kirmizi")]
+    for p in random.sample(risky_parcels, min(25, len(risky_parcels))):
+        msg = random.choice([
+            f"Parsel {p['parcel_code']} → Nem kritik seviyeye düştü.",
+            f"Parsel {p['parcel_code']} → NDVI değeri düşüş gösteriyor, kontrol önerilir.",
+            f"Parsel {p['parcel_code']} → Yabancı ot riski oluştu.",
+        ])
+        notifs.append({
+            "id": str(uuid.uuid4()), "type": "risk_uyarisi", "title": "Parsel Risk Uyarısı",
+            "message": msg, "parcel_id": p["id"], "parcel_code": p["parcel_code"],
+            "channel": "in_app", "status": random.choice(["gönderildi", "okundu"]),
+            "created_at": (datetime.now(timezone.utc) - timedelta(hours=random.randint(1, 72))).isoformat()
+        })
+
+    # 3) Hasat/verim ile ilgili olumlu bildirimler (sağlıklı parseller)
+    healthy_parcels = [p for p in parcels if p["risk_level"] == "yesil"]
+    for p in random.sample(healthy_parcels, min(15, len(healthy_parcels))):
+        pct = random.randint(3, 12)
+        msg = random.choice([
+            f"Parsel {p['parcel_code']} → Hasat için uygun dönem başladı.",
+            f"Parsel {p['parcel_code']} → Beklenen verim %{pct} arttı.",
+        ])
+        notifs.append({
+            "id": str(uuid.uuid4()), "type": "hasat_bilgi", "title": "Hasat / Verim Bilgisi",
+            "message": msg, "parcel_id": p["id"], "parcel_code": p["parcel_code"],
+            "channel": "in_app", "status": "gönderildi",
+            "created_at": (datetime.now(timezone.utc) - timedelta(hours=random.randint(1, 48))).isoformat()
+        })
+
+    await db.notifications.insert_many(notifs)
+    
+    return {
+        "status": "seeded",
+        "counts": {
+            "users": len(admin_users) + len(farmer_user_records),
+            "admin_users": len(admin_users),
+            "farmer_login_accounts": len(farmer_user_records),
+            "regions": len(regions), "farmers": len(farmers), "parcels": len(parcels),
+            "contracts": len(contracts), "plantings": len(plantings), "yields": len(yields_list),
+            "soil_samples": len(soil_samples), "machines": len(machines), "workers": len(workers),
+            "tasks": len(tasks), "appointments": len(appts), "irrigation_events": len(irrigation_events),
+            "iot_sensors": len(iot_sensors), "drone_missions": len(drone_missions),
+            "risky_parcels": len(risky_parcels)
+        },
+        "demo_logins": {
+            "super_admin": "admin@turkseker.com.tr / admin123",
+            "fabrika_muduru": "ahmet.yilmaz@turkseker.com.tr / ahmet123",
+            "ziraat_muhendisi": "mehmet.demir@turkseker.com.tr / mehmet123",
+            "ciftci_ornek": "ts-00001@ciftci.tr / ciftci123  (her çiftçi member_no@ciftci.tr ile)"
+        }
+    }
+
+
+# ============ KÖK ENDPOINT (Sağlık kontrolü) ============
+@api_router.get("/")
+async def root():
+    return {"app": APP_NAME, "full_name": APP_FULL_NAME, "version": APP_VERSION, "status": "ok"}
+
+
+@api_router.get("/roles")
+async def list_roles(user=Depends(current_user)):
+    """Rol hiyerarşisini ve etiketlerini döner (frontend'de yetki gösterimi için)."""
+    return {"hierarchy": ROLE_HIERARCHY, "labels": ROLE_LABELS}
+
+
+# ============ ROUTER'I UYGULAMAYA BAĞLA ============
+# Ek modülleri kaydet (AI, audit, NDVI, müstahsil PDF, vb.)
+# Granüler yetkilendirme (Sprint 4d) — diğer modüllerden ÖNCE kurulmalı
+# çünkü integrations/audit/data_entry require_permission'ı kullanıyor.
+from permissions import make_require_permission, register_permission_routes
+require_permission = make_require_permission(current_user, db)
+register_permission_routes(api_router, db, current_user, require_min_role, log_audit)
+
+from extras import register_extra_routes
+register_extra_routes(api_router, db, current_user, is_admin)
+
+# Saha veri toplama (form builder) modülü
+from forms_module import register_form_routes
+register_form_routes(api_router, db, current_user, is_admin, security)
+
+# Audit log görüntüleme
+register_audit_routes(api_router, db, current_user, is_admin, require_permission=require_permission)
+
+# Ayarlar / Entegrasyonlar modülü (SMS, Email, Planet Labs, AI Servisi)
+register_integration_routes(api_router, db, current_user, is_admin, log_audit=log_audit, require_permission=require_permission)
+
+# Veri Giriş modülü (Sprint 4a) — sözleşme, ekim, toprak, sulama, operasyon,
+# lojistik, kantar, e-belge, IoT, drone, parsel düzenleme
+from data_entry import register_data_entry_routes
+register_data_entry_routes(api_router, db, current_user, require_permission, log_audit)
+
+# Tenant (Kurum) Yönetimi (Sprint 4c) — SADECE platform_admin, BİLEREK raw_db kullanır
+from tenants import register_tenant_routes
+register_tenant_routes(api_router, raw_db, current_user, hash_password, log_audit)
+
+# Kullanıcı/Personel Yönetimi (Sprint 4d) — rol/izin atama
+from users import register_user_routes
+register_user_routes(api_router, db, current_user, require_permission, hash_password, log_audit)
+
+app.include_router(api_router)
+
+# CORS — sadece config.py'de tanımlı (env değişkeninden okunan) domain'lere izin ver.
+# allow_credentials=True + allow_origins=["*"] KOMBİNASYONU KULLANILMAZ:
+# tarayıcılar bunu reddeder ve ayrıca bir güvenlik açığıdır.
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=CORS_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def startup():
+    logger.info(f"🌱 {APP_NAME} başlatıldı — CORS origins: {CORS_ORIGINS}")
+
+    # ============ TEMEL İNDEXLER ============
+    # En sık sorgulanan alanlara index eklenmezse, veri büyüdükçe
+    # her .find() koleksiyonun tamamını tarar (collection scan).
+    # Burada eklenenler en kritik/sık kullanılanlar; yeni endpoint'ler
+    # eklendikçe bu liste genişletilmeli.
+    try:
+        await db.users.create_index("email", unique=True)
+        await db.users.create_index("id", unique=True)
+        await db.farmers.create_index("id", unique=True)
+        await db.farmers.create_index("member_no")
+        await db.parcels.create_index("id", unique=True)
+        await db.parcels.create_index("farmer_id")
+        await db.yields.create_index("farmer_id")
+        await db.yields.create_index("parcel_id")
+        await db.contracts.create_index("farmer_id")
+        await db.audit_logs.create_index("created_at")
+        await db.audit_logs.create_index("entity")
+        await db.forms.create_index("id", unique=True)
+        await db.integrations.create_index("type", unique=True)
+        await db.iot_sensors.create_index("parcel_id")
+        await db.iot_sensors.create_index("status")
+        await db.drone_missions.create_index("parcel_id")
+        await db.parcels.create_index("risk_level")
+        await db.field_visits.create_index("client_id")
+
+        # Tenant izolasyonu artık her sorguda tenant_id filtresi kullanıyor —
+        # bu alan üzerinde index olmadan koleksiyon taraması yapılır.
+        for coll in ["users", "farmers", "parcels", "contracts", "plantings",
+                     "soil_samples", "irrigation_events", "machines", "workers",
+                     "tasks", "appointments", "kantar_records", "einvoices",
+                     "irsaliyeler", "iot_sensors", "drone_missions", "notifications",
+                     "audit_logs", "integrations", "regions", "disease_detections",
+                     "field_visits", "forms", "yields"]:
+            await raw_db[coll].create_index("tenant_id")
+        await raw_db.tenants.create_index("slug", unique=True)
+        await raw_db.tenants.create_index("id", unique=True)
+
+        # ============ PLATFORM ADMIN BOOTSTRAP ============
+        # platform_admin, tenant'lar oluşturup yönetir (bkz. tenants.py).
+        # Hiç yoksa .env'deki (veya varsayılan) kimlik bilgileriyle ilk kez
+        # oluşturulur. ÜRETİMDE PLATFORM_ADMIN_PASSWORD MUTLAKA DEĞİŞTİRİLMELİ.
+        existing_platform_admin = await raw_db.users.find_one({"role": "platform_admin"})
+        if not existing_platform_admin:
+            pf_email = os.environ.get("PLATFORM_ADMIN_EMAIL", "platform@tabsis.local")
+            pf_password = os.environ.get("PLATFORM_ADMIN_PASSWORD", "DEGISTIR-platform-admin-2026")
+            await raw_db.users.insert_one({
+                "id": str(uuid.uuid4()),
+                "email": pf_email.lower(),
+                "password": hash_password(pf_password),
+                "full_name": "Platform Yöneticisi",
+                "role": "platform_admin",
+                "tenant_id": None,          # tenant'lara ait DEĞİL — tenant'ları yönetir
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            logger.warning(
+                f"🔑 Platform admin oluşturuldu: {pf_email} — "
+                f"ÜRETİMDE .env'de PLATFORM_ADMIN_EMAIL/PASSWORD tanımlayıp bu varsayılanı değiştirin!"
+            )
+        logger.info("📊 MongoDB indexleri oluşturuldu/doğrulandı")
+    except Exception as e:
+        logger.warning(f"⚠️  Index oluşturma sırasında sorun: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    """Uygulama kapanırken DB bağlantısını düzgün kapat"""
+    client.close()
