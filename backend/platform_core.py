@@ -46,6 +46,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, List
+import migrations_engine as _migrations_engine
 
 FEATURE_FLAG_LABELS = {
     "ai": "Yapay Zeka (AI Copilot / Hastalık Tespiti)",
@@ -258,6 +259,27 @@ def register_platform_core_routes(api_router, db, current_user, require_permissi
             {"service": "geoserver", "label": "GeoServer", "status": "kurulu_degil",
              "detail": "Bu ortamda kurulu değil — react-leaflet + genel XYZ servisleri kullanılıyor"},
         ]
+
+        # PR-04: şema (migration) versiyonu Health Center'da görünür olmalı
+        # (ROADMAP-URUNLESTIRME.md kabul kriteri). Mevcut response şekli
+        # (liste) korunuyor -- diğer servis satırlarıyla aynı formatta
+        # tek bir satır olarak eklenir, frontend (PlatformCore.jsx) hiç
+        # değişmeden çalışmaya devam eder. raw_db kullanılır çünkü bu
+        # global (tenant'tan bağımsız) bir migration versiyonudur.
+        try:
+            from tenant_context import TenantScopedDB
+            raw = db._real_db if isinstance(db, TenantScopedDB) else db
+            m = await _migrations_engine.get_status(raw)
+            if m["pending_count"] == 0:
+                schema_status, schema_detail = "saglikli", f"Şema v{m['current_version']} (güncel)"
+            else:
+                schema_status = "uyari"
+                schema_detail = f"Şema v{m['current_version']} -- {m['pending_count']} bekleyen migration var"
+        except Exception as e:  # noqa: BLE001
+            schema_status, schema_detail = "hata", str(e)
+        results.append({"service": "schema_version", "label": "Şema Versiyonu (Migration)",
+                         "status": schema_status, "detail": schema_detail})
+
         for r in results:
             r["status_label"] = HEALTH_STATUS_LABELS.get(r["status"], r["status"])
         return results

@@ -2486,6 +2486,12 @@ register_automation_routes(api_router, db, current_user, require_permission, log
 from case_management import register_case_routes
 register_case_routes(api_router, db, current_user, require_permission, log_audit)
 
+# PR-04 (ROADMAP-URUNLESTIRME.md): Migration Runner + Surum Yukseltme/Geri
+# Alma. raw_db kullanir (tenant filtresiz) -- migration'lar sema seviyesinde
+# calisir. Surum numarasi Health Center'da (platform_core.py) gorunur.
+from migrations_engine import register_migration_routes
+register_migration_routes(api_router, raw_db, require_permission, log_audit)
+
 # Communication Hub: Kanal Provider Pattern + Şablon Yönetimi + Gönderim +
 # Kişi Kartı İletişim Timeline'ı (IT-25 / FAZ 9 başlangıç).
 from communications import register_communication_routes
