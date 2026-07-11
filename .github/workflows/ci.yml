@@ -1,0 +1,99 @@
+# PR-10: CI Pipeline -- her push/PR'da otomatik test + bagimlilik guvenlik
+# taramasi (PR-13). Kirmizi ise merge engellenir (branch protection kurali
+# GitHub tarafinda ayrica ayarlanmalidir -- bu, kullanicinin Git hosting
+# hesabinda yapmasi gereken tek adimdir, bkz. ROADMAP-URUNLESTIRME.md PR-10
+# "Sizin Yapmanız Gerekir").
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  backend-tests:
+    name: Backend testleri (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Bagimliliklari kur
+        run: |
+          pip install -r backend/requirements.txt
+          pip install -r backend/requirements-dev.txt
+
+      - name: pytest calistir
+        run: pytest tests/ -v
+
+  dependency-audit:
+    name: Bagimlilik guvenlik taramasi (PR-13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: pip-audit kur ve calistir
+        run: |
+          pip install pip-audit
+          pip install -r backend/requirements.txt
+          # --desc: bulunan zafiyetin aciklamasini da goster.
+          # Yuksek/kritik seviye zafiyet varsa build KIRMIZI olur (varsayilan davranis).
+          pip-audit -r backend/requirements.txt --desc
+
+  frontend-build:
+    name: Frontend build kontrolu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Bagimliliklari kur
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        working-directory: frontend
+        env:
+          REACT_APP_BACKEND_URL: http://localhost:8001
+        run: yarn build
+
+  postman-collection-check:
+    name: Postman collection guncel mi? (PR-25)
+    runs-on: ubuntu-latest
+    needs: backend-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bagimliliklari kur
+        run: pip install -r backend/requirements.txt
+
+      - name: Collection'i yeniden uret ve fark var mi kontrol et
+        run: |
+          cd backend && python ../scripts/generate_postman_collection.py
+          cd ..
+          if ! git diff --quiet -- postman/; then
+            echo "UYARI: postman/ altindaki dosyalar guncel degildi, bu calistirmada yeniden uretildi."
+            echo "Normalde CD asamasinda otomatik commit'lenir/yayinlanir (bkz. PR-25/PR-26)."
+          fi
