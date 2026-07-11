@@ -2532,6 +2532,13 @@ register_experience_profile_routes(api_router, db, current_user, require_permiss
 
 app.include_router(api_router)
 
+# PR-22 (ROADMAP-URUNLESTIRME.md): /api/v1 -- versiyonlu, standart zarfli
+# yuzey. Mevcut /api/* uclarina DOKUNMAZ (bkz. api_envelope.py docstring),
+# sadece harici entegratorler/Postman/API Key kullanicilari icin ek bir
+# katmandir.
+from api_envelope import register_api_v1_proxy
+register_api_v1_proxy(app)
+
 # CORS — sadece config_service.py'de tanımlı (env değişkeninden okunan) domain'lere izin ver.
 # allow_credentials=True + allow_origins=["*"] KOMBİNASYONU KULLANILMAZ:
 # tarayıcılar bunu reddeder ve ayrıca bir güvenlik açığıdır.
