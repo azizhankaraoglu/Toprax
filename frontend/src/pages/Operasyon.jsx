@@ -1,29 +1,34 @@
-import { useEffect, useState } from "react";
 import api from "@/api";
 import { Tractor, Users2, ListChecks, Wrench } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { QuickAddPanel } from "@/components/QuickAdd";
+import { useFetch } from "@/hooks/use-fetch";
 
+// Refactoring notu (2026-07-11): 6 bagimsiz useState+useEffect+api.get
+// kalibi useFetch hook'una tasindi (bkz. hooks/use-fetch.js) -- DAVRANIS
+// AYNI: mount'ta bir kere fetch, loadAll() mutasyon sonrasi 4 listeyi
+// yeniden ceker (oncekiyle birebir), parcels/regions bir kere yuklenir.
 export default function Operasyon() {
-  const [summary, setSummary] = useState(null);
-  const [tasks, setTasks] = useState([]);
-  const [machines, setMachines] = useState([]);
-  const [workers, setWorkers] = useState([]);
-  const [parcels, setParcels] = useState([]);
-  const [regions, setRegions] = useState([]);
+  const summaryQ = useFetch("/operations/summary");
+  const tasksQ = useFetch("/operations/tasks", { initialData: [] });
+  const machinesQ = useFetch("/operations/machines", { initialData: [] });
+  const workersQ = useFetch("/operations/workers", { initialData: [] });
+  const parcelsQ = useFetch("/parcels", { params: { limit: 500 }, initialData: [] });
+  const regionsQ = useFetch("/regions", { initialData: [] });
+
+  const summary = summaryQ.data;
+  const tasks = tasksQ.data;
+  const machines = machinesQ.data;
+  const workers = workersQ.data;
+  const parcels = parcelsQ.data;
+  const regions = regionsQ.data;
 
   const loadAll = () => {
-    api.get("/operations/summary").then((r) => setSummary(r.data));
-    api.get("/operations/tasks").then((r) => setTasks(r.data));
-    api.get("/operations/machines").then((r) => setMachines(r.data));
-    api.get("/operations/workers").then((r) => setWorkers(r.data));
+    summaryQ.reload();
+    tasksQ.reload();
+    machinesQ.reload();
+    workersQ.reload();
   };
-
-  useEffect(() => {
-    loadAll();
-    api.get("/parcels", { params: { limit: 500 } }).then((r) => setParcels(r.data));
-    api.get("/regions").then((r) => setRegions(r.data));
-  }, []);
 
   if (!summary) return <div className="p-10 text-[var(--text-dim)]">Yükleniyor…</div>;
 

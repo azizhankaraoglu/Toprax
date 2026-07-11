@@ -1,15 +1,17 @@
-import { useEffect, useState } from "react";
 import api from "@/api";
 import { QuickAddPanel } from "@/components/QuickAdd";
+import { useFetch } from "@/hooks/use-fetch";
+
+// Refactoring notu (2026-07-11): bu dosyadaki 6 bileşenin her biri ayrı
+// ayrı useState+useEffect+api.get tekrarlıyordu — useFetch hook'una
+// taşındı (bkz. hooks/use-fetch.js). DAVRANIŞ AYNI: mount'ta bir kere
+// fetch, mutasyon sonrası ilgili reload() çağrılır (öncekiyle birebir).
 
 export function Sozlesmeler() {
-  const [contracts, setContracts] = useState([]);
-  const [parcels, setParcels] = useState([]);
-  const load = () => api.get("/contracts", { params: { season: 2025 }}).then((r) => setContracts(r.data));
-  useEffect(() => {
-    load();
-    api.get("/parcels", { params: { limit: 500 } }).then((r) => setParcels(r.data));
-  }, []);
+  const contractsQ = useFetch("/contracts", { params: { season: 2025 }, initialData: [] });
+  const parcelsQ = useFetch("/parcels", { params: { limit: 500 }, initialData: [] });
+  const contracts = contractsQ.data;
+  const parcels = parcelsQ.data;
 
   return (
     <div className="p-8" data-testid="sozlesmeler-page">
@@ -41,7 +43,7 @@ export function Sozlesmeler() {
             advance_seed_kg: v.advance_seed_kg ? Number(v.advance_seed_kg) : null,
             advance_fertilizer_kg: v.advance_fertilizer_kg ? Number(v.advance_fertilizer_kg) : null,
           });
-          load();
+          contractsQ.reload();
         }}
       />
 
@@ -69,13 +71,10 @@ export function Sozlesmeler() {
 }
 
 export function Ekim() {
-  const [plantings, setPlantings] = useState([]);
-  const [parcels, setParcels] = useState([]);
-  const load = () => api.get("/plantings", { params: { season: 2025 }}).then((r) => setPlantings(r.data));
-  useEffect(() => {
-    load();
-    api.get("/parcels", { params: { limit: 500 } }).then((r) => setParcels(r.data));
-  }, []);
+  const plantingsQ = useFetch("/plantings", { params: { season: 2025 }, initialData: [] });
+  const parcelsQ = useFetch("/parcels", { params: { limit: 500 }, initialData: [] });
+  const plantings = plantingsQ.data;
+  const parcels = parcelsQ.data;
   const stageBadge = { ekim: "badge-b", gelişim: "badge-c", olgunlaşma: "badge-c", hasat: "badge-a" };
   return (
     <div className="p-8" data-testid="ekim-page">
@@ -99,7 +98,7 @@ export function Ekim() {
               { value: "olgunlaşma", label: "Olgunlaşma" }, { value: "hasat", label: "Hasat" },
             ] },
         ]}
-        onSubmit={async (v) => { await api.post("/plantings", { ...v, season: Number(v.season) }); load(); }}
+        onSubmit={async (v) => { await api.post("/plantings", { ...v, season: Number(v.season) }); plantingsQ.reload(); }}
       />
 
       <div className="card overflow-hidden">
@@ -124,13 +123,10 @@ export function Ekim() {
 }
 
 export function Lojistik() {
-  const [appts, setAppts] = useState([]);
-  const [farmers, setFarmers] = useState([]);
-  const load = () => api.get("/logistics/appointments").then((r) => setAppts(r.data));
-  useEffect(() => {
-    load();
-    api.get("/farmers", { params: { limit: 500 } }).then((r) => setFarmers(r.data));
-  }, []);
+  const apptsQ = useFetch("/logistics/appointments", { initialData: [] });
+  const farmersQ = useFetch("/farmers", { params: { limit: 500 }, initialData: [] });
+  const appts = apptsQ.data;
+  const farmers = farmersQ.data;
   return (
     <div className="p-8" data-testid="lojistik-page">
       <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M08 · MODÜL</div>
@@ -152,7 +148,7 @@ export function Lojistik() {
             estimated_ton: Number(v.estimated_ton),
             scheduled_at: new Date(v.scheduled_at).toISOString(),
           });
-          load();
+          apptsQ.reload();
         }}
       />
 
@@ -180,12 +176,10 @@ export function Lojistik() {
 }
 
 export function Karne() {
-  const [top, setTop] = useState([]);
-  const [bottom, setBottom] = useState([]);
-  useEffect(() => {
-    api.get("/karne/top").then((r) => setTop(r.data));
-    api.get("/karne/bottom").then((r) => setBottom(r.data));
-  }, []);
+  const topQ = useFetch("/karne/top", { initialData: [] });
+  const bottomQ = useFetch("/karne/bottom", { initialData: [] });
+  const top = topQ.data;
+  const bottom = bottomQ.data;
   return (
     <div className="p-8" data-testid="karne-page">
       <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M12 · MODÜL</div>
@@ -221,8 +215,8 @@ export function Karne() {
 }
 
 export function Bildirimler() {
-  const [notifs, setNotifs] = useState([]);
-  useEffect(() => { api.get("/notifications").then((r) => setNotifs(r.data)); }, []);
+  const notifsQ = useFetch("/notifications", { initialData: [] });
+  const notifs = notifsQ.data;
   const chBadge = { sms: "badge-b", whatsapp: "badge-a", push: "badge-c", in_app: "badge-neutral" };
   return (
     <div className="p-8" data-testid="bildirimler-page">

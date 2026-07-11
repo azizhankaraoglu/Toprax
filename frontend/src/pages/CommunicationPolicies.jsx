@@ -7,33 +7,34 @@
  * ekran İCAT EDİLMEDİ — aynı sayfada ikinci bir bölüm, backend'de de tek
  * modülde (communication_policy.py) birlikte yaşıyorlar.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import api from "@/api";
+import { useFetch } from "@/hooks/use-fetch";
 import { Zap, Plus, ShieldOff, Trash2 } from "lucide-react";
 
 const emptyPolicyForm = { name: "", event_type: "", channels: [], template_ids: {} };
 const emptyBlacklistForm = { contact_type: "farmer", contact_id: "", reason: "" };
 
+// Refactoring notu (2026-07-11): 5 bagimsiz okuma-fetch'i useFetch hook'una
+// tasindi (bkz. hooks/use-fetch.js) -- form state (policyForm/blacklistForm/
+// error) DEGISMEDI, sadece "listeyi cek" kismi sadelesti. DAVRANIS AYNI.
 export default function CommunicationPolicies() {
-  const [policies, setPolicies] = useState([]);
-  const [eventTypes, setEventTypes] = useState([]);
-  const [channels, setChannels] = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [blacklist, setBlacklist] = useState([]);
+  const policiesQ = useFetch("/communication-policies", { initialData: [] });
+  const eventTypesQ = useFetch("/communication-policies/event-types", { initialData: [] });
+  const channelsQ = useFetch("/channels", { initialData: [] });
+  const templatesQ = useFetch("/templates", { initialData: [] });
+  const blacklistQ = useFetch("/communications/blacklist", { initialData: [] });
+  const policies = policiesQ.data;
+  const eventTypes = eventTypesQ.data;
+  const channels = channelsQ.data;
+  const templates = templatesQ.data;
+  const blacklist = blacklistQ.data;
   const [policyForm, setPolicyForm] = useState(emptyPolicyForm);
   const [blacklistForm, setBlacklistForm] = useState(emptyBlacklistForm);
   const [error, setError] = useState("");
 
-  const loadPolicies = () => api.get("/communication-policies").then((r) => setPolicies(r.data));
-  const loadBlacklist = () => api.get("/communications/blacklist").then((r) => setBlacklist(r.data));
-
-  useEffect(() => {
-    loadPolicies();
-    loadBlacklist();
-    api.get("/communication-policies/event-types").then((r) => setEventTypes(r.data));
-    api.get("/channels").then((r) => setChannels(r.data));
-    api.get("/templates").then((r) => setTemplates(r.data));
-  }, []);
+  const loadPolicies = () => policiesQ.reload();
+  const loadBlacklist = () => blacklistQ.reload();
 
   const eventLabels = Object.fromEntries(eventTypes.map((e) => [e.key, e.label]));
   const channelLabel = (key) => channels.find((c) => c.key === key)?.label || key;
