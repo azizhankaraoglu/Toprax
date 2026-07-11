@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "@/api";
-import { Wheat, Lock, Mail, Loader2 } from "lucide-react";
+import { Wheat, Lock, Mail, Loader2, MessageCircleQuestion, Send, CheckCircle2, X } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("admin@turkseker.com.tr");
@@ -9,6 +9,37 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
+
+  // İletişim formu (2026-07-11) — hesabı olmayan ziyaretçiler için: giriş
+  // yapamayan biri, hesap oluşturana kadar kurumla iletişime geçebilsin.
+  // Kimlik doğrulama GEREKTİRMEZ (/public/contact-request), Bize Ulaşın'a
+  // (Case Management) "Hesap / Giriş Talebi" kategorisiyle düşer.
+  const [showContact, setShowContact] = useState(false);
+  const [contactForm, setContactForm] = useState({ full_name: "", phone: "", email: "", message: "" });
+  const [contactError, setContactError] = useState("");
+  const [contactLoading, setContactLoading] = useState(false);
+  const [contactSent, setContactSent] = useState(false);
+
+  async function submitContact(e) {
+    e.preventDefault();
+    setContactError("");
+    setContactLoading(true);
+    try {
+      await api.post("/public/contact-request", contactForm);
+      setContactSent(true);
+      setContactForm({ full_name: "", phone: "", email: "", message: "" });
+    } catch (err) {
+      setContactError(err.response?.data?.detail || "Talep gönderilemedi, lütfen tekrar deneyin");
+    } finally {
+      setContactLoading(false);
+    }
+  }
+
+  function toggleContact() {
+    setShowContact((v) => !v);
+    setContactSent(false);
+    setContactError("");
+  }
 
   useEffect(() => {
     if (localStorage.getItem("token")) {
@@ -136,6 +167,102 @@ export default function Login() {
               {loading ? <><Loader2 size={16} className="animate-spin" /> Giriş yapılıyor…</> : "Giriş yap"}
             </button>
           </form>
+
+          <div className="mt-6 text-center">
+            <button
+              type="button"
+              data-testid="no-account-contact-toggle"
+              onClick={toggleContact}
+              className="text-xs text-[var(--text-dim)] hover:text-[var(--primary)] inline-flex items-center gap-1.5"
+            >
+              <MessageCircleQuestion size={14} />
+              Giriş için kullanıcınız yok mu? Buradan talep oluşturabilirsiniz
+            </button>
+          </div>
+
+          {showContact && (
+            <div className="mt-4 card p-5 relative" data-testid="contact-request-panel">
+              <button
+                type="button"
+                onClick={toggleContact}
+                className="absolute top-3 right-3 text-[var(--text-dim)] hover:text-white"
+                aria-label="Kapat"
+              >
+                <X size={16} />
+              </button>
+
+              {contactSent ? (
+                <div className="text-center py-2" data-testid="contact-request-success">
+                  <CheckCircle2 size={28} className="text-[var(--primary)] mx-auto mb-2" />
+                  <p className="text-sm">Talebiniz alındı.</p>
+                  <p className="text-xs text-[var(--text-dim)] mt-1">
+                    Kurumunuzun yetkilisi en kısa sürede sizinle iletişime geçecektir.
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={submitContact} className="space-y-3">
+                  <div>
+                    <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">HESAP / GİRİŞ TALEBİ</div>
+                    <p className="text-xs text-[var(--text-dim)]">
+                      Kurumunuzda henüz bir kullanıcı hesabınız yoksa, aşağıdaki formla
+                      talep oluşturun — yetkiliniz sizinle iletişime geçecektir.
+                    </p>
+                  </div>
+                  <input
+                    data-testid="contact-fullname-input"
+                    className="input text-sm"
+                    placeholder="Ad Soyad"
+                    required
+                    value={contactForm.full_name}
+                    onChange={(e) => setContactForm((f) => ({ ...f, full_name: e.target.value }))}
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      data-testid="contact-phone-input"
+                      className="input text-sm"
+                      placeholder="Telefon"
+                      value={contactForm.phone}
+                      onChange={(e) => setContactForm((f) => ({ ...f, phone: e.target.value }))}
+                    />
+                    <input
+                      data-testid="contact-email-input"
+                      type="email"
+                      className="input text-sm"
+                      placeholder="E-posta"
+                      value={contactForm.email}
+                      onChange={(e) => setContactForm((f) => ({ ...f, email: e.target.value }))}
+                    />
+                  </div>
+                  <textarea
+                    data-testid="contact-message-input"
+                    className="input text-sm min-h-[80px]"
+                    placeholder="Talebinizi kısaca açıklayın (örn. hangi kurum/kooperatif, hangi rol)"
+                    required
+                    value={contactForm.message}
+                    onChange={(e) => setContactForm((f) => ({ ...f, message: e.target.value }))}
+                  />
+                  <p className="text-[10px] text-[var(--text-dim)]">
+                    Telefon veya e-postadan en az birini girmeniz gerekir.
+                  </p>
+
+                  {contactError && (
+                    <div className="text-xs text-[var(--danger)] bg-red-500/10 border border-red-500/20 rounded-lg p-2.5">
+                      {contactError}
+                    </div>
+                  )}
+
+                  <button
+                    data-testid="contact-submit-button"
+                    type="submit"
+                    disabled={contactLoading}
+                    className="btn btn-primary w-full justify-center py-2.5 text-sm"
+                  >
+                    {contactLoading ? <><Loader2 size={14} className="animate-spin" /> Gönderiliyor…</> : <><Send size={14} /> Talep Gönder</>}
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
 
           <div className="mt-8 pt-6 border-t border-[var(--border)] text-xs text-[var(--text-dim)] space-y-1">
             <div className="text-[10px] tracking-widest mb-2">DEMO HESAPLAR</div>

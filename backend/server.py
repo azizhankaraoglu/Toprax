@@ -49,6 +49,7 @@ from security import (hash_password, verify_password, needs_rehash,
 from audit import log_audit, register_audit_routes
 from integrations import register_integration_routes
 from tenant_context import TenantScopedDB, current_tenant_id
+from public_contact import resolve_bootstrap_tenant, create_public_contact_case
 
 # MongoDB bağlantısı kur (MONGO_URL/DB_NAME artık config_service.py'den okunur)
 client = AsyncIOMotorClient(MONGO_URL)                      # Async client
@@ -235,6 +236,16 @@ class LoginReq(BaseModel):
 class RefreshTokenReq(BaseModel):
     """Refresh token endpoint'i için body şeması"""
     refresh_token: str
+
+
+class PublicContactRequest(BaseModel):
+    """Giriş sayfasındaki 'Hesabınız yok mu? Talep oluşturun' formu için
+    body şeması (2026-07-11) -- kimlik doğrulama GEREKTİRMEZ, bkz.
+    /public/contact-request endpoint'inin docstring'i."""
+    full_name: str
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    message: str
 
 
 class FarmerCreate(BaseModel):
@@ -479,6 +490,53 @@ async def refresh_access_token(body: RefreshTokenReq):
 async def me(user=Depends(current_user)):
     """Mevcut giriş yapmış kullanıcının bilgilerini döner"""
     return user
+
+
+@api_router.post("/public/contact-request")
+async def public_contact_request(body: PublicContactRequest, request: Request):
+    """
+    Giriş sayfasındaki (Login.jsx) 'Giriş için kullanıcınız yok ise burada
+    talep oluşturabilirsiniz' formu (2026-07-11). KİMLİK DOĞRULAMASI
+    GEREKTİRMEZ -- /auth/login gibi bu da bir "öncesi" endpoint'i: henüz
+    hesabı olmayan biri başvuruyor, current_user/require_permission
+    KULLANILAMAZ (login ile AYNI gerekçe).
+
+    Asıl mantık public_contact.py'de (tenant çözümleme + case/kategori
+    yazma) -- mongomock ile tek başına test edilebilsin diye ayrıştırıldı
+    (bkz. tests/test_public_contact_request.py). Bu route sadece girdi
+    doğrulama + kötüye kullanım freni + tenant bağlamını kurup/söküyor.
+
+    Kötüye kullanım freni: auth_lockout.py'deki (PR-13) AYNI IP bazlı
+    sayaç yeniden kullanılır -- aynı IP 15 dakikada 5'ten fazla talep
+    oluşturamaz (Redis/ek bağımlılık YOK, login brute-force korumasıyla
+    aynı in-process tasarım).
+    """
+    if not body.phone and not body.email:
+        raise HTTPException(400, "Telefon veya e-posta adreslerinden en az biri gerekli (size dönüş yapılabilmesi için)")
+    if not body.full_name.strip() or not body.message.strip():
+        raise HTTPException(400, "Ad Soyad ve mesaj alanları zorunludur")
+
+    client_ip = request.client.host if request.client else "unknown"
+    lock_key = "public-contact-form"
+    locked_remaining = is_locked(lock_key, client_ip)
+    if locked_remaining > 0:
+        raise HTTPException(429, f"Çok fazla talep oluşturuldu -- {int(locked_remaining // 60) + 1} dakika sonra tekrar deneyin")
+    record_failed_attempt(lock_key, client_ip)
+
+    reset_token = None
+    if current_tenant_id.get() is None:
+        tenant = await resolve_bootstrap_tenant(raw_db)
+        reset_token = current_tenant_id.set(tenant["id"])
+
+    try:
+        case_doc = await create_public_contact_case(db, body.full_name, body.phone, body.email, body.message)
+        await log_audit(db, {"email": body.email or body.phone or "anonim"}, action="create",
+                         entity="case", entity_id=case_doc["id"], new_value=case_doc, request=request)
+    finally:
+        if reset_token is not None:
+            current_tenant_id.reset(reset_token)
+
+    return {"ok": True, "message": "Talebiniz alındı. Kurumunuzun yetkilisi en kısa sürede sizinle iletişime geçecektir."}
 
 
 # =====================================================================
