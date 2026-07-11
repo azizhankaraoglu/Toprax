@@ -1691,3 +1691,76 @@ sözdizimi kontrolünden geçti; tüm bash scriptleri `bash -n` ile
 sözdizimi kontrolünden geçti; docker-compose YAML dosyaları
 `yaml.safe_load` ile doğrulandı. **Repo artık git ile takip ediliyor,
 her adım ayrı commit.**
+
+---
+
+## 12) 2026-07-11 (devam, 4. oturum) — AI-VIZYON-PLATFORMU-PROMPT.md → Mimari Doküman + FAZ 18 Planı
+
+**Kapsam:** Kullanıcı `AI-VIZYON-PLATFORMU-PROMPT.md`'yi uygulamamı istedi.
+Bu prompt'un kendisi zaten iki açık karar sorulmasını zorunlu kılıyordu —
+ikisi de kullanıcıya soruldu:
+
+1. **DB/kuyruk yığını:** Kullanıcı kararı bana bıraktı ("amacımıza uygun en
+   optimum performans/teknoloji kararını sen ver"). **Mongo + in-process**
+   seçildi (PostgreSQL/PostGIS/Redis/RabbitMQ DEĞİL) — gerekçe: (a) Faz-1
+   ölçeği (3000-5000 parsel) PostGIS'in gerçek avantaj sağladığı ölçeğin
+   çok altında, (b) ROADMAP-URUNLESTIRME.md'nin FAZ P0'ı tam da "tek
+   docker-compose, tek backup scripti, tek migration runner" ile minimum
+   ops yükü hedefliyordu — ikinci bir DB teknolojisi bunu ikiye katlardı,
+   (c) ROADMAP.md'nin kendi "B. Uyarlama Kararları" bölümü zaten "Redis/
+   RabbitMQ/Elasticsearch/GeoServer → Mongo/in-process karşılık" diyor,
+   bu karar mevcut politikayla TAM tutarlı, (d) kaçış yolu açık: Faz 2+'da
+   AI Engine ayrı bir servis olduğu için istenirse İLERİDE PostGIS'e
+   geçilebilir, bugün seçmemek yarın seçememek anlamına gelmiyor.
+2. **Menü yerleşimi:** Kullanıcı "Ayarlar altında alt-grup" seçeneğini
+   onayladı (8. üst menü AÇILMADI).
+
+**Numaralandırma düzeltmesi (prompt'un kendi hatası):** Prompt "IT-38'den
+başlayın" diyordu ama IT-01..46 zaten TAMAMEN dolu (FAZ 17/IT-46'ya kadar
+kullanılmış — grep ile doğrulandı). Prompt ayrıca "yeni FAZ 14" diyordu
+ama FAZ 17'ye kadar zaten dolu. Bu çelişki görmezden gelinmedi, düzeltilip
+**FAZ 18, IT-47'den başlayarak** uygulandı; bu düzeltme hem yeni FAZ 18
+başlığında hem de bu bölümde açıkça not edildi.
+
+**Üretilen dosyalar (SADECE doküman — kod YAZILMADI, prompt'un kendi
+"Beklenen Çıktı Formatı" bölümü de zaten sadece 2 doküman istiyordu):**
+- `AI-VIZYON-PLATFORMU-PROMPT.md` (orijinal prompt, repoya kopyalandı —
+  Desktop/toprax'tan, referans olarak kalıcı saklanması için).
+- `AI-VIZYON-PLATFORMU-MIMARI.md` (YENİ, ~655 satır) — 18 bölüm: karar
+  özeti, sistem mimarisi (ASCII diyagram), modül hiyerarşisi, veritabanı
+  tasarımı (7 koleksiyon: ai_datasets, ai_knowledge_records, ai_taxonomy,
+  ai_models, ai_predictions, ai_jobs, ai_tenant_quota,
+  ai_active_learning_queue), görüntü kaynakları/Provider Pattern
+  genişlemesi, Knowledge Library mimarisi, yerel model önerileri (lisans
+  tablosu — **Ultralytics YOLO AGPL-3.0 riski** açıkça işaretlendi),
+  Confidence Engine + job queue (RabbitMQ yerine Mongo `find_one_and_update`
+  atomik claim deseni), tenant AI kotası, cloud escalation + redaksiyon
+  filtresi, Active Learning/HITL (case_management.py'ye köprü — YENİ
+  mesajlaşma İCAT EDİLMEDİ), MLOps (golden dataset regresyon kapısı,
+  Health Center entegrasyonu), performans/güvenlik, API tasarımı (Standard
+  API sözleşmesine uyum), ekranlar/menü, Faz 1→4 deployment yol haritası
+  (Service Registry ile adres soyutlama), Event Bus entegrasyonu, Mobil AI
+  Kamera köprüsü, bilinen riskler/açık sorular.
+- `ROADMAP-DETAY-TAM.md`: yeni **FAZ 18 — Agricultural Intelligence Engine**
+  bloğu eklendi, IT-47 (Knowledge Library çekirdeği), IT-48 (Yerel Pipeline
+  + Confidence Engine), IT-49 (Cloud Escalation + Tenant Kota), IT-50
+  (Active Learning + Uzman Doğrulama), IT-51 (MLOps/Model Registry +
+  Health Center), IT-52 (Mobil AI Kamera Köprüsü), IT-53 (Menü/RBAC
+  Konsolidasyonu + Postman entegrasyonu) — her biri Veri Modeli/API/UI/
+  Kabul Kriterleri formatında, var olan IT-42..46 girişleriyle AYNI
+  yoğunlukta.
+- `ROADMAP.md`: durum panosuna `FAZ 18 | IT-47..53 | ⬜ (plan hazır, kod
+  yazılmadı)` satırı eklendi.
+- `CLAUDE.md` (repo kökü): başlık güncellendi, bu oturuma referans eklendi.
+
+**Bilinçli kapsam dışı bırakılan (bu oturumda YAPILMAYAN):** Gerçek kod
+(backend/ai_engine/ paketi, modeller, pipeline, UI ekranları) — prompt'un
+kendi talimatı bu oturumun çıktısının SADECE mimari doküman + IT planı
+olmasıydı ("Bu görevin çıktısı dağınık bir rapor olmamalı... İKİ parçayı
+üret"), implementasyon bir SONRAKİ oturumun (kullanıcı "IT-47'yi yap"
+dediğinde) konusu.
+
+**Doğrulama:** `grep -oE "IT-[0-9]+"` ile IT numaralandırma çakışması
+olmadığı (IT-47..53 önceden hiç kullanılmamış) teyit edildi; yeni FAZ 18
+bloğu ROADMAP-DETAY-TAM.md'nin var olan IT-42..46 girişleriyle AYNI
+başlık/bölüm yapısında yazıldığı gözden geçirilerek doğrulandı.

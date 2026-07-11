@@ -3,6 +3,7 @@
 > Bu dosya her oturumun başında okunmalıdır. Amaç: yeni bir Claude oturumunun
 > projeyi sıfırdan keşfetmeden doğru kararlar verebilmesi.
 > Son güncelleme: 2026-07-11 (güvenlik denetimi + FAZ 13-17 (IT-36..46) roadmap'e eklendi + FAZ 13 (IT-36..39) TAMAMLANDI — bkz. dosya sonu "Mevcut Durum")
+> Son güncelleme (devam): 2026-07-11 — ROADMAP-URUNLESTIRME.md (on-premise urunlestirme, PR-01..PR-26 + P1-P4) TAMAMLANDI; FAZ 18 (Agricultural Intelligence Engine, IT-47..53) PLANLANDI (`AI-VIZYON-PLATFORMU-MIMARI.md` + ROADMAP-DETAY-TAM.md) ama HENUZ KOD YAZILMADI — bkz. memory/CLAUDE.md Bolum 11-12.
 
 ---
 

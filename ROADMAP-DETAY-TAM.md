@@ -1375,6 +1375,247 @@ VE mobilden erişilebiliyor; "Hata Bildirimi" kategorisi otomatik
 
 ---
 
+## FAZ 18 — Agricultural Intelligence Engine (AI Vision Platformu)
+
+> **Bağlam (2026-07-11 kararı):** `AI-VIZYON-PLATFORMU-PROMPT.md`'nin
+> istediği kapsamlı AI/Computer Vision platformu — tam mimari için
+> `AI-VIZYON-PLATFORMU-MIMARI.md`'ye bakın. Prompt IT-38'den başlamayı
+> öneriyordu ama o numaralar zaten IT-42..46 olarak kullanılmıştı (FAZ 15-17)
+> — bu yüzden **IT-47'den** başlanmıştır. Prompt'un sorduğu 2 açık karar
+> kullanıcıyla netleştirildi: (1) **Mongo + in-process** kullanılacak
+> (PostgreSQL/PostGIS/Redis/RabbitMQ İCAT EDİLMEZ — gerekçe mimari dokümanın
+> Karar 1 bölümünde), (2) yeni ekranlar **"Ayarlar" altında bir alt-grup**
+> olarak yerleşecek (8. üst menü AÇILMAZ). Bu FAZ, mimari dokümanda önerilen
+> 6 parçaya + bir menü/RBAC konsolidasyon adımına bölünmüştür.
+
+### IT-47 — AI Knowledge Library Çekirdeği
+
+**Veri Modeli:** `ai_datasets`, `ai_knowledge_records`, `ai_taxonomy`
+(bkz. AI-VIZYON-PLATFORMU-MIMARI.md Bölüm 4.1 — alan listesi BİREBİR
+oradan alınır). Mantıksal veritabanı: `tabsis_ai` (aynı Mongo örneği,
+ayrı DB — fiziksel izolasyon, ayrı teknoloji DEĞİL). Tenant izolasyonu
+mevcut `TenantScopedDB` ile (yeni bir mekanizma İCAT EDİLMEZ).
+Versiyonlama: `ledger.py`'nin silinmezlik deseniyle AYNI —
+`previous_version_id` ile yeni kayıt, eski kayıt `is_active=false`
+olur ama SİLİNMEZ.
+
+**Upload/Import:** tekli, toplu, klasör, ZIP — `geo_import.py`'nin
+"önizle → doğrula → onayla" akışıyla AYNI desen. Fiziksel dosyalar
+`storage.py` üzerinden (`module="ai_knowledge"`), yeni bir depolama
+katmanı İCAT EDİLMEZ.
+
+**Annotation:** bbox/polygon/segmentation mask çizimi, MEVCUT
+`leaflet-draw`/`@turf/turf` kütüphaneleri `CRS.Simple` modunda
+(piksel koordinatı) kullanılarak yapılır — yeni bir çizim kütüphanesi
+kurulmaz.
+
+**API:** `crud_base.py`'den (`build_crud_router`, PR-23) türetilir:
+`POST/GET/PUT/DELETE /api/ai/datasets`, `POST/GET/PUT/DELETE
+/api/ai/knowledge-records`, `POST /api/ai/knowledge-records/bulk`,
+`POST /api/ai/knowledge-records/{id}/annotations`, `GET
+/api/ai/knowledge-records/export`. Query Engine'e (IT-08)
+`ai_knowledge_records` modülü + `CORE_FILTERABLE_FIELDS` girdisi eklenir
+— knowledge search kendi arama motorunu YAZMAZ.
+
+**UI:** Knowledge Library (liste+filtre), Dataset Manager, Image
+Browser, Annotation Screen, Dataset Statistics — Ayarlar > AI Bilgi
+Kütüphanesi > "Kütüphane" sekmesi.
+
+**RBAC:** `permissions.py` PERMISSION_CATALOG'a yeni modül:
+`ai_knowledge:view`, `ai_knowledge:create`, `ai_knowledge:approve`,
+`ai_knowledge:manage`.
+
+**Kabul Kriterleri:** ZIP toplu upload 100+ görüntüyü tek işlemde
+`ai_knowledge_records`'a dönüştürüyor; bir kaydın annotation'ı
+düzenlendiğinde eski versiyon SİLİNMİYOR (`previous_version_id` ile
+zincirleniyor); `POST /api/query/ai_knowledge_records` filtre+sayfalama
+ile çalışıyor; en az 20 örnek taksonomi kaydı (ürün/hastalık/zararlı)
+seed ediliyor (gerçek liste kullanıcının bölge/ürün profiline göre
+netleşmeli — bkz. mimari doküman Bölüm 18.3).
+
+---
+
+### IT-48 — Yerel AI Pipeline + Confidence Engine
+
+**Kavram:** AI-VIZYON-PLATFORMU-MIMARI.md Bölüm 7.1'deki tam akış
+(Ön İşleme → Spektral Analiz → Kural Motoru → Yerel Modeller →
+Confidence Engine) BİREBİR uygulanır.
+
+**Veri Modeli:** `ai_models`, `ai_predictions`, `ai_jobs` (mimari
+doküman Bölüm 4.1). Job queue RabbitMQ'suz, `find_one_and_update`
+atomik claim ile (Bölüm 7.3'teki kod özeti referans alınır).
+
+**Yerel modeller:** mimari doküman Bölüm 6'daki tablo — Faz-1'de
+SADECE CPU uyumlu modeller devreye alınır (YOLO ailesi seçilirse
+**AGPL lisans riski** için mimari dokümanın Bölüm 6 notu — Apache-2.0
+alternatifleri veya ticari lisans satın alma kararı bu IT'nin bir
+parçası olarak netleştirilmeli, PR-17'nin lisans raporuna eklenmeli).
+
+**Spektral analiz:** `satellite_provider.py`'deki `ndvi_to_health()`
+fonksiyonu YENİDEN YAZILMAZ, import edilip paylaşılır.
+
+**API:** `POST /api/ai/predict` (senkron, küçük iş), `POST
+/api/ai/predict/async` (ai_jobs'a düşer), `GET /api/ai/jobs/{id}`.
+
+**Kabul Kriterleri:** aynı görüntü için kural motoru kesin sonuç
+verdiğinde yerel model HİÇ çalıştırılmıyor (maliyet minimizasyonu);
+birden fazla model çelişen sonuç verdiğinde confidence otomatik
+düşürülüyor (Bölüm 7.2); bir job "processing" durumunda kilitliyken
+ikinci bir worker AYNI job'ı claim edemiyor (atomiklik testi); başarısız
+job `max_attempts`'a kadar otomatik retry ediyor.
+
+---
+
+### IT-49 — Bulut Escalation + Tenant AI Kotası
+
+**Veri Modeli:** `ai_tenant_quota` (mimari doküman Bölüm 4.1/8).
+
+**Kavram:** düşük güvenli sonuçlar, kota müsaitse `ai_provider.py`
+(mevcut Provider Pattern, mock_mode dahil) üzerinden buluta escalate
+edilir — YENİ bir AI sağlayıcı entegrasyon katmanı İCAT EDİLMEZ.
+Escalation ÖNCESİNDE mimari doküman Bölüm 9'daki redaksiyon filtresi
+ZORUNLU uygulanır (kimliklendirici metadata asla gönderilmez).
+
+**Kota mantığı:** `$inc` ile atomik sayaç artırma (race condition
+önlenir); kota dolduğunda sonuç YİNE DÖNER (asla sessiz hata),
+`decision="low_confidence_no_cloud_budget"` ile işaretlenir; %80 eşiğinde
+tenant admin'ine mevcut bildirim akışıyla (Comm Hub, yeni mantık
+YAZILMADAN) uyarı gider.
+
+**API:** `GET /api/ai/tenant-quota` (kalan kota), admin `PUT
+/api/ai/tenant-quota/{tenant_id}/limits`.
+
+**Kabul Kriterleri:** Tenant A'nın kotası dolduğunda Tenant B'nin
+escalation'ı ETKİLENMİYOR (izolasyon testi); redaksiyon filtresinden
+geçen bir istekte çiftçi adı/TC/telefon/adres HİÇBİR ALANDA
+bulunmuyor (otomatik test: gönderilen payload'da yasaklı alan
+regex'i taranıyor); kota %80'e ulaştığında bildirim gerçekten
+gidiyor.
+
+---
+
+### IT-50 — Active Learning + Uzman Doğrulama Arayüzü
+
+**Veri Modeli:** `ai_active_learning_queue` (mimari doküman Bölüm 4.1).
+
+**Kavram:** YENİ bir mesajlaşma sistemi İCAT EDİLMEZ — düşük güvenli/
+yeni/nadir bir tahmin bu kuyruğa düştüğünde, `case_management.py`
+üzerinden `category="AI Doğrulama"` bir Case açılır (IT-46'nın Case
+modeli birebir kullanılır). Uzman bu Case'i kendi "Onay Bekleyenlerim"
+ekranında (IT-07b, `PendingApprovals.jsx`) diğer onaylarla birlikte
+görür. Onay/düzeltme, Case'in `CaseMessage` akışına not olarak düşer +
+`ai_knowledge_records`'a yeni versiyon (`labels[].source="hibrit"`)
+eklenir.
+
+**Önceliklendirme:** `priority_score` — düşük güven + bilinmeyen sınıf +
+model konsensüs çelişkisi bileşenlerinin toplamı (mimari doküman
+Bölüm 10).
+
+**UI:** Expert Validation Screen (renk kodlu: kırmızı/sarı/yeşil,
+onay/düzeltme/yeniden-eğitim-işaretle aksiyonları, performans
+istatistikleri), Prediction Review — Ayarlar > AI Bilgi Kütüphanesi >
+"Doğrulama" sekmesi.
+
+**RBAC:** `ai_prediction:view`, `ai_prediction:validate`.
+
+**Kabul Kriterleri:** bir doğrulama Case'i, uzmanın normal onay
+kuyruğunda diğer onaylarla birlikte (ayrı bir ekranda DEĞİL) görünüyor;
+onaylanan bir tahmin otomatik olarak golden dataset'e (IT-51'in
+kullanacağı) ekleniyor; düzeltilen bir etiket eski versiyonu SİLMEDEN
+yeni versiyon olarak kaydediliyor.
+
+---
+
+### IT-51 — MLOps / Model Registry + Health Center Entegrasyonu
+
+**Kavram:** `ai_models` durum makinesi (`training→validation→staging→
+production→retired`) — CLAUDE.md'nin diğer modüllerdeki
+`ALLOWED_TRANSITIONS` konvansiyonuyla AYNI desen.
+
+**Zorunlu kapı:** `staging→production` geçişi ÖNCESİNDE golden dataset
+üzerinde regresyon testi ÇALIŞIR; yeni model metrikleri (precision/
+recall/F1/IoU) mevcut production modelinden KÖTÜYSE deploy otomatik
+REDDEDİLİR (bu adım atlanamaz, API seviyesinde zorlanır).
+
+**Rollback:** `previous_model_id` ile tek çağrıda önceki production
+modeline dönülür (PR-04'ün migration rollback felsefesiyle aynı desen).
+
+**Health Center:** `platform_core.py`'nin `GET /platform-core/health`
+yanıtına (PR-04'te `schema_version` eklenen AYNI liste) yeni bir
+servis kaydı: `{"service": "ai_model_health", ...}` — response şekli
+DEĞİŞMEZ, sadece yeni bir satır eklenir.
+
+**Lisans raporu güncellemesi:** IT-48'de seçilen yerel modellerin
+lisansları `docs/legal/BAGIMLILIK-LISANS-RAPORU.md`'ye (PR-17) yeni
+bir "ML Modelleri" bölümü olarak eklenir.
+
+**API:** `GET/POST /api/ai/models`, `POST /api/ai/models/{id}/deploy`,
+`POST /api/ai/models/{id}/rollback`, `POST /api/ai/models/{id}/train`,
+`GET /api/ai/models/{id}/training-history`.
+
+**UI:** Model Training Screen, Model Management, Model Comparison,
+Training History, AI Monitoring Dashboard, Inference History — "Model
+Yönetimi" + "İzleme" sekmeleri.
+
+**Kabul Kriterleri:** golden dataset'te mevcut modelden kötü metrik
+veren bir model deploy edilmeye çalışıldığında 4xx ile reddediliyor;
+rollback sonrası `production` işaretli model gerçekten önceki sürüm;
+Health Center'da AI Model Sağlığı satırı görünüyor ve drift/hata
+oranını doğru yansıtıyor.
+
+---
+
+### IT-52 — Mobil AI Kamera Köprüsü
+
+**Kavram:** IT-35'in mobil rol matrisindeki Saha Personeli kamera akışı
+YENİDEN YAZILMAZ — mobil taraf çekim/upload yapmaya devam eder (offline
+kuyruk dahil). AI Engine, mevcut generic upload tamamlanma olayını
+(`upload_completed` — event bus'a eklenir) dinler, otomatik olarak
+`ai_jobs`'a bir analiz job'ı düşürür. Kullanıcı ek bir aksiyon almaz.
+
+**Event Bus:** `EVENT_TYPES`'a `ai_disease_detected`, `ai_risk_detected`,
+`ai_validation_needed`, `ai_model_deployed` eklenir (mimari doküman
+Bölüm 16). Bilinen tüketiciler: Saha Operasyonları (otomatik görev
+oluşturma, docx'teki "AI hastalık tespit etti → görev" senaryosu),
+Comm Hub (Communication Policy üzerinden bildirim), Harita (AI Harita
+Asistanı girdisi, IT-17).
+
+**Kabul Kriterleri:** mobilden offline çekilip senkronize edilen bir
+fotoğraf, kullanıcı hiçbir ek adım atmadan `ai_jobs`'a otomatik giriyor;
+sonuç hazır olduğunda ilgili Saha Personeli/Ziraat Mühendisi'ne mevcut
+bildirim kanalıyla ulaşıyor; bir hastalık tespitinde otomatik bir Saha
+görevi açılıyor (docx senaryosu).
+
+---
+
+### IT-53 — Menü/RBAC Konsolidasyonu + Geliştirici Portalı Entegrasyonu
+
+**Kavram:** IT-47..52'de dağınık eklenen ekranlar tek bir menü
+konumunda toplanır (kullanıcı ile netleşen Karar 2): Ayarlar → **AI
+Bilgi Kütüphanesi**, 4 sekme (Kütüphane/Doğrulama/Model Yönetimi/
+İzleme — mimari doküman Bölüm 14). CLAUDE.md Kural 3'e uyum için 8.
+üst menü AÇILMAZ.
+
+**RBAC:** IT-47..52'de eklenen TÜM permission'lar (`ai_knowledge:*`,
+`ai_model:*`, `ai_prediction:*`) `DEFAULT_ROLE_PERMISSIONS`'da ilgili
+rollere (Ziraat Mühendisi: view+validate, Sistem Yöneticisi: tümü)
+atanır.
+
+**Geliştirici Portalı:** `/api/ai/*` uçları hiçbir ek kod olmadan
+`scripts/generate_postman_collection.py`'nin (PR-25) bir sonraki
+çalıştırmasında otomatik Postman collection'a girer (yeni bir "ai"
+klasörü) — bu IT'nin tek somut aksiyonu, generator scriptini bu modül
+merge edildikten sonra bir kez çalıştırıp `postman/` çıktısını
+güncellemektir.
+
+**Kabul Kriterleri:** Ayarlar menüsünde tek bir "AI Bilgi Kütüphanesi"
+girişi var, 8. üst menü maddesi YOK; Ziraat Mühendisi rolündeki bir
+kullanıcı Doğrulama sekmesini görüyor ama Model Yönetimi'ni GÖRMÜYOR
+(RBAC testi); Postman collection'da `ai` klasörü altında IT-47..52'nin
+tüm uçları listeleniyor.
+
+---
+
 ## Kullanım Notu — Neden Bu Dosya Kod Kalitesini Artırır
 
 ROADMAP.md satırları ("Financial Ledger + Cari Hesap ekranı" gibi) Claude Code'a

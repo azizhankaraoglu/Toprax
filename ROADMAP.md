@@ -218,3 +218,4 @@ her şeyden önce, çünkü tüm sonraki modüller onu kullanır.
 | FAZ 15 | IT-42 ✅ · IT-43 ✅ | ✅ (IT-07b — organization.py + approval.py olarak uygulandı) |
 | FAZ 16 | IT-44 · IT-45 | ⬜ |
 | FAZ 17 | IT-46 ✅ | ✅ (IT-28 — case_management.py, "Bize Ulaşın") |
+| FAZ 18 | IT-47 · IT-48 · IT-49 · IT-50 · IT-51 · IT-52 · IT-53 | ⬜ (Agricultural Intelligence Engine — plan hazır, `AI-VIZYON-PLATFORMU-MIMARI.md` + ROADMAP-DETAY-TAM.md'ye eklendi 2026-07-11; DB/kuyruk kararı: Mongo+in-process, menü kararı: Ayarlar altı alt-grup — henüz KOD YAZILMADI) |
