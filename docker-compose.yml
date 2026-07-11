@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: tabsis-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?MONGO_ROOT_USERNAME .env dosyasında tanımlanmalı}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD .env dosyasında tanımlanmalı}
+    volumes:
+      - mongo_data:/data/db
+    # ÖNEMLİ: Mongo artık host'a AÇILMIYOR (P0 güvenlik düzeltmesi — önceden
+    # 27017 host'a publish ediliyordu ve kimlik doğrulaması da yoktu, yani
+    # herkes doğrudan veritabanına bağlanabiliyordu). backend zaten aynı
+    # tabsis-net üzerinden mongo:27017'ye erişir, host portu gerekmez.
+    # Yerel geliştirmede Mongo Compass gibi bir araçla bağlanmak gerekirse
+    # SADECE localhost'a bağlı bir port açın (docker-compose.override.yml
+    # içinde "127.0.0.1:27017:27017" gibi), asla "27017:27017" (0.0.0.0) YAZMAYIN.
+    networks:
+      - tabsis-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../Dockerfile.backend
+    container_name: tabsis-backend
+    restart: unless-stopped
+    environment:
+      # Bu compose dosyası üretim/dağıtım amaçlıdır — ENVIRONMENT=production
+      # iken config_service.py aşağıdaki secret'lar boş/varsayılan ise
+      # uygulamayı fail-fast RuntimeError ile açılıştan reddeder.
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      MONGO_URL: mongodb://${MONGO_ROOT_USERNAME:?MONGO_ROOT_USERNAME .env dosyasında tanımlanmalı}:${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD .env dosyasında tanımlanmalı}@mongo:27017/?authSource=admin
+      DB_NAME: tarim_kooperatif
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET .env dosyasında tanımlanmalı — güçlü/rastgele bir değer kullanın (python -c "import secrets; print(secrets.token_hex(32))")}
+      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:?PLATFORM_ADMIN_EMAIL .env dosyasında tanımlanmalı}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?PLATFORM_ADMIN_PASSWORD .env dosyasında tanımlanmalı — güçlü bir şifre kullanın}
+      ALLOW_DATA_SEEDING: ${ALLOW_DATA_SEEDING:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+    ports:
+      - "8001:8001"
+    depends_on:
+      - mongo
+    networks:
+      - tabsis-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../Dockerfile.frontend
+      args:
+        REACT_APP_BACKEND_URL: http://localhost:8001
+    container_name: tabsis-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - tabsis-net
+
+volumes:
+  mongo_data:
+
+networks:
+  tabsis-net:
+    driver: bridge

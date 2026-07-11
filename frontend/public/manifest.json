@@ -1,0 +1,11 @@
+{
+  "short_name": "TabSIS",
+  "name": "TabSIS — Tarımsal Operasyon ve Karar Destek Platformu",
+  "start_url": "/m",
+  "display": "standalone",
+  "background_color": "#070b09",
+  "theme_color": "#16a34a",
+  "icons": [
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any maskable" }
+  ]
+}
