@@ -2553,6 +2553,11 @@ register_api_key_routes(api_router, raw_db, require_permission, log_audit)
 from dev_portal import register_dev_portal_routes
 register_dev_portal_routes(api_router)
 
+# PR-15 (ROADMAP-URUNLESTIRME.md): KVKK acik riza kayit mekanizmasi
+# (genel amacli -- bkz. docs/legal/KVKK-AYDINLATMA-METNI.md Bolum 6).
+from consent import register_consent_routes
+register_consent_routes(api_router, db, current_user, log_audit)
+
 # Communication Hub: Kanal Provider Pattern + Şablon Yönetimi + Gönderim +
 # Kişi Kartı İletişim Timeline'ı (IT-25 / FAZ 9 başlangıç).
 from communications import register_communication_routes
