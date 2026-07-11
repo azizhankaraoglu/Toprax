@@ -22,6 +22,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from api_keys import resolve_api_key_user, KEY_PREFIX as API_KEY_PREFIX
+from auth_lockout import is_locked, record_failed_attempt, record_successful_login
 from dotenv import load_dotenv                              # .env dosyasını okur
 from starlette.middleware.cors import CORSMiddleware        # CORS kuralları
 from motor.motor_asyncio import AsyncIOMotorClient          # Async MongoDB sürücüsü
@@ -385,7 +386,16 @@ async def login(body: LoginReq, request: Request):
 
     Çiftçi girişi: çiftçinin oluşturulmuş bir user kaydı varsa email/şifre ile.
     Demo'da her çiftçinin email'i: <member_no>@ciftci.tr / şifre: ciftci123
+
+    PR-13 (ROADMAP-URUNLESTIRME.md): brute-force koruması -- aynı e-posta+IP
+    kombinasyonu 15 dakika içinde 5 başarısız denemeden sonra 15 dakika
+    kilitlenir (bkz. auth_lockout.py).
     """
+    client_ip = request.client.host if request.client else "unknown"
+    locked_remaining = is_locked(body.email, client_ip)
+    if locked_remaining > 0:
+        raise HTTPException(429, f"Çok fazla başarısız deneme -- {int(locked_remaining // 60) + 1} dakika sonra tekrar deneyin")
+
     # E-posta küçük harfe çevir (case-insensitive arama). Email artık tenant
     # bazlı benzersiz (bkz. P1 index düzeltmesi) — aynı e-posta birden fazla
     # kurumda kayıtlı olabilir, bu yüzden TÜM eşleşmeler çekilip şifre her
@@ -401,6 +411,7 @@ async def login(body: LoginReq, request: Request):
 
     # Kullanıcı yoksa VEYA şifre hiçbir aday ile eşleşmiyorsa hata (bcrypt + eski SHA256 destekli)
     if not user:
+        record_failed_attempt(body.email, client_ip)
         await log_audit(db, {"email": body.email}, action="login_failed", entity="user", request=request)
         raise HTTPException(401, "Hatalı e-posta veya şifre")
 
@@ -414,6 +425,7 @@ async def login(body: LoginReq, request: Request):
     if needs_rehash(user["password"]):
         await db.users.update_one({"id": user["id"]}, {"$set": {"password": hash_password(body.password)}})
 
+    record_successful_login(body.email, client_ip)
     access_token = make_access_token(user["id"], user["role"], user.get("farmer_id"), user.get("tenant_id"))
     refresh_token = make_refresh_token(user["id"], user.get("tenant_id"))
 
