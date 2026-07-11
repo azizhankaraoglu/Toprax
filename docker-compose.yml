@@ -50,6 +50,7 @@ services:
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?PLATFORM_ADMIN_PASSWORD .env dosyasında tanımlanmalı — güçlü bir şifre kullanın}
       ALLOW_DATA_SEEDING: ${ALLOW_DATA_SEEDING:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
       - "8001:8001"
     depends_on:

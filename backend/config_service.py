@@ -81,6 +81,13 @@ else:
         "http://127.0.0.1:3000",
     ]
 
+# ============ GOZLEMLENEBILIRLIK (PR-12) ============
+# Bos ise hata izleme devre disi kalir (varsayilan, sifir davranis
+# degisikligi). Doldurulursa herhangi bir Sentry-uyumlu servise (Sentry'nin
+# kendisi VEYA self-hosted GlitchTip -- on-premise/KVKK hassasiyeti olan
+# musteriler icin onerilir, ROADMAP-URUNLESTIRME.md PR-12 notu) baglanir.
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+
 # ============ PLATFORM ADMIN BOOTSTRAP ============
 # İlk açılışta hiç platform_admin yoksa bu bilgilerle otomatik oluşturulur.
 _DEV_PLATFORM_ADMIN_PASSWORD = "DEGISTIR-platform-admin-2026"

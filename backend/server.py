@@ -42,7 +42,8 @@ load_dotenv(ROOT_DIR / '.env')                               # .env dosyasını 
 from config_service import (APP_NAME, APP_FULL_NAME, APP_VERSION, JWT_SECRET, JWT_ALG,
                              CORS_ORIGINS, ADMIN_TIER_ROLES, ROLE_HIERARCHY, ROLE_LABELS,
                              has_min_role, MONGO_URL, DB_NAME, PLATFORM_ADMIN_EMAIL,
-                             PLATFORM_ADMIN_PASSWORD, install_secret_masking, ALLOW_DATA_SEEDING)
+                             PLATFORM_ADMIN_PASSWORD, install_secret_masking, ALLOW_DATA_SEEDING,
+                             SENTRY_DSN, IS_PRODUCTION, ENVIRONMENT)
 from security import (hash_password, verify_password, needs_rehash,
                        make_access_token, make_refresh_token, decode_token)
 from audit import log_audit, register_audit_routes
@@ -57,6 +58,22 @@ raw_db = client[DB_NAME]                                    # HAM veritabanı ha
 # göre otomatik filtreleyen bir sarmalayıcısıdır (bkz. tenant_context.py).
 # Mevcut hiçbir sorgu satırı değişmeden tenant-izole hale gelir.
 db = TenantScopedDB(raw_db)
+
+# PR-12 (ROADMAP-URUNLESTIRME.md): Gozlemlenebilirlik -- SENTRY_DSN bos ise
+# TAMAMEN devre disi (sifir davranis degisikligi, sifir performans etkisi).
+# Doldurulursa Sentry VEYA self-hosted GlitchTip (Sentry API-uyumlu) hata
+# izleme baglanir. Loglara token/sifre yazilmaz kurali (CLAUDE.md #3.1) ile
+# tutarli: send_default_pii=False -- kullanici PII'si otomatik gonderilmez.
+if SENTRY_DSN:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=ENVIRONMENT,
+        release=APP_VERSION,
+        send_default_pii=False,
+        traces_sample_rate=0.1 if IS_PRODUCTION else 1.0,
+    )
+    logging.getLogger(__name__).info("Sentry/GlitchTip hata izleme aktif (environment=%s)", ENVIRONMENT)
 
 # FastAPI uygulaması
 app = FastAPI(title=APP_FULL_NAME, version=APP_VERSION)
