@@ -1,49 +1,77 @@
-# TabSIS Kullanıcı Kılavuzu — Yönetici / Muhasebe
+# TabSIS Kullanım Kılavuzu — Yönetici
 
-> Bu kılavuz Kurum/Fabrika Müdürü, Sistem Yöneticisi ve finans
-> (hakediş/cari hesap) işlemlerini yürüten personel içindir -- TabSIS'te
-> ayrı bir "Muhasebe" rolü tanımlı değildir, finans yetkileri Sistem
-> Yöneticisi/Kurum Yöneticisi rolüne (veya Ayarlar &gt; Özel Roller'dan
-> tanımlanacak özel bir role) bağlıdır.
+> Hedef Kitle: İl/İlçe Yöneticisi, Fabrika Müdürü ve Muhasebe Personeli
 
-## Kurulum Sonrası İlk Adımlar
+## 1. Yönetici Rolü Ne İşe Yarar
 
-1. Kurulum sihirbazını (`/kurulum`) tamamlayın (bkz.
-   `docs/KURULUM-KILAVUZU.md`).
-2. **Ayarlar &gt; Kullanıcılar**'dan personel ekleyin, rol atayın.
-3. **Ayarlar &gt; Entegrasyonlar**'dan SMS/e-posta/uydu sağlayıcılarını
-   yapılandırın.
-4. **Organizasyon Hiyerarşisi**'ni kurun (birim/pozisyon/kullanıcı
-   ataması) -- onay zincirlerinin doğru çalışması buna bağlıdır.
+Bu kılavuz, kurumunuzun günlük İŞ yönetimini yürüten kişiler içindir: hakediş/finans takibi, onay süreçleri, raporlama ve saha operasyonlarının genel görünümü. Sistem ayarları (kullanıcı/rol yönetimi, entegrasyonlar) için "Admin Kullanım Kılavuzu"na bakın — bu iki kılavuz aynı teknik yetki seviyesindeki (Admin Katmanı) kişilere hitap eder, ama farklı GÖREVLERİ anlatır.
 
-## Finans / Hakediş
+## 2. Dashboard ve Genel Bakış
 
-- **Hakediş** ekranından üretim sezonu bazlı hakediş hesaplaması
-  yapılır (kotalı/kotasız tonaj, kalite katsayısı).
-- **Cari Hesap** ekranından çiftçi bazlı bakiye takibi yapılır.
-- Muhasebe kayıtları (ledger) **asla silinmez** -- bir hata durumunda
-  "Ters Kayıt" (reverse) ile düzeltilir, orijinal kayıt korunur (denetim
-  izi bütünlüğü).
+Giriş sonrası karşınıza çıkan Dashboard'da toplam çiftçi/parsel/alan/sözleşme sayıları, 5 yıllık üretim trendi, bölge bazlı performans ve çiftçi karne dağılımı özet olarak sunulur. Her kutucuk/grafik, ilgili detay ekranına tıklanabilir.
 
-## Onay Zinciri Yönetimi
+## 3. Çiftçi ve Parsel Yönetimi
 
-**Ayarlar &gt; Onay Zincirleri**'nden hangi sürecin (destek, kampanya,
-görev kapanışı, case atama) hangi adımlardan onay alacağını
-tanımlayabilirsiniz.
+Çiftçiler ve Parseller ekranlarından kurumunuza bağlı üreticileri ve arazilerini görüntüler, arama/filtreleme yapabilir, gerektiğinde yeni kayıt ekleyebilirsiniz. Harita Paneli'nden parsellerin coğrafi dağılımını ve (kuruluysa) uydu/NDVI katmanlarını inceleyebilirsiniz.
 
-## Raporlar ve Dashboard
+## 4. Sözleşme & Kota Yönetimi
 
-Ana Dashboard ve **Raporlar** menüsündeki her kutucuk/grafik, ilgili
-detay ekranına tıklanabilir (örn. "Açık Destek Talepleri" kutusuna
-tıklamak Destek Kataloğu'na yönlendirir).
+Sözleşme & Kota ekranından üreticilerinizle yapılan sezonluk sözleşmeleri (kota, çeşit, avans bilgileri) yönetirsiniz.
 
-## Platform Yönetimi (sadece Platform Yöneticisi)
+## 5. Hakediş (Finans)
 
-Yeni kurum (tenant) açma, lisans tanımlama ve tenant bazlı istatistikler
-**Platform Admin** panelinden (`/platform`) yönetilir -- bkz.
-`scripts/provision-tenant.sh` (otomasyonlu tenant açma).
+Hakediş ekranından üretim sezonu bazlı hakediş hesaplaması yapılır (kotalı/kotasız tonaj, kalite katsayısı dahil). Cari Hesap ekranından çiftçi bazlı bakiye takibi yapılır.
 
-## Geliştirici Portalı
+> **NOT:** Muhasebe kayıtları (ledger) ASLA silinmez — bir hata durumunda "Ters Kayıt" (reverse) ile düzeltilir, orijinal kayıt korunur. Bu, denetim izi bütünlüğü için kasıtlı bir tasarımdır.
 
-Dış sistemlerle entegrasyon (API key, Postman koleksiyonu, webhook)
-gerekiyorsa **Geliştirici Portalı** ekranını kullanın.
+## 6. Cari Hesap Mutabakatı
+
+Mutabakat (Reconciliation) ekranından çiftçi cari hesaplarınızı dönemsel olarak karşılaştırıp uyuşmazlıkları tespit edebilirsiniz.
+
+## 7. Onay Bekleyenlerim
+
+Organizasyon hiyerarşinizde onayınızı gerektiren süreçler (örn. bir case ataması, kampanya onayı, görev kapanışı) Onay Bekleyenlerim ekranında toplanır. Buradan onaylayabilir veya reddedebilirsiniz.
+
+> **NOT:** Hangi sürecin onay gerektireceğini Admin katmanındaki bir kullanıcı Ayarlar > Onay Zincirleri'nden tanımlar — bu ekranın kendisi sadece SİZE gelen bekleyen onayları gösterir.
+
+## 8. Organizasyon Hiyerarşisi
+
+Organizasyon Hiyerarşisi ekranından kurumunuzun birim/pozisyon yapısını ve kimin kime bağlı olduğunu görüntüleyebilirsiniz.
+
+## 9. Kampanyalar
+
+Kampanyalar ekranından çiftçi segmentlerine (örn. belirli bir bölgedeki üreticiler) yönelik SMS/e-posta/WhatsApp duyuru kampanyaları planlayabilir, onaya sunabilir ve sonuçlarını (iletildi/başarısız) takip edebilirsiniz.
+
+## 10. Saha Operasyonları — Genel Bakış
+
+Görev Yönetimi ekranından saha personeline atanan görevlerin durumunu (planlı/devam ediyor/tamamlandı) izleyebilirsiniz. Operasyon ekranından makine filosu ve işçi vardiya bilgilerine ulaşırsınız.
+
+## 11. Raporlar
+
+Raporlar menü grubu altında toplanan ekranlardan aşağıdaki analizlere ulaşırsınız:
+
+| Ekran | İçerik |
+|---|---|
+| Toprak Analizleri | Numune sonuçlarının özeti |
+| Saha Raporları | Tamamlanan saha görevlerinin özeti |
+| Verimlilik | Sezon/bölge bazlı verim karşılaştırması |
+| Çiftçi Karne | En yüksek/geliştirme bekleyen üretici listeleri |
+| UFYD Dashboard | Üretici Finansal Yönetim Dashboard'u |
+
+## 12. Bize Ulaşın (Case Yönetimi)
+
+Bize Ulaşın ekranından çiftçilerden ve saha personelinden gelen tüm talepleri (destek, şikayet, öneri, hastalık bildirimi vb.) görür, personele atayabilir ve durumlarını (yeni → atandı → inceleniyor → çözüldü) takip edebilirsiniz.
+
+> **NOT:** Giriş sayfasındaki "Hesabınız yok mu?" formundan gelen talepler de bu ekranda "Hesap / Giriş Talebi" kategorisiyle görünür.
+
+## 13. Sık Sorulan Sorular
+
+**S: Bir hakediş kaydında hata yaptım, nasıl düzeltirim?**
+C: Kaydı silemezsiniz — ilgili kayıttan "Ters Kayıt" oluşturup ardından doğru kaydı girin. Böylece hem hata hem düzeltme denetim izinde görünür kalır.
+
+**S: Onay Bekleyenlerim ekranında hiçbir şey görünmüyor.**
+C: Ya bekleyen bir onay yoktur ya da kurumunuzda ilgili süreç için henüz bir onay zinciri tanımlanmamıştır (bu durumda işlemler doğrudan uygulanır, onaya düşmez).
+
+**S: Kampanya gönderirken bazı kişilere ulaşmadı.**
+C: Kara listede olan kişilere (KVKK) hiçbir kampanya gönderilmez — bu beklenen bir davranıştır, hata değildir.
+
