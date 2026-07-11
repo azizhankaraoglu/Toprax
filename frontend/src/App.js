@@ -31,6 +31,7 @@ import CampaignManagement from "@/pages/CampaignManagement";
 import CommunicationPolicies from "@/pages/CommunicationPolicies";
 import EgitimYonetimi from "@/pages/EgitimYonetimi";
 import IntegrationHub from "@/pages/IntegrationHub";
+import DeveloperPortal from "@/pages/DeveloperPortal";
 import PlatformCore from "@/pages/PlatformCore";
 import { ExperienceProfileYonetimi } from "@/pages/ExperienceProfiles";
 import MobilDashboard from "@/pages/MobilDashboard";
@@ -112,6 +113,7 @@ function App() {
             <Route path="/bize-ulasin" element={<CaseManagement />} />
             <Route path="/egitim-yonetimi" element={<EgitimYonetimi />} />
             <Route path="/integration-hub" element={<IntegrationHub />} />
+            <Route path="/gelistirici-portali" element={<DeveloperPortal />} />
             <Route path="/platform-core" element={<PlatformCore />} />
             <Route path="/experience-profiles" element={<ExperienceProfileYonetimi />} />
             <Route path="/ufyd-dashboard" element={<UfydDashboard />} />

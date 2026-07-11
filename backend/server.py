@@ -2518,6 +2518,12 @@ register_setup_wizard_routes(api_router, raw_db, current_user, log_audit)
 from api_keys import register_api_key_routes
 register_api_key_routes(api_router, raw_db, require_permission, log_audit)
 
+# PR-26 (ROADMAP-URUNLESTIRME.md): Gelistirici Portali backend destegi --
+# Swagger (/docs) FastAPI varsayilaniyla zaten acik, burada sadece Postman
+# collection indirme + changelog uclari eklenir.
+from dev_portal import register_dev_portal_routes
+register_dev_portal_routes(api_router)
+
 # Communication Hub: Kanal Provider Pattern + Şablon Yönetimi + Gönderim +
 # Kişi Kartı İletişim Timeline'ı (IT-25 / FAZ 9 başlangıç).
 from communications import register_communication_routes

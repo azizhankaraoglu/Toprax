@@ -6,7 +6,7 @@ import {
   Settings2, BarChart3, Truck, Bell, LogOut, Award, ChevronRight, FlaskConical,
   Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Settings, Sparkles,
   UserCog, ShieldCheck, ListTree, LayoutList, Search, Landmark, Compass, Wallet, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, SlidersHorizontal, ClipboardCheck,
-  Workflow, CheckSquare, Inbox
+  Workflow, CheckSquare, Inbox, Code2
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
 
@@ -99,6 +99,7 @@ const navGroups = [
       { to: "/onay-bekleyenlerim", icon: CheckSquare, label: "Onay Bekleyenlerim" },
       { to: "/bize-ulasin", icon: Inbox, label: "Bize Ulaşın" },
       { to: "/integration-hub", icon: Cable, label: "Integration Hub" },
+      { to: "/gelistirici-portali", icon: Code2, label: "Geliştirici Portalı", adminTierOnly: true },
       { to: "/platform-core", icon: SlidersHorizontal, label: "Platform Core" },
       { to: "/experience-profiles", icon: Smartphone, label: "Experience Profile" },
       { to: "/ayarlar", icon: Settings, label: "Ayarlar", adminTierOnly: true },
