@@ -21,6 +21,7 @@ Mimari Notu:
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from api_keys import resolve_api_key_user, KEY_PREFIX as API_KEY_PREFIX
 from dotenv import load_dotenv                              # .env dosyasını okur
 from starlette.middleware.cors import CORSMiddleware        # CORS kuralları
 from motor.motor_asyncio import AsyncIOMotorClient          # Async MongoDB sürücüsü
@@ -131,10 +132,22 @@ async def current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
     Her korunan endpoint'in başında çağrılan dependency.
     Bearer token'ı doğrular, kullanıcı objesini geri döner.
     Token yoksa veya geçersizse 401 fırlatır.
+
+    PR-24 (ROADMAP-URUNLESTIRME.md): Authorization header'i "tabsis_key_"
+    ile basliyorsa bu bir JWT degil, makine-makine API key'idir (bkz.
+    api_keys.py). TEK entegrasyon noktasi burasi -- boylece asagidaki JWT
+    kodu hic degismeden, ~370 mevcut endpoint API key'i de otomatik kabul
+    eder (require_permission zaten current_user'i sarmalıyor).
     """
     if not creds:
         raise HTTPException(401, "Token gerekli")
-    
+
+    if creds.credentials.startswith(API_KEY_PREFIX):
+        api_user = await resolve_api_key_user(raw_db, creds.credentials)
+        if not api_user:
+            raise HTTPException(401, "Geçersiz, süresi dolmuş veya iptal edilmiş API anahtarı")
+        return api_user
+
     try:
         # Token'ı çöz (imza doğrulaması + süre kontrolü otomatik)
         payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALG])
@@ -2497,6 +2510,13 @@ register_migration_routes(api_router, raw_db, require_permission, log_audit)
 # platform_core.py uclarinda (bkz. setup_wizard.py docstring).
 from setup_wizard import register_setup_wizard_routes
 register_setup_wizard_routes(api_router, raw_db, current_user, log_audit)
+
+# PR-24 (ROADMAP-URUNLESTIRME.md): API Key CRUD (Entegrasyon Merkezi ->
+# "API Anahtarlarım"). Dogrulama/rate-limit mantigi current_user icinde
+# (yukarida) zaten entegre edildi -- burada sadece yonetim uclari (olustur/
+# listele/iptal et) eklenir.
+from api_keys import register_api_key_routes
+register_api_key_routes(api_router, raw_db, require_permission, log_audit)
 
 # Communication Hub: Kanal Provider Pattern + Şablon Yönetimi + Gönderim +
 # Kişi Kartı İletişim Timeline'ı (IT-25 / FAZ 9 başlangıç).
