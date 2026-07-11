@@ -1576,3 +1576,118 @@ sunulur.
   yenileme" fazının kapsamında ele alınacak.
 - **Doğrulama:** `server.py` yine gerçek ortamda import edildi (270 route,
   çakışmasız); `Extras.jsx` esbuild ile sözdizimi doğrulamasından geçti.
+
+---
+
+## 11) 2026-07-11 (devam, 3. oturum) — ROADMAP-URUNLESTIRME.md (On-Premise Ürünleştirme) — PR-01..PR-26 + P1-P4 en iyi çaba
+
+**Kritik değişiklik — Git disiplini kuruldu:** Bu oturuma kadar
+`/tmp/toprax_extract`'ta hiç git deposu yoktu (önceki iki oturumun tüm
+işi commit edilmemişti). Bu oturumda `git init` yapıldı, mevcut durum
+"Baseline" commit'i olarak kaydedildi, ve bundan sonraki HER mantıksal
+adım ayrı bir commit olarak kaydedildi (kullanıcının açık talebi:
+"Lütfen her yaptığın şeyi commitlemeyi atlama"). Repo artık ~20 commit
+içeriyor, her biri kendi PR-XX'ini ve doğrulama adımlarını açıklıyor.
+
+**Kapsam:** `ROADMAP-URUNLESTIRME.md` — TABSİS'i on-premise satılabilir
+ürüne dönüştürme roadmap'i. FAZ P0 (Kurulum Paketleme) ve FAZ P0b (API
+Standardizasyonu) TAMAMEN, FAZ P1-P4'ün "Claude Code Yapar" kısımları
+EN İYİ ÇABA ile tamamlandı.
+
+### FAZ P0 — Kurulum Paketleme (PR-01..PR-08) — ✅ TAMAMLANDI
+- **PR-01:** Dockerfile.backend multi-stage (builder+runtime, non-root
+  kullanıcı, HEALTHCHECK) yapıldı; docker-compose.yml'e healthcheck +
+  `depends_on: condition: service_healthy` eklendi; `GET /api/health`
+  (kimlik doğrulamasız, DB ping) eklendi; `.dockerignore`'lar eklendi.
+- **PR-02:** `backend/setup_wizard.py` (ince katman) + `SetupWizard.jsx`
+  (`/kurulum`, 6 adım) — YENİ iş mantığı YAZILMADI, var olan
+  tenants.py/integrations.py/platform_core.py uçları sırayla çağrılır.
+  Tamamlanınca kendini kilitler (`platform_setup` singleton doc).
+- **PR-03:** `scripts/check-requirements.sh` — bağımsız bash, Docker
+  öncesi çalışır (OS/CPU/RAM/disk/Docker versiyonu/portlar).
+- **PR-04:** `backend/migrations_engine.py` + `migrations/versions/0001_*`
+  (org/approval/case_management index'leri) + `migration_runner.py` (CLI)
+  + `upgrade.sh` (pull+migrate+otomatik rollback). Health Center'a şema
+  versiyonu satırı eklendi (response şekli DEĞİŞMEDİ — yeni bir servis
+  kaydı olarak eklendi).
+- **PR-05:** `scripts/build-offline-bundle.sh` + `install-from-bundle.sh`
+  — docker-compose.yml'e `image:` tag'i eklendi (build: ile birlikte,
+  online davranış değişmedi).
+- **PR-06:** `nginx/reverse-proxy.conf.template` + `docker-compose.tls.yml`
+  (opsiyonel overlay) + `scripts/setup-tls.sh` (Let's Encrypt + certbot
+  otomatik yenileme).
+- **PR-07:** `scripts/smoke-test.sh` — kurulum sonrası health/root/login/
+  frontend kontrolü.
+- **PR-08:** `docs/KURULUM-KILAVUZU.md` — uçtan uca IT admin kılavuzu.
+
+### FAZ P0b — API Standardizasyonu (PR-22..PR-26) — ✅ TAMAMLANDI
+- **PR-22:** `backend/api_envelope.py` — `/api/v1/*` YENİ, versiyonlu,
+  zarflı yüzey. Mevcut `/api/*` (370+ route, frontend bunu kullanıyor)
+  **HİÇ DEĞİŞTİRİLMEDİ** — ASGI transport ile içeride `/api/*`'e delege
+  edip yanıtı `{data,meta,error}` zarfına sarar. httpx.ASGITransport ile
+  canlı app'e karşı test edildi.
+- **PR-23:** `backend/crud_base.py` — `build_crud_router(CrudConfig, ...)`
+  generic CRUD/soft-delete fabrikası. **Var olan ~30 modül DOKUNULMADI**
+  (gereksiz refactor yasağı) — sadece BUNDAN SONRAKİ yeni modüller için.
+  `tests/test_crud_base.py` (mongomock_motor) ile <10 satırlık kullanımın
+  gerçekten çalıştığı kanıtlandı.
+- **PR-24:** `backend/api_keys.py` — kullanıcı JWT'sinden ayrı, tenant'a
+  bağlı, scope'lu, rate limitli API Key. **TEK entegrasyon noktası:**
+  `server.py`'deki `current_user()` — Authorization "tabsis_key_" ile
+  başlıyorsa `resolve_api_key_user()` çağrılır, sentetik user (`role=None`,
+  `permission_overrides.grant=scopes`) döner. permissions.py'ye HİÇ
+  DOKUNULMADI, ~370 endpoint sıfır ek kodla API key kabul eder.
+  `tests/test_api_keys.py`: scope-dışı izin yok, süresi dolmuş/iptal
+  edilmiş key reddediliyor, rate limit 429 veriyor — hepsi test edildi.
+- **PR-25:** `scripts/generate_postman_collection.py` — `server.app.openapi()`
+  introspection'ından (DB/HTTP sunucusu gerektirmez) Postman v2.1 üretir
+  (87 klasör, 368 istek — gerçekten çalıştırılıp doğrulandı). Insomnia
+  ayrı kod YAZILMADI (Postman v2.1'i doğrudan import edebiliyor).
+- **PR-26:** `backend/dev_portal.py` + `DeveloperPortal.jsx`
+  (`/gelistirici-portali`) — Swagger (zaten `/docs`'ta açık, kod
+  YAZILMADI), Postman indirme, API Key yönetim UI'ı, webhook linki
+  (integration_hub.py'ye — tekrar yazılmadı), changelog (`CHANGELOG.md`).
+
+### FAZ P1-P4 — En İyi Çaba (kod/doküman gerektiren kısımlar)
+- **PR-09 (kısmi):** `tests/test_ledger_immutability.py` (silinmezlik
+  kuralı — router'da DELETE/PUT yok + reverse() orijinali değiştirmiyor),
+  `tests/test_auth_lockout.py`.
+- **PR-10:** `.github/workflows/ci.yml` (pytest + pip-audit + yarn build +
+  postman collection güncellik kontrolü).
+- **PR-11:** `scripts/backup.sh` (mongodump, 14 gün retention) +
+  `scripts/restore-verify.sh` (AYRI izole container'da restore edip
+  bütünlük kontrolü — prod'a dokunmaz).
+- **PR-12:** `SENTRY_DSN` (boşsa devre dışı) — Sentry veya self-hosted
+  GlitchTip. `config_service.py` + `server.py`.
+- **PR-13:** GodMode (IT-36 bu projede "Saha Personeli Mobil" anlamına
+  geliyor, GodMode kod tabanında HİÇ YOK) yerine GERÇEKTEN VAR OLAN
+  `/api/auth/login`'e brute-force kilidi (`auth_lockout.py`, 5 deneme/15dk)
+  eklendi + CI'da pip-audit.
+- **PR-14:** `loadtest/k6-*.js` (Query Engine, harita/parsel, toplu SMS).
+- **PR-15:** `docs/legal/KVKK-AYDINLATMA-METNI.md` (taslak) +
+  `backend/consent.py` (genel amaçlı rıza kayıt ucu, ledger deseniyle
+  aynı: geri alınır, silinmez).
+- **PR-16:** `docs/legal/KULLANIM-SARTLARI-VE-SLA-TASLAK.md`.
+- **PR-17:** `scripts/check-license-compliance.sh` + GERÇEKTEN çalıştırılıp
+  üretilen `docs/legal/BAGIMLILIK-LISANS-RAPORU.md` (128 paket, 0 GPL/AGPL
+  kırmızı bayrak).
+- **PR-18:** `scripts/setup-demo-tenant.sh` (var olan `/admin/seed*`
+  uçlarını dedike bir tenant'ta çağırır, YENİDEN YAZMAZ).
+- **PR-19:** `scripts/provision-tenant.sh`.
+- **PR-21:** `docs/user-guides/{CIFTCI,ZIRAAT-MUHENDISI,YONETICI}-KILAVUZU.md`.
+- **PR-20:** yapılmadı — tamamen kullanıcının işi (pilot müşteri ilişkisi).
+
+**Bilinen sınırlar / kullanıcının yapması gerekenler (özet):** 3. parti
+hesap açma (Sentry/pentest firması), hukuki taslakların avukata
+onaylatılması, SLA/kapasite rakamlarının onaylanması, gerçek sunucuda
+ilk kurulum + TLS + restore denemesi, pilot müşteri bulma — hiçbiri
+otomatikleştirilemez, ROADMAP-URUNLESTIRME.md'de her PR'ın kendi
+"Sizin Yapmanız Gerekir" maddesinde ayrıca belirtildi.
+
+**Doğrulama:** Her PR sonrası `server.py` gerçek ortamda import edildi
+(sürüm sonu: 379 route, hiç çakışma yok); `pytest tests/ -q` son durumda
+24/24 yeşil; yeni/değişen tüm `.jsx`/`.js` dosyaları esbuild ile
+sözdizimi kontrolünden geçti; tüm bash scriptleri `bash -n` ile
+sözdizimi kontrolünden geçti; docker-compose YAML dosyaları
+`yaml.safe_load` ile doğrulandı. **Repo artık git ile takip ediliyor,
+her adım ayrı commit.**
