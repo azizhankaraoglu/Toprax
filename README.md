@@ -1,6 +1,11 @@
 # TabSIS — Tarımsal Operasyon ve Karar Destek Platformu
 ## Yerel Kurulum Kılavuzu (Windows · macOS · Linux)
 
+> **Kurumsal / on-premise satış kurulumu:** IT ekibiniz için adım adım,
+> kurulum sihirbazı + TLS + air-gapped + sürüm yükseltme dahil kapsamlı
+> kılavuz için bkz. [`docs/KURULUM-KILAVUZU.md`](docs/KURULUM-KILAVUZU.md).
+> Aşağıdaki bölüm geliştirici/yerel kurulum içindir.
+
 > **Sürüm 2.0 notları:** Bu sürümde rebranding (Emergent izleri temizlendi),
 > bcrypt şifreleme, refresh token, rol hiyerarşisi, merkezi audit log ve
 > **Ayarlar > Entegrasyonlar** modülü (SMS/Email/Planet Labs/AI servisi,
