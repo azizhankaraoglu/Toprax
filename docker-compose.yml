@@ -17,6 +17,12 @@ services:
     # Yerel geliştirmede Mongo Compass gibi bir araçla bağlanmak gerekirse
     # SADECE localhost'a bağlı bir port açın (docker-compose.override.yml
     # içinde "127.0.0.1:27017:27017" gibi), asla "27017:27017" (0.0.0.0) YAZMAYIN.
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
     networks:
       - tabsis-net
 
@@ -41,7 +47,14 @@ services:
     ports:
       - "8001:8001"
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - tabsis-net
 
@@ -56,7 +69,14 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - tabsis-net
 

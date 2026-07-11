@@ -2308,6 +2308,33 @@ async def root():
     return {"app": APP_NAME, "full_name": APP_FULL_NAME, "version": APP_VERSION, "status": "ok"}
 
 
+@api_router.get("/health")
+async def health_check():
+    """Kimlik dogrulamasiz, hafif liveness/readiness endpoint'i.
+
+    PR-07 (kurulum sonrasi smoke test) ve Docker/Compose HEALTHCHECK
+    tarafindan kullanilir. Kasitli olarak require_permission/current_user
+    kullanmaz -- orkestrasyon katmani (Docker, k8s, load balancer) bu uca
+    auth olmadan erisebilmeli. Hassas bilgi donmez (bkz. CLAUDE.md #3.1).
+    """
+    checks = {}
+    overall_ok = True
+
+    try:
+        await raw_db.command("ping")
+        checks["database"] = {"status": "ok"}
+    except Exception as exc:  # noqa: BLE001
+        overall_ok = False
+        checks["database"] = {"status": "error", "detail": "veritabanina baglanilamadi"}
+
+    return {
+        "status": "healthy" if overall_ok else "unhealthy",
+        "app": APP_NAME,
+        "version": APP_VERSION,
+        "checks": checks,
+    }
+
+
 @api_router.get("/roles")
 async def list_roles(user=Depends(current_user)):
     """Rol hiyerarşisini ve etiketlerini döner (frontend'de yetki gösterimi için)."""

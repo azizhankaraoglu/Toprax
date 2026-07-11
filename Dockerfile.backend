@@ -1,12 +1,45 @@
-FROM python:3.11-slim
+# syntax=docker/dockerfile:1
+# Multi-stage build: kucuk imaj boyutu icin bagimliliklar ayri bir "builder"
+# katmaninda derlenir/wheel'lenir, calisan imaja sadece gerekli wheel'ler
+# ve kaynak kod kopyalanir (pip cache, derleyici araclari, build-essential
+# nihai imajda YOK).
+
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
+
+FROM python:3.11-slim AS runtime
+
+# curl: PR-07 smoke-test / Docker HEALTHCHECK icin
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 1000 tabsis
 
 WORKDIR /app
 
+COPY --from=builder /build/wheels /wheels
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
+    && rm -rf /wheels
 
 COPY . .
 
+RUN mkdir -p /app/uploads && chown -R tabsis:tabsis /app
+
+USER tabsis
+
 EXPOSE 8001
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:8001/api/health || exit 1
 
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8001"]
