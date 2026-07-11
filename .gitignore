@@ -95,3 +95,7 @@ credentials.json
 *.key
 .credentials
 proje.zip
+
+# PR-06: TLS sertifikalari repoya girmez (self-signed/gercek key materyali)
+nginx/certs/*.pem
+nginx/reverse-proxy.conf

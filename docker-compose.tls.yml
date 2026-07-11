@@ -1,0 +1,59 @@
+# docker-compose.tls.yml -- PR-06: TLS/Sertifika Otomasyonu (opsiyonel overlay)
+#
+# Internete acik kurulumlarda kullanin:
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+#
+# Tamamen kapali (air-gapped) kurulumlarda bu dosyayi KULLANMAYIN --
+# PR-08 kurulum dokumaninin "Manuel Sertifika" bolumune bakin (kendi
+# sertifikanizi nginx/certs/ altina koyup dogrudan bir reverse proxy
+# calistirirsiniz, Let's Encrypt/certbot internet gerektirir).
+#
+# reverse-proxy: 80/443'u tek noktadan karsilar, backend'i (8001) ve
+# frontend'i (80) domain uzerinden tek TLS sertifikasi ile sunar. Bu
+# devrede oldugunda backend/frontend'in host'a dogrudan port publish
+# etmesine GEREK KALMAZ -- docker-compose.yml'deki "ports:" satirlarini
+# prod'da kaldirmayi (sadece reverse-proxy'nin 80/443'u actigi bir kuruluma
+# gecmeyi) dusunun; geriye uyumluluk icin varsayilan olarak degistirilmedi.
+
+services:
+  reverse-proxy:
+    image: nginx:alpine
+    container_name: tabsis-reverse-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/reverse-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/webroot:/var/www/certbot:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - tabsis-net
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: tabsis-certbot
+    restart: unless-stopped
+    volumes:
+      - ./nginx/certs:/etc/letsencrypt/live-out
+      - ./nginx/webroot:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    # 12 saatte bir yenileme dener; certbot yalnizca sertifikanin gecerlilik
+    # suresi 30 gunden azsa fiilen yeniler (--deploy-hook ile yeni
+    # sertifikayi nginx/certs/ altina kopyalayip nginx'i reload eder).
+    entrypoint: >
+      /bin/sh -c "trap exit TERM;
+      while :; do
+        certbot renew --webroot -w /var/www/certbot --quiet \
+          --deploy-hook 'cp /etc/letsencrypt/live/*/fullchain.pem /etc/letsencrypt/live-out/fullchain.pem &&
+                         cp /etc/letsencrypt/live/*/privkey.pem /etc/letsencrypt/live-out/privkey.pem';
+        sleep 12h;
+      done"
+    networks:
+      - tabsis-net
+
+volumes:
+  certbot_conf:
