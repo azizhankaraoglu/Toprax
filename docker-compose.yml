@@ -30,6 +30,12 @@ services:
     build:
       context: ./backend
       dockerfile: ../Dockerfile.backend
+    # 'image:' sabit tag verir -- PR-05 (offline/air-gapped bundle) bu tag'i
+    # 'docker save'/'docker load' ile tasir. Internet varken normal
+    # 'docker compose up' bu adi otomatik kullanir/build eder; air-gapped
+    # ortamda imaj zaten 'docker load' ile bu adla yuklendigi icin build
+    # tekrar tetiklenmez.
+    image: tabsis-backend:latest
     container_name: tabsis-backend
     restart: unless-stopped
     environment:
@@ -64,6 +70,8 @@ services:
       dockerfile: ../Dockerfile.frontend
       args:
         REACT_APP_BACKEND_URL: http://localhost:8001
+    # bkz. backend'deki 'image:' notu -- ayni PR-05 gerekcesi.
+    image: tabsis-frontend:latest
     container_name: tabsis-frontend
     restart: unless-stopped
     ports:
