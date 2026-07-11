@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "@/App.css";
 import Login from "@/pages/Login";
+import SetupWizard from "@/pages/SetupWizard";
 import Layout from "@/components/Layout";
 import Dashboard from "@/pages/Dashboard";
 import GlobalSearch from "@/pages/GlobalSearch";
@@ -64,6 +65,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/kurulum" element={<SetupWizard />} />
           <Route path="/platform" element={<PlatformRoute><PlatformAdmin /></PlatformRoute>} />
           <Route path="/form/:token" element={<FormDoldur isPublic={true} />} />
           <Route path="/ciftci" element={<PrivateRoute><FarmerHome /></PrivateRoute>} />

@@ -2492,6 +2492,12 @@ register_case_routes(api_router, db, current_user, require_permission, log_audit
 from migrations_engine import register_migration_routes
 register_migration_routes(api_router, raw_db, require_permission, log_audit)
 
+# PR-02 (ROADMAP-URUNLESTIRME.md): Web tabanli kurulum sihirbazi -- ince
+# katman, gercek is mantigi zaten var olan tenants.py/integrations.py/
+# platform_core.py uclarinda (bkz. setup_wizard.py docstring).
+from setup_wizard import register_setup_wizard_routes
+register_setup_wizard_routes(api_router, raw_db, current_user, log_audit)
+
 # Communication Hub: Kanal Provider Pattern + Şablon Yönetimi + Gönderim +
 # Kişi Kartı İletişim Timeline'ı (IT-25 / FAZ 9 başlangıç).
 from communications import register_communication_routes
