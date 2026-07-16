@@ -58,11 +58,11 @@ export function MapDrawTools({ active, mode = "none", onCreated, onEdited }) {
         polygon: {
           allowIntersection: false,
           showArea: true,
-          shapeOptions: { color: "#4ade80", weight: 2 },
+          shapeOptions: { color: "#FF8C00", weight: 2 },
         },
         polyline: false,
-        rectangle: isSelectMode ? { shapeOptions: { color: "#a78bfa", weight: 2 } } : false,
-        circle: isSelectMode ? { shapeOptions: { color: "#a78bfa", weight: 2 } } : false,
+        rectangle: isSelectMode ? { shapeOptions: { color: "#3B82F6", weight: 2 } } : false,
+        circle: isSelectMode ? { shapeOptions: { color: "#3B82F6", weight: 2 } } : false,
         circlemarker: false,
         marker: false,
       },
@@ -120,7 +120,7 @@ export function MapDrawTools({ active, mode = "none", onCreated, onEdited }) {
     const drawer = new L.Draw.Polygon(map, {
       allowIntersection: false,
       showArea: true,
-      shapeOptions: { color: "#4ade80", weight: 2 },
+      shapeOptions: { color: "#FF8C00", weight: 2 },
     });
     polygonDrawerRef.current = drawer;
     drawer.enable();

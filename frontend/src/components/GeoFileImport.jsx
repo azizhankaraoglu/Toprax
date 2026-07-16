@@ -147,7 +147,7 @@ export default function GeoFileImport({ onConfirm }) {
               <MapContainer center={centerOf(selectedFeature.geometry)} zoom={15} style={{ height: "100%", width: "100%" }}>
                 <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; OpenStreetMap" />
                 {selectedFeature.geometry.type === "Polygon" && (
-                  <Polygon positions={selectedFeature.geometry.coordinates[0].map(([lng, lat]) => [lat, lng])} pathOptions={{ color: "#4ade80" }} />
+                  <Polygon positions={selectedFeature.geometry.coordinates[0].map(([lng, lat]) => [lat, lng])} pathOptions={{ color: "#FF8C00" }} />
                 )}
                 {selectedFeature.geometry.type === "LineString" && (
                   <Polyline positions={selectedFeature.geometry.coordinates.map(([lng, lat]) => [lat, lng])} pathOptions={{ color: "#4ade80" }} />

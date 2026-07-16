@@ -6,9 +6,10 @@ import {
   Settings2, BarChart3, Truck, Bell, LogOut, Award, ChevronRight, FlaskConical,
   Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Settings, Sparkles,
   UserCog, ShieldCheck, ListTree, LayoutList, Search, Landmark, Compass, Wallet, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, SlidersHorizontal, ClipboardCheck,
-  Workflow, CheckSquare, Inbox, Code2
+  Workflow, CheckSquare, Inbox, Code2, Radio
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
+import AnnouncementPopup from "@/components/AnnouncementPopup";
 
 // Sadece bu roller Ayarlar/Audit Log'u görebilir (backend'deki
 // ADMIN_TIER_ROLES ile tutarlı — config.py).
@@ -40,6 +41,7 @@ const navGroups = [
     title: "ANALİZ & AI",
     items: [
       { to: "/uydu", icon: Satellite, label: "Uydu / NDVI" },
+      { to: "/uzaktan-algilama", icon: Satellite, label: "Uzaktan Algılama" },
       { to: "/copilot", icon: Sparkles, label: "AI Copilot", featureFlag: "ai" },
       { to: "/hastalik", icon: Brain, label: "AI Hastalık", featureFlag: "ai" },
     ]
@@ -93,6 +95,7 @@ const navGroups = [
       { to: "/lookup-yonetimi", icon: ListTree, label: "Lookup Yönetimi", adminTierOnly: true },
       { to: "/destek-katalogu", icon: Wallet, label: "Destek Kataloğu", adminTierOnly: true },
       { to: "/sablon-yonetimi", icon: MessagesSquare, label: "Şablon Yönetimi", adminTierOnly: true },
+      { to: "/duyuru-yonetimi", icon: Radio, label: "Duyuru Yönetimi", adminTierOnly: true },
       { to: "/kampanyalar", icon: Megaphone, label: "Kampanyalar" },
       { to: "/iletisim-politikalari", icon: ShieldOff, label: "İletişim Politikaları", adminTierOnly: true },
       { to: "/organizasyon-hiyerarsisi", icon: Workflow, label: "Organizasyon Hiyerarşisi", adminTierOnly: true },
@@ -101,6 +104,7 @@ const navGroups = [
       { to: "/integration-hub", icon: Cable, label: "Integration Hub" },
       { to: "/gelistirici-portali", icon: Code2, label: "Geliştirici Portalı", adminTierOnly: true },
       { to: "/platform-core", icon: SlidersHorizontal, label: "Platform Core" },
+      { to: "/ai-bilgi-kutuphanesi", icon: Brain, label: "AI Bilgi Kütüphanesi", featureFlag: "ai" },
       { to: "/experience-profiles", icon: Smartphone, label: "Experience Profile" },
       { to: "/ayarlar", icon: Settings, label: "Ayarlar", adminTierOnly: true },
     ]
@@ -135,14 +139,14 @@ export default function Layout() {
         <span className="text-xl">☰</span>
       </button>
 
-      <aside className={`w-64 bg-[#070b09] border-r border-[var(--border)] flex flex-col fixed h-screen z-40 transition-transform ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+      <aside className={`w-64 bg-[var(--bg)] border-r border-[var(--border)] flex flex-col fixed h-screen z-40 transition-transform ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
         <div className="p-5 border-b border-[var(--border)]">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg bg-[var(--primary)] flex items-center justify-center">
-              <Wheat size={18} className="text-[#052e16]"/>
+              <Wheat size={18} className="text-white"/>
             </div>
             <div>
-              <div className="font-display text-lg leading-none">TabSIS</div>
+              <div className="font-display text-lg leading-none">Toprax</div>
               <div className="text-[10px] text-[var(--text-dim)] tracking-widest mt-0.5">KOOPERATİF EDİSYONU</div>
             </div>
           </div>
@@ -188,7 +192,7 @@ export default function Layout() {
 
         <div className="border-t border-[var(--border)] p-3">
           <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] flex items-center justify-center text-[#052e16] font-bold text-sm">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] flex items-center justify-center text-white font-bold text-sm">
               {(user.full_name || "?").charAt(0)}
             </div>
             <div className="flex-1 min-w-0">
@@ -202,6 +206,7 @@ export default function Layout() {
       </aside>
 
       <main className="flex-1 md:ml-64 min-h-screen pt-14 md:pt-0"><Outlet /></main>
+      <AnnouncementPopup />
     </div>
   );
 }

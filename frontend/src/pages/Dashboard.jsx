@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "@/api";
 import {
   Users, Map as MapIcon, FileText, TrendingUp, Wheat, Target,
@@ -19,14 +20,27 @@ function timeAgo(iso) {
   return `${Math.round(diffMin / 1440)} gün önce`;
 }
 
-function KPI({ icon: Icon, label, value, suffix, delta, accent }) {
+function KPI({ icon: Icon, label, value, suffix, delta, accent, to }) {
+  const navigate = useNavigate();
+  // KONU 3 — drill-down: `to` verilmişse kart tıklanabilir, ilgili filtreli
+  // liste ekranına götürür (CLAUDE.md Kural 5). Verilmemişse eski statik davranış.
+  const clickable = !!to;
   return (
-    <div className="card card-hover p-5 fade-in" data-testid={`kpi-${label}`}>
+    <div
+      className={`card card-hover p-5 fade-in ${clickable ? "cursor-pointer" : ""}`}
+      data-testid={`kpi-${label}`}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? () => navigate(to) : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === "Enter") navigate(to); } : undefined}
+      title={clickable ? "Detaya git" : undefined}
+    >
       <div className="flex items-start justify-between mb-3">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${accent || "bg-[var(--primary)]/10 text-[var(--primary)]"}`}>
           <Icon size={20} />
         </div>
-        {delta && <span className="text-xs text-[var(--primary)] flex items-center gap-1"><ArrowUpRight size={12}/>{delta}</span>}
+        {delta ? <span className="text-xs text-[var(--primary)] flex items-center gap-1"><ArrowUpRight size={12}/>{delta}</span>
+               : clickable && <ArrowUpRight size={14} className="text-[var(--text-dim)]" />}
       </div>
       <div className="text-xs text-[var(--text-dim)] tracking-wider uppercase">{label}</div>
       <div className="font-display text-3xl mt-1">{value}{suffix && <span className="text-base text-[var(--text-dim)] ml-1">{suffix}</span>}</div>
@@ -34,7 +48,7 @@ function KPI({ icon: Icon, label, value, suffix, delta, accent }) {
   );
 }
 
-const KARNE_COLORS = { A: "#4ade80", B: "#60a5fa", C: "#fbbf24", D: "#ef4444" };
+const KARNE_COLORS = { A: "#FF8C00", B: "#3B82F6", C: "#F59E0B", D: "#EF4444" };
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
@@ -62,22 +76,22 @@ export default function Dashboard() {
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <KPI icon={Users} label="Sözleşmeli Çiftçi" value={fmt(k.farmers_total)} />
-        <KPI icon={MapIcon} label="Toplam Parsel" value={fmt(k.parcels_total)} />
-        <KPI icon={Wheat} label="Toplam Alan" value={fmt(k.total_area_dekar)} suffix="dekar" />
-        <KPI icon={FileText} label="Aktif Sözleşme" value={fmt(k.active_contracts)} accent="bg-blue-500/10 text-blue-400" />
-        <KPI icon={Target} label="Hedef Hasat" value={fmt(k.expected_ton)} suffix="ton" accent="bg-amber-500/10 text-amber-400" />
-        <KPI icon={TrendingUp} label="Gerçekleşen" value={fmt(k.actual_ton)} suffix="ton" delta={`%${k.yield_completion_pct}`} accent="bg-emerald-500/10 text-emerald-400" />
-        <KPI icon={AlertTriangle} label="Riskli Parsel" value={fmt(k.risky_parcels)} accent="bg-red-500/10 text-red-400" />
-        <KPI icon={Users} label="A Karne Çiftçi" value={data.karne_distribution.A} accent="bg-[var(--primary)]/10 text-[var(--primary)]" />
+        <KPI icon={Users} label="Sözleşmeli Çiftçi" value={fmt(k.farmers_total)} to="/ciftciler" />
+        <KPI icon={MapIcon} label="Toplam Parsel" value={fmt(k.parcels_total)} to="/parseller" />
+        <KPI icon={Wheat} label="Toplam Alan" value={fmt(k.total_area_dekar)} suffix="dekar" to="/parseller" />
+        <KPI icon={FileText} label="Aktif Sözleşme" value={fmt(k.active_contracts)} accent="bg-info/10 text-info" to="/sozlesmeler" />
+        <KPI icon={Target} label="Hedef Hasat" value={fmt(k.expected_ton)} suffix="ton" accent="bg-warning/10 text-warning" />
+        <KPI icon={TrendingUp} label="Gerçekleşen" value={fmt(k.actual_ton)} suffix="ton" delta={`%${k.yield_completion_pct}`} accent="bg-success/10 text-success" />
+        <KPI icon={AlertTriangle} label="Riskli Parsel" value={fmt(k.risky_parcels)} accent="bg-danger/10 text-danger" to="/parseller?risk=1" />
+        <KPI icon={Users} label="A Karne Çiftçi" value={data.karne_distribution.A} accent="bg-orange/10 text-orange-500" to="/ciftciler?karne=A" />
       </div>
 
       {/* Sprint 2 — GIS/IoT/Drone canlı durum kartları (gerçek veriden) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KPI icon={Satellite} label="Ortalama NDVI" value={k.avg_ndvi} accent="bg-cyan-500/10 text-cyan-400" />
-        <KPI icon={Satellite} label="Son Uydu Analizi" value={timeAgo(k.last_satellite_scan)} accent="bg-cyan-500/10 text-cyan-400" />
-        <KPI icon={Radio} label="Aktif Sensör" value={`${fmt(k.iot_sensors_active)} / ${fmt(k.iot_sensors_total)}`} accent="bg-violet-500/10 text-violet-400" />
-        <KPI icon={Plane} label="Drone Görevi" value={fmt(k.drone_missions_total)} accent="bg-indigo-500/10 text-indigo-400" />
+        <KPI icon={Satellite} label="Ortalama NDVI" value={k.avg_ndvi} accent="bg-info/10 text-info" to="/uydu" />
+        <KPI icon={Satellite} label="Son Uydu Analizi" value={timeAgo(k.last_satellite_scan)} accent="bg-info/10 text-info" to="/uydu" />
+        <KPI icon={Radio} label="Aktif Sensör" value={`${fmt(k.iot_sensors_active)} / ${fmt(k.iot_sensors_total)}`} accent="bg-info/10 text-info" to="/operasyon" />
+        <KPI icon={Plane} label="Drone Görevi" value={fmt(k.drone_missions_total)} accent="bg-info/10 text-info" to="/operasyon" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">

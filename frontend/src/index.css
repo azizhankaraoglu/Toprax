@@ -5,16 +5,20 @@
 @import "leaflet/dist/leaflet.css";
 
 :root {
-  --bg: #0a0f0d;
-  --surface: #11181a;
-  --surface-2: #1a2326;
-  --border: #243038;
-  --text: #e8efe9;
-  --text-dim: #97a8a0;
-  --primary: #4ade80;
-  --primary-dark: #16a34a;
-  --accent: #fbbf24;
-  --danger: #ef4444;
+  --bg: #0f0f0f;
+  --surface: #1a1a1a;
+  --surface-2: #242424;
+  --border: #363636;
+  --text: #f0f0f0;
+  --text-dim: #a8a8a8;
+  --primary: #FF8C00;
+  --primary-dark: #E67E00;
+  --primary-light: #FFB84D;
+  --success: #10B981;
+  --danger: #EF4444;
+  --warning: #F59E0B;
+  --info: #3B82F6;
+  --accent: #FFB84D;
   --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
 }
 
@@ -57,7 +61,7 @@ html, body, #root, .App {
   transition: border-color 200ms ease, transform 200ms ease;
 }
 .card-hover:hover {
-  border-color: rgba(74, 222, 128, 0.4);
+  border-color: rgba(255, 140, 0, 0.4);
   transform: translateY(-2px);
 }
 
@@ -76,9 +80,10 @@ html, body, #root, .App {
 .btn:active { transform: scale(0.97); }
 .btn-primary {
   background: var(--primary);
-  color: #052e16;
+  color: #ffffff;
+  font-weight: 600;
 }
-.btn-primary:hover { background: #6ee7a3; }
+.btn-primary:hover { background: var(--primary-dark); }
 .btn-ghost {
   background: transparent;
   border-color: var(--border);
@@ -128,27 +133,27 @@ html, body, #root, .App {
 .pulse-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--primary);
-  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+  box-shadow: 0 0 0 0 rgba(255, 140, 0, 0.7);
   animation: pulse 2s infinite;
 }
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
-  70% { box-shadow: 0 0 0 12px rgba(74, 222, 128, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(255, 140, 0, 0.7); }
+  70% { box-shadow: 0 0 0 12px rgba(255, 140, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 140, 0, 0); }
 }
 
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
-.badge-a { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
-.badge-b { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
-.badge-c { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+.badge-a { background: rgba(255, 140, 0, 0.15); color: #FF8C00; }
+.badge-b { background: rgba(16, 185, 129, 0.15); color: #10B981; }
+.badge-c { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
 .badge-d { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
 .badge-neutral { background: rgba(151, 168, 160, 0.15); color: var(--text-dim); }
