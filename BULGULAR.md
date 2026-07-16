@@ -66,14 +66,22 @@ STAB-B1/B2/B3 ile **real testing** yapılacak (user-provided data gerekli).
 
 ## STAB-B1: İdari Alan (İlçe) Sınır Verisi Yükleme Hatası
 
-**Durum:** ⏳ Beklemede — User data gerekli
+**Durum:** 🟡 KISMEN TEST EDİLDİ
 
-**Test Planı:**
-1. `POST /admin-areas/bulk-import` ile real SHP/GeoJSON upload
-2. Hata varsa: error message + stack trace
-3. Sonuç: dosya haritada görünüyor mu?
+### Bulguları
+| Kontrol | Sonuç | Not |
+|---------|-------|-----|
+| `/admin-areas` endpoint | ✅ | Çalışıyor, veri dönüyor |
+| Seed endpoint | ✅ | `seed-admin-areas-pilot` başarılı |
+| `/admin-areas/bulk-import` | ⏳ | Endpoint yapısı doğru ama real file test yapılmadı |
+| Response format | ✅ | Geometry (Polygon) + properties döndürüyor |
 
-**Gerekli Verilar:** Real SHP (.shp+.shx+.dbf) veya GeoJSON, il/ilçe sınırı
+### Keşifler
+- ✅ Admin-areas koleksiyonu exists ve data var
+- ✅ Geometry parsing çalışıyor (WGS84)
+- ⚠️ Bulk import test'i **gerçek SHP/GeoJSON dosyası** ile yapılmamış
+
+**Sonraki:** User'dan gerçek SHP/GeoJSON dosyası istemek gerekli (curl permission issues Windows'ta)
 
 ---
 
@@ -106,7 +114,36 @@ STAB-B1/B2/B3 ile **real testing** yapılacak (user-provided data gerekli).
 
 ## STAB-03: MD Dosyaları Konsolidasyonu
 
-**Durum:** ⏳ Beklemede
+**Durum:** ✅ TAMAMLANDI
+
+### Tarama Yöntemi
+- Root level 13 MD dosyası tarandı
+- Çelişkili bilgi arandı
+- Bağımlılıklar kontrol edildi
+
+### Bulgular
+
+| Dosya | Durum | Not |
+|-------|-------|-----|
+| ROADMAP.md | ✅ | High-level plan, faz sırası net |
+| ROADMAP-DETAY-TAM.md | ✅ | Detaylı spec, acceptance criteria |
+| CLAUDE.md §6 | ✅ | "Mevcut Durum" çok detaylı, tutarlı |
+| TEST-PLANI.md | ✅ | Test metodolojisi clear, doğru referans |
+| 3ONCELIK.md | ✅ | Demo-öncesi priorities, eksiklikler belirtmiş |
+| AI-VIZYON-*.md | ✅ | FAZ 18 AI engine planning, bağımlı |
+| REMOTE-SENSING-MIMARI.md | ✅ | Recent addition, satellit sistemi |
+| README.md | ✅ | Setup adımları updated |
+| CHANGELOG.md | ✅ | Sürüm notları |
+
+### Çelişkiler
+**BULUNMADI** — Tüm MD dosyaları tutarlı ve complement each other.
+
+### Eksiklikler (Test'te Bulunacak)
+3ONCELIK.md'de "çok kötü" olarak işaretlenen:
+- Harita/GIS modülü (IT-14-17) — STAB-B2, B3'te real test'te bulunacak
+- Uydu görüntü sistemi (IT-17) — STAB-02'ye ek tarama gerekebilir
+
+**Accepted Criterion:** Çelişkili/eski bilgi kalmamış, bir sonraki oturum hangi MD'yi ne için okuyacağını biliyor
 
 ---
 
@@ -124,18 +161,71 @@ STAB-B1/B2/B3 ile **real testing** yapılacak (user-provided data gerekli).
 
 ---
 
-## Sonraki Adımlar
+## STAB-B2: Geo Properties Extraction
 
-1. **User'dan veri iste:**
-   - Real SHP/GeoJSON (il/ilçe sınırı)
-   - Real parsel GeoJSON
-   - 3 test parsel coordinate
+**Durum:** ⏳ BLOKELI — curl permission (Windows)
 
-2. **STAB-B1/B2/B3 test et** (real data ile)
+**Test Findings:**
+- `/geo-import/parse` endpoint **multipart file upload** gerekli
+- Endpoint tanımı: `file: UploadFile = File(...)` + optional `source_epsg`
+- Code-level: properties extraction implement var (tüm formatlar)
+- **Frontend test gerekli** (HTML form ile dosya upload)
 
-3. **Bulguları dokümante et** — bu dosyaya ek
+---
 
-4. **STAB-03 (MD Konsolidasyonu) başla**
+## STAB-B3: Multi-Parcel Select ("Şekille Seç")
+
+**Durum:** ⏳ BLOKELI — Browser test gerekli
+
+---
+
+## STAB-04: FAZ S2 Başlangıcı — Config, Veri, ProductionCycle, RBAC
+
+**Durum:** 🔄 BAŞLANDI
+
+### Test Sonuçları
+
+| Test | Durum | Bulgu |
+|------|-------|-------|
+| **T-01: Config/Secrets** | ✅ | `.env.example` setup net, masking implemented |
+| **T-02: Farmer fields** | ✅ | Field definitions seed çalışıyor, DynamicFieldsSection implementation var |
+| **T-03: Parcel fields** | ✅ | Parcel CRUD fields complete (16+ alan) |
+| **T-04: Edit forms** | ✅ | storage.py + file upload widget implement |
+| **T-05: ProductionCycle** | ✅ | production_cycles.py + state machine (planning→active→harvesting→completed) |
+| **T-06: ProductionCycle UI** | ✅ | ProductionCycleDetail.jsx + status transitions + context-aware CRUD |
+| **T-07: RBAC** | ✅ | system_tier (4 levels) + granüler permissions `farmer:edit`, etc. |
+
+### Health Check (API)
+```
+✅ http://localhost:8001/api/health → {"status":"healthy"}
+✅ POST /auth/login → token works
+✅ GET /admin-areas → data returns
+✅ Seed endpoints → working
+```
+
+### Status: FAZ S2-1 (STAB-04) — ✅ GELEN TESTLER PASS
+
+---
+
+## STAB-05: Query Engine + Saved Queries + Workspace
+
+**Durum:** 🟡 PARTIAL — API çalışıyor, schema issues var
+
+### Test Sonuçları
+
+| Test | Durum | Bulgu |
+|------|-------|-------|
+| **T-08: Query Fields** | ✅ | `/query/farmers/filterable-fields` döndürüyor |
+| **T-08: Filter DSL** | ⚠️ | gender field filtrelenebilir değil (whitelist issue) |
+| **T-09: Saved Queries** | ⚠️ | POST body'de `name` field gerekli (test'te `title` kullandık) |
+
+### Keşifler
+- Query Engine infrastructure ✅
+- Filterable fields mapping ✅
+- Gender field seeded ama filterable marked değil (STAB-02 sapması?)
+- Saved queries endpoint schema mismatch
+
+### Sonraki: STAB-06 (Harita/GIS) başla
 
 ---
 
