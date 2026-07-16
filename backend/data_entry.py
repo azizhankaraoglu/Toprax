@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Veri Giriş Modülü (Sprint 4)
+Toprax — Veri Giriş Modülü (Sprint 4)
 =====================================================================
 Denetimde tespit edilen "sadece görüntüleme" ekranları için eksik
 CREATE/UPDATE/DELETE endpoint'leri burada toplanır:
@@ -33,7 +33,9 @@ from typing import Optional
 from event_bus import publish
 
 
-def register_data_entry_routes(api_router, db, current_user, require_permission, log_audit):
+def register_data_entry_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "factory" flag'i kapatılınca kantar kaydı GERÇEKTEN 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     # =====================================================================
     # SÖZLEŞMELER
@@ -102,6 +104,11 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         doc["id"] = str(uuid.uuid4())
         doc["farmer_id"] = body.farmer_id or parcel["farmer_id"]
         doc["region_id"] = parcel["region_id"]
+        # IT-05: production_cycle_id verilmediyse otomatik bağla (orphan kayıt
+        # kalmaz; eski parcel_id KORUNUR — backward-compatible).
+        if not doc.get("production_cycle_id"):
+            from production_cycles import ensure_cycle_for
+            doc["production_cycle_id"] = await ensure_cycle_for(db, body.parcel_id, body.season, doc["farmer_id"])
         doc["contract_no"] = f"SZ-{body.season}-{parcel['parcel_code'][-5:]}"
         doc["created_at"] = datetime.now(timezone.utc).isoformat()
         await db.contracts.insert_one(doc)
@@ -133,12 +140,46 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
     @api_router.delete("/contracts/{contract_id}")
     async def delete_contract(contract_id: str, request: Request,
                                user=Depends(require_permission("contracts:delete"))):
+        # BULGU 1 (Kritik) düzeltmesi: fiziksel silme YAPILMAZ. CLAUDE.md
+        # Bölüm 4 Konvansiyon #3 gereği çekirdek/finansal-yakın kayıtlar
+        # is_active=False ile pasife alınır; audit izi + kayıt gövdesi DB'de
+        # kalır, geri alınabilir.
         old = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Sözleşme bulunamadı")
-        await db.contracts.delete_one({"id": contract_id})
-        await log_audit(db, user, action="delete", entity="contract", entity_id=contract_id, old_value=old, request=request)
-        return {"status": "deleted"}
+
+        # Bağlı-kayıt (orphan) koruması — parseldeki 409 deseniyle aynı:
+        # sözleşmeye bağlı ekim veya ledger (hakediş/finans) hareketi varsa
+        # önce onlar kapatılmalı, aksi halde veri bütünlüğü bozulur.
+        linked_plantings = await db.plantings.count_documents(
+            {"contract_id": contract_id, "is_active": {"$ne": False}}
+        )
+        if linked_plantings > 0:
+            raise HTTPException(
+                409,
+                f"Bu sözleşmeye bağlı {linked_plantings} ekim kaydı var. Önce ekim "
+                "kayıtlarını kapatın/taşıyın, sonra sözleşmeyi silin."
+            )
+        linked_ledger = await db.ledger_entries.count_documents(
+            {"reference_type": "contract", "reference_id": contract_id}
+        )
+        if linked_ledger > 0:
+            raise HTTPException(
+                409,
+                f"Bu sözleşmeye bağlı {linked_ledger} finansal (ledger) hareket var. "
+                "Finansal kayıtlar ters kayıtla düzeltilir; sözleşme silinemez."
+            )
+
+        await db.contracts.update_one(
+            {"id": contract_id},
+            {"$set": {
+                "is_active": False,
+                "deleted_at": datetime.now(timezone.utc).isoformat(),
+                "deleted_by": user.get("full_name") or user.get("email"),
+            }},
+        )
+        await log_audit(db, user, action="soft_delete", entity="contract", entity_id=contract_id, old_value=old, request=request)
+        return {"status": "deactivated"}
 
     # =====================================================================
     # EKİM PLANLAMA
@@ -203,6 +244,10 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         doc["farmer_id"] = body.farmer_id or parcel["farmer_id"]
         doc["region_id"] = parcel["region_id"]
         doc["actual_harvest_date"] = None
+        # IT-05: production_cycle_id verilmediyse otomatik bağla (backward-compatible).
+        if not doc.get("production_cycle_id"):
+            from production_cycles import ensure_cycle_for
+            doc["production_cycle_id"] = await ensure_cycle_for(db, body.parcel_id, body.season, doc["farmer_id"])
         await db.plantings.insert_one(doc)
         doc.pop("_id", None)
         await log_audit(db, user, action="create", entity="planting", entity_id=doc["id"], new_value=doc, request=request)
@@ -281,6 +326,15 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         if not doc.get("recommendation"):
             doc["recommendation"] = _auto_recommendation(body.ph)
         doc["entered_by"] = user.get("full_name")
+        # IT-05: production_cycle_id verilmediyse otomatik bağla. Toprak analizinde
+        # yıl alanı yok — analiz tarihinden (date) türetilir, olmazsa mevcut yıl.
+        if not doc.get("production_cycle_id"):
+            from production_cycles import ensure_cycle_for
+            try:
+                _yr = int(str(body.date)[:4])
+            except Exception:
+                _yr = datetime.now(timezone.utc).year
+            doc["production_cycle_id"] = await ensure_cycle_for(db, body.parcel_id, _yr, parcel.get("farmer_id"))
         await db.soil_samples.insert_one(doc)
         doc.pop("_id", None)
         await log_audit(db, user, action="create", entity="soil_sample", entity_id=doc["id"], new_value=doc, request=request)
@@ -369,9 +423,17 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         old = await db.machines.find_one({"id": machine_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Makine bulunamadı")
-        await db.machines.delete_one({"id": machine_id})
-        await log_audit(db, user, action="delete", entity="machine", entity_id=machine_id, old_value=old, request=request)
-        return {"status": "deleted"}
+        # BULGU 1 düzeltmesi: hard-delete -> soft-delete
+        await db.machines.update_one(
+            {"id": machine_id},
+            {"$set": {
+                "is_active": False,
+                "deleted_at": datetime.now(timezone.utc).isoformat(),
+                "deleted_by": user.get("full_name") or user.get("email"),
+            }},
+        )
+        await log_audit(db, user, action="soft_delete", entity="machine", entity_id=machine_id, old_value=old, request=request)
+        return {"status": "deactivated"}
 
     # =====================================================================
     # OPERASYON — İŞÇİ
@@ -418,9 +480,17 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         old = await db.workers.find_one({"id": worker_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "İşçi bulunamadı")
-        await db.workers.delete_one({"id": worker_id})
-        await log_audit(db, user, action="delete", entity="worker", entity_id=worker_id, old_value=old, request=request)
-        return {"status": "deleted"}
+        # BULGU 1 düzeltmesi: hard-delete -> soft-delete
+        await db.workers.update_one(
+            {"id": worker_id},
+            {"$set": {
+                "is_active": False,
+                "deleted_at": datetime.now(timezone.utc).isoformat(),
+                "deleted_by": user.get("full_name") or user.get("email"),
+            }},
+        )
+        await log_audit(db, user, action="soft_delete", entity="worker", entity_id=worker_id, old_value=old, request=request)
+        return {"status": "deactivated"}
 
     # =====================================================================
     # OPERASYON — GÖREV
@@ -476,9 +546,17 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         old = await db.tasks.find_one({"id": task_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Görev bulunamadı")
-        await db.tasks.delete_one({"id": task_id})
-        await log_audit(db, user, action="delete", entity="task", entity_id=task_id, old_value=old, request=request)
-        return {"status": "deleted"}
+        # BULGU 1 düzeltmesi: hard-delete -> soft-delete
+        await db.tasks.update_one(
+            {"id": task_id},
+            {"$set": {
+                "is_active": False,
+                "deleted_at": datetime.now(timezone.utc).isoformat(),
+                "deleted_by": user.get("full_name") or user.get("email"),
+            }},
+        )
+        await log_audit(db, user, action="soft_delete", entity="task", entity_id=task_id, old_value=old, request=request)
+        return {"status": "deactivated"}
 
     # =====================================================================
     # LOJİSTİK RANDEVU
@@ -548,7 +626,8 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/kantar/records")
     async def create_kantar_record(body: KantarRecordCreate, request: Request,
-                                    user=Depends(require_permission("kantar:create"))):
+                                    user=Depends(require_permission("kantar:create")),
+                                    _feat=Depends(require_feature("factory"))):
         farmer = await db.farmers.find_one({"id": body.farmer_id}, {"_id": 0})
         if not farmer:
             raise HTTPException(404, "Çiftçi bulunamadı")
@@ -691,9 +770,17 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         old = await db.iot_sensors.find_one({"id": sensor_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Sensör bulunamadı")
-        await db.iot_sensors.delete_one({"id": sensor_id})
-        await log_audit(db, user, action="delete", entity="iot_sensor", entity_id=sensor_id, old_value=old, request=request)
-        return {"status": "deleted"}
+        # BULGU 1 düzeltmesi: hard-delete -> soft-delete
+        await db.iot_sensors.update_one(
+            {"id": sensor_id},
+            {"$set": {
+                "is_active": False,
+                "deleted_at": datetime.now(timezone.utc).isoformat(),
+                "deleted_by": user.get("full_name") or user.get("email"),
+            }},
+        )
+        await log_audit(db, user, action="soft_delete", entity="iot_sensor", entity_id=sensor_id, old_value=old, request=request)
+        return {"status": "deactivated"}
 
     # =====================================================================
     # DRONE GÖREVİ — Manuel log (gerçek entegrasyon gelene kadar)

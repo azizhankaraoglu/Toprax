@@ -10,6 +10,7 @@ import FarmerDetail from "@/pages/FarmerDetail";
 import Parcels from "@/pages/Parcels";
 import ParcelDetail from "@/pages/ParcelDetail";
 import HaritaPaneli from "@/pages/HaritaPaneli";
+import RemoteSensing from "@/pages/RemoteSensing";
 import ProductionCycleDetail from "@/pages/ProductionCycleDetail";
 import Sulama from "@/pages/Sulama";
 import Operasyon from "@/pages/Operasyon";
@@ -27,12 +28,14 @@ import UfydDashboard from "@/pages/UfydDashboard";
 import SahaOperasyonlari from "@/pages/SahaOperasyonlari";
 import AutomationRules from "@/pages/AutomationRules";
 import { SablonYonetimi } from "@/pages/TemplateManagement";
+import AnnouncementManagement from "@/pages/AnnouncementManagement";
 import CampaignManagement from "@/pages/CampaignManagement";
 import CommunicationPolicies from "@/pages/CommunicationPolicies";
 import EgitimYonetimi from "@/pages/EgitimYonetimi";
 import IntegrationHub from "@/pages/IntegrationHub";
 import DeveloperPortal from "@/pages/DeveloperPortal";
 import PlatformCore from "@/pages/PlatformCore";
+import AiKnowledgeLibrary from "@/pages/AiKnowledgeLibrary";
 import { ExperienceProfileYonetimi } from "@/pages/ExperienceProfiles";
 import MobilDashboard from "@/pages/MobilDashboard";
 import OrganizationChart from "@/pages/OrganizationChart";
@@ -91,6 +94,7 @@ function App() {
             <Route path="/karne" element={<Karne />} />
             <Route path="/bildirimler" element={<Bildirimler />} />
             <Route path="/uydu" element={<UyduGorunutu />} />
+            <Route path="/uzaktan-algilama" element={<RemoteSensing />} />
             <Route path="/copilot" element={<AICopilot />} />
             <Route path="/hastalik" element={<HastalikTespiti />} />
             <Route path="/saha" element={<SahaPWA />} />
@@ -106,6 +110,7 @@ function App() {
             <Route path="/idari-alanlar" element={<AdminAreaManagement />} />
             <Route path="/destek-katalogu" element={<DestekKatalogu />} />
             <Route path="/sablon-yonetimi" element={<SablonYonetimi />} />
+            <Route path="/duyuru-yonetimi" element={<AnnouncementManagement />} />
             <Route path="/kampanyalar" element={<CampaignManagement />} />
             <Route path="/iletisim-politikalari" element={<CommunicationPolicies />} />
             <Route path="/organizasyon-hiyerarsisi" element={<OrganizationChart />} />
@@ -115,6 +120,7 @@ function App() {
             <Route path="/integration-hub" element={<IntegrationHub />} />
             <Route path="/gelistirici-portali" element={<DeveloperPortal />} />
             <Route path="/platform-core" element={<PlatformCore />} />
+            <Route path="/ai-bilgi-kutuphanesi" element={<AiKnowledgeLibrary />} />
             <Route path="/experience-profiles" element={<ExperienceProfileYonetimi />} />
             <Route path="/ufyd-dashboard" element={<UfydDashboard />} />
             <Route path="/saha-operasyonlari" element={<SahaOperasyonlari />} />

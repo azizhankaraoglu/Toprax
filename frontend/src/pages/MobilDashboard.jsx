@@ -42,6 +42,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import api from "@/api";
 import { enqueue, flush, getAll as getQueuedItems } from "@/lib/offlineQueue";
+import AnnouncementPopup from "@/components/AnnouncementPopup";
 import {
   Wifi, WifiOff, LayoutDashboard, ListChecks, Camera, MapPin, CloudUpload,
   CheckCircle2, Clock, RefreshCw, ThumbsUp, ThumbsDown, Truck, Flag,
@@ -478,6 +479,7 @@ export default function MobilDashboard() {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] p-4 max-w-md mx-auto" data-testid="mobil-dashboard">
+      <AnnouncementPopup />
       <header className="flex items-center justify-between mb-4">
         <div>
           <div className="text-[10px] text-[var(--primary)] tracking-widest">MOBİL — {experience.profile_name}</div>

@@ -13,7 +13,7 @@
  *
  * Kullanım: enqueue({method, url, body}) → flush(apiClient) → getAll()
  */
-const DB_NAME = "tabsis_offline";
+const DB_NAME = "toprax_offline";
 const STORE = "queue";
 
 function openDB() {

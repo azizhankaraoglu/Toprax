@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — İcmal/Mutabakat Belgesi + Finansal Simülasyon + UFYD Dashboard
+Toprax — İcmal/Mutabakat Belgesi + Finansal Simülasyon + UFYD Dashboard
 (IT-21 / FAZ 7 — UFYD, son halka)
 =====================================================================
 UFYD omurgasının kapanışı:

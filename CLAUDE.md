@@ -1,4 +1,4 @@
-# CLAUDE.md — TABSİS Proje Hafızası
+# CLAUDE.md — TOPRAX Proje Hafızası
 
 > Bu dosya her oturumun başında okunmalıdır. Amaç: yeni bir Claude oturumunun
 > projeyi sıfırdan keşfetmeden doğru kararlar verebilmesi.
@@ -9,7 +9,7 @@
 
 ## 1. Proje Kimliği
 
-**TABSİS (Dijital Tarım Platformu)** — kooperatif/fabrika/kamu kurumlarının
+**TOPRAX (Dijital Tarım Platformu)** — kooperatif/fabrika/kamu kurumlarının
 çiftçi, parsel, sözleşme, üretim, finans ve saha operasyonlarını yönettiği
 multi-tenant tarımsal operasyon platformu.
 
@@ -317,6 +317,15 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
    Yeni tasarım dili YASAK. `data-testid` eklenir.
 10. **Idempotent seed:** her modülün seed endpoint'i tekrar çağrılabilir olmalı
     (`_ensure_*` kalıbı, bkz. field_definitions.py).
+11. **Dashboard widget'ları drill-down olmalı (KONU 3):** Hiçbir widget/kart
+    sadece statik sayı göstermez; tıklandığında widget'ın temsil ettiği veriyle
+    önceden filtrelenmiş ilgili liste/detay ekranına götürür (ör. "Riskli
+    Parsel" kartı → `/parseller?risk=1`). Yeni eklenen her dashboard için bu
+    VARSAYILAN davranıştır. Teknik kalıp: kart `useNavigate` ile hedef
+    route'a + query param'a gider; hedef liste ekranı `useSearchParams` ile
+    param'ı okuyup mevcut filtre mekanizmasına (SmartDataGrid `initialFilters`
+    veya sayfa filtre state'i) uygular — yeni bir sorgu yolu İCAT EDİLMEZ
+    (widget'lar zaten Query Engine'den beslenir, IT-14).
 
 ## 5. Bilinen Tuzaklar
 

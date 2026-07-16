@@ -7,7 +7,7 @@
 # kurulumlarda kullanilmaz (bkz. docker-compose.tls.yml basindaki not).
 #
 # Kullanim: bash scripts/setup-tls.sh <domain> <eposta>
-#   ornek:  bash scripts/setup-tls.sh tabsis.ornekkooperatif.com.tr admin@ornekkooperatif.com.tr
+#   ornek:  bash scripts/setup-tls.sh toprax.ornekkooperatif.com.tr admin@ornekkooperatif.com.tr
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -25,7 +25,7 @@ if ! docker compose version >/dev/null 2>&1; then
   COMPOSE="docker-compose -f docker-compose.yml -f docker-compose.tls.yml"
 fi
 
-echo "=== TABSIS TLS Kurulumu: $DOMAIN ==="
+echo "=== TOPRAX TLS Kurulumu: $DOMAIN ==="
 mkdir -p nginx/certs nginx/webroot
 
 echo "[1/4] nginx/reverse-proxy.conf sablon uzerinden uretiliyor (DOMAIN=$DOMAIN)..."
@@ -42,13 +42,13 @@ $COMPOSE up -d reverse-proxy
 echo "[4/4] Let's Encrypt sertifikasi isteniyor (certbot, webroot yontemi)..."
 docker run --rm \
   -v "$(pwd)/nginx/webroot:/var/www/certbot" \
-  -v "tabsis_certbot_conf:/etc/letsencrypt" \
+  -v "toprax_certbot_conf:/etc/letsencrypt" \
   certbot/certbot:latest certonly --webroot -w /var/www/certbot \
   -d "$DOMAIN" --email "$EMAIL" --agree-tos --non-interactive
 
 echo "Gercek sertifika nginx/certs/ altina kopyalaniyor..."
 docker run --rm \
-  -v "tabsis_certbot_conf:/etc/letsencrypt" \
+  -v "toprax_certbot_conf:/etc/letsencrypt" \
   -v "$(pwd)/nginx/certs:/out" \
   certbot/certbot:latest sh -c "cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem /out/fullchain.pem && cp /etc/letsencrypt/live/$DOMAIN/privkey.pem /out/privkey.pem"
 

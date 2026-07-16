@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — ProductionCycle (Üretim Sezonu) Modülü (IT-05 / Sprint A2)
+Toprax — ProductionCycle (Üretim Sezonu) Modülü (IT-05 / Sprint A2)
 =====================================================================
 İkinci omurga: Farmer → Parcel → ProductionCycle → (Contract/Planting/
 SoilSample/...). Bir parselin belirli bir yıl+sezonundaki üretim
@@ -25,6 +25,34 @@ from pydantic import BaseModel
 from typing import Optional
 
 DEFAULT_SEASON_LABEL = "Ana Ürün"
+
+
+async def ensure_cycle_for(db, parcel_id: str, year: int, farmer_id: str) -> str:
+    """(parcel_id, year, DEFAULT_SEASON_LABEL) için ProductionCycle bulur/oluşturur
+    — idempotent. IT-05: alt kayıtlar (sözleşme/toprak/ekim) oluşturulurken
+    production_cycle_id verilmediyse, çağıran modül (data_entry.py) bunu çağırıp
+    o parselin ilgili yıl/varsayılan sezonunu otomatik bağlar. Böylece hiçbir
+    üretim kaydı ProductionCycle'sız (orphan) kalmaz, ama eski `parcel_id`
+    KORUNUR (backward-compatible — mevcut mobil/portal akışları bozulmaz).
+    Modül seviyesindedir ki `register_*_routes` closure'ı DIŞINDAN import
+    edilebilsin (migration + data_entry AYNI tek yardımcıyı kullanır)."""
+    cycle = await db.production_cycles.find_one(
+        {"parcel_id": parcel_id, "year": year, "season": DEFAULT_SEASON_LABEL}, {"_id": 0}
+    )
+    if cycle:
+        return cycle["id"]
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()), "farmer_id": farmer_id, "parcel_id": parcel_id,
+        "year": year, "season": DEFAULT_SEASON_LABEL, "crop": "Şeker Pancarı",
+        "status": "completed" if year < datetime.now().year else "active",
+        "status_updated_at": now,
+        "notes": "Alt kayıt oluşturulurken otomatik bağlandı (IT-05)",
+        "created_at": now, "created_by": "auto (IT-05)",
+    }
+    await db.production_cycles.insert_one(doc)
+    return doc["id"]
+
 
 STATUS_LABELS = {
     "planning": "Planlama",
@@ -63,7 +91,9 @@ class ProductionCycleStatusUpdate(BaseModel):
     status: str
 
 
-def register_production_cycle_routes(api_router, db, current_user, require_permission, log_audit):
+def register_production_cycle_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "production" flag'i kapatılınca liste GERÇEKTEN 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     @api_router.get("/production-cycles")
     async def list_production_cycles(
@@ -72,6 +102,7 @@ def register_production_cycle_routes(api_router, db, current_user, require_permi
         year: Optional[int] = None,
         status: Optional[str] = None,
         user=Depends(require_permission("production_cycles:view")),
+        _feat=Depends(require_feature("production")),
     ):
         filt = {}
         if farmer_id:

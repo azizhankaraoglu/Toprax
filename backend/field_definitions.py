@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Dinamik Form Yönetimi & Lookup Yönetimi (Sprint A1)
+Toprax — Dinamik Form Yönetimi & Lookup Yönetimi (Sprint A1)
 =====================================================================
 Bu modül forms_module.py (M18 — GPS/foto destekli saha anket formları)
 İLE KARIŞTIRILMAMALIDIR. Farklı bir problemi çözer:
@@ -113,13 +113,43 @@ async def get_sensitive_field_keys(db, module: str) -> set:
     return {r["field_key"] for r in rows}
 
 
-async def mask_sensitive_fields(db, module: str, doc: Optional[dict], user: dict) -> Optional[dict]:
-    """Tek bir entity dokümanına (örn. GET /farmers/{id}) maskeleme uygular."""
+# IT-07 — "Finans rolü" bu sistemde ayrı bir ROL değil (bkz. config_service.py
+# ROLE_HIERARCHY — muhasebe rolü yok), finans YETKİSİ permission ile ifade edilir.
+# Finans-otoritesi sayılan (saha personeli/ziraat mühendisinde OLMAYAN) permission'lar:
+FINANCE_PERMISSIONS = {"ledger:reverse", "entitlement:finalize"}
+
+
+async def _finance_or_admin(db, user: dict) -> bool:
+    """Admin-tier VEYA finans yetkisine sahip kullanıcı hassas alanları görebilir."""
     from config_service import get_system_tier
-    if doc is None or get_system_tier(user.get("role")) in ("god_mode", "super_admin", "admin"):
+    if get_system_tier(user.get("role")) in ("god_mode", "super_admin", "admin"):
+        return True
+    from permissions import get_effective_permissions
+    perms = set(await get_effective_permissions(user, db))
+    return bool(FINANCE_PERMISSIONS & perms)
+
+
+def _is_owner(module: str, doc: dict, user: dict) -> bool:
+    """Kaydın sahibi (roadmap IT-07: 'kaydın sahibi') — çiftçi KENDİ IBAN'ını
+    görebilir. Güvenli taraf: sahiplik netse True, aksi halde False (maskele)."""
+    uid_farmer = user.get("farmer_id")
+    if not uid_farmer or not doc:
+        return False
+    if module == "farmers" and doc.get("id") == uid_farmer:
+        return True
+    return doc.get("farmer_id") == uid_farmer
+
+
+async def mask_sensitive_fields(db, module: str, doc: Optional[dict], user: dict) -> Optional[dict]:
+    """Tek bir entity dokümanına (örn. GET /farmers/{id}) maskeleme uygular.
+    IT-07: hassas alanı (ör. IBAN) SADECE admin-tier, finans yetkisi olan VEYA
+    kaydın sahibi görebilir; diğer herkeste maskelenir (güvenli taraf: şüphede maskele)."""
+    if doc is None:
         return doc
     keys = await get_sensitive_field_keys(db, module)
     if not keys:
+        return doc
+    if _is_owner(module, doc, user) or await _finance_or_admin(db, user):
         return doc
     out = dict(doc)
     for k in keys:
@@ -140,14 +170,18 @@ async def get_filterable_field_defs(db, module: str) -> List[dict]:
 
 
 async def mask_sensitive_fields_many(db, module: str, docs: List[dict], user: dict) -> List[dict]:
-    """Bir liste entity dokümanına (örn. GET /farmers) maskeleme uygular."""
-    from config_service import get_system_tier
-    if get_system_tier(user.get("role")) in ("god_mode", "super_admin", "admin"):
-        return docs
+    """Bir liste entity dokümanına (örn. GET /farmers) maskeleme uygular.
+    IT-07: admin/finans yetkisi bir kez hesaplanır (N sorgu değil); sahiplik
+    kontrolü doküman bazlıdır (çiftçi kendi kaydının IBAN'ını görür)."""
     keys = await get_sensitive_field_keys(db, module)
     if not keys:
         return docs
+    base_ok = await _finance_or_admin(db, user)   # tek sefer (perf)
+    if base_ok:
+        return docs
     for d in docs:
+        if _is_owner(module, d, user):
+            continue
         for k in keys:
             if k in d:
                 d[k] = _mask(d[k])

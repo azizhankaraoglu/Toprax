@@ -3,7 +3,7 @@
 #
 # build-offline-bundle.sh ile uretilen paket internetsiz hedef sunucuya
 # tasindiktan sonra bu script paketin ICINDEN calistirilir:
-#   tar -xzf tabsis-offline-bundle-YYYYMMDD.tar.gz
+#   tar -xzf toprax-offline-bundle-YYYYMMDD.tar.gz
 #   cd offline-bundle
 #   bash scripts/install-from-bundle.sh
 #
@@ -18,7 +18,7 @@ if ! docker compose version >/dev/null 2>&1; then
   COMPOSE="docker-compose"
 fi
 
-echo "=== TABSIS Air-Gapped Kurulum ==="
+echo "=== TOPRAX Air-Gapped Kurulum ==="
 
 echo "[1/4] On-kosul kontrolu (Docker/RAM/disk/port)..."
 bash scripts/check-requirements.sh || {

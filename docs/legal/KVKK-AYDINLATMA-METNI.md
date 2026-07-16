@@ -9,7 +9,7 @@
 ## 1. Veri Sorumlusu
 
 [KURUM ADI] ("Kurum"), 6698 sayılı Kişisel Verilerin Korunması Kanunu
-("KVKK") uyarınca veri sorumlusu sıfatıyla, TabSIS platformu üzerinden
+("KVKK") uyarınca veri sorumlusu sıfatıyla, Toprax platformu üzerinden
 işlediği kişisel verilerinize ilişkin olarak sizi bilgilendirmek ister.
 
 ## 2. İşlenen Kişisel Veri Kategorileri

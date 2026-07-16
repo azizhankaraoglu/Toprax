@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Merkezi Konfigürasyon Servisi (IT-01)
+Toprax — Merkezi Konfigürasyon Servisi (IT-01)
 =====================================================================
 Tüm ortam değişkenleri, sabitler ve rol hiyerarşisi burada toplanır.
 Diğer TÜM backend modülleri ayarlarını buradan import eder — env
@@ -15,8 +15,8 @@ import os
 import re
 import logging
 
-APP_NAME = "TabSIS"
-APP_FULL_NAME = "TabSIS — Tarımsal Operasyon ve Karar Destek Platformu"
+APP_NAME = "Toprax"
+APP_FULL_NAME = "Toprax — Tarımsal Operasyon ve Karar Destek Platformu"
 APP_VERSION = "2.0.0"
 
 
@@ -42,7 +42,7 @@ ENVIRONMENT = os.environ.get("ENVIRONMENT", "development").strip().lower()
 IS_PRODUCTION = ENVIRONMENT == "production"
 
 # ============ JWT ============
-_DEV_JWT_SECRET = "tabsis-dev-only-secret-DEGISTIR"
+_DEV_JWT_SECRET = "toprax-dev-only-secret-DEGISTIR"
 JWT_SECRET = os.environ.get("JWT_SECRET")
 if not JWT_SECRET:
     if IS_PRODUCTION:
@@ -58,7 +58,7 @@ if not JWT_SECRET:
     )
 elif IS_PRODUCTION and JWT_SECRET == _DEV_JWT_SECRET:
     raise RuntimeError(
-        "JWT_SECRET geliştirme değeriyle (tabsis-dev-only-secret-DEGISTIR) üretimde "
+        "JWT_SECRET geliştirme değeriyle (toprax-dev-only-secret-DEGISTIR) üretimde "
         "çalıştırılamaz. .env dosyasında güçlü, benzersiz bir secret tanımlayın."
     )
 
@@ -67,7 +67,7 @@ ACCESS_TOKEN_EXPIRE_HOURS = 24
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 # ============ CORS ============
-# .env içinde CORS_ORIGINS="https://tabsis.example.com,https://app.example.com"
+# .env içinde CORS_ORIGINS="https://toprax.example.com,https://app.example.com"
 # şeklinde virgülle ayrılmış domain listesi verilebilir.
 # Tanımlı değilse yerel geliştirme domain'lerine düşer (wildcard KULLANILMAZ,
 # çünkü allow_credentials=True ile allow_origins=["*"] birlikte tarayıcılar
@@ -91,7 +91,7 @@ SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
 # ============ PLATFORM ADMIN BOOTSTRAP ============
 # İlk açılışta hiç platform_admin yoksa bu bilgilerle otomatik oluşturulur.
 _DEV_PLATFORM_ADMIN_PASSWORD = "DEGISTIR-platform-admin-2026"
-PLATFORM_ADMIN_EMAIL = os.environ.get("PLATFORM_ADMIN_EMAIL", "platform@tabsis.local")
+PLATFORM_ADMIN_EMAIL = os.environ.get("PLATFORM_ADMIN_EMAIL", "platform@toprax.local")
 PLATFORM_ADMIN_PASSWORD = os.environ.get("PLATFORM_ADMIN_PASSWORD")
 if not PLATFORM_ADMIN_PASSWORD:
     if IS_PRODUCTION:

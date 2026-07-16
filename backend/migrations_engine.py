@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-logger = logging.getLogger("tabsis.migrations")
+logger = logging.getLogger("toprax.migrations")
 
 VERSIONS_PACKAGE = "migrations.versions"
 VERSIONS_DIR = Path(__file__).parent / "migrations" / "versions"

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/api";
 import { MapContainer, TileLayer, Polygon, Popup, Marker, useMapEvents } from "react-leaflet";
 import * as turf from "@turf/turf";
@@ -36,6 +36,7 @@ const areaFromGeoJSON = (geojson) => Math.round((turf.area(geojson) / 1000) * 10
 
 export default function Parcels() {
   const nav = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [parcels, setParcels] = useState([]);
   const [farmers, setFarmers] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -279,6 +280,13 @@ export default function Parcels() {
   const totalArea = parcels.reduce((s, p) => s + (p.area_dekar || 0), 0);
   const riskyCount = parcels.filter((p) => p.risk_level === "turuncu" || p.risk_level === "kirmizi").length;
 
+  // KONU 3 (drill-down): Dashboard "Riskli Parsel" kartı /parseller?risk=1 ile
+  // gelir; harita ve liste yalnızca riskli parselleri gösterir (CLAUDE.md Kural 5).
+  const riskOnly = searchParams.get("risk") === "1";
+  const visibleParcels = riskOnly
+    ? parcels.filter((p) => p.risk_level === "turuncu" || p.risk_level === "kirmizi")
+    : parcels;
+
   const TOOLS = [
     { key: "manual", icon: Plus, label: "Manuel Ekle" },
     { key: "draw", icon: PenLine, label: "Parsel Çiz" },
@@ -299,6 +307,12 @@ export default function Parcels() {
             {parcels.length} parsel · {totalArea.toFixed(0)} dekar toplam
             {riskyCount > 0 && <span className="text-red-400"> · {riskyCount} riskli parsel</span>}
           </p>
+          {riskOnly && (
+            <div className="mt-2 inline-flex items-center gap-2 text-xs bg-red-500/10 text-red-400 px-2.5 py-1 rounded">
+              <span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> Yalnızca riskli parseller ({visibleParcels.length})
+              <button className="underline hover:text-red-300" onClick={() => setSearchParams({})}>Tümünü göster</button>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3 text-xs text-[var(--text-dim)]">
           {Object.entries(RISK_COLORS).map(([level, color]) => (
@@ -370,7 +384,7 @@ export default function Parcels() {
             })}
 
             {/* Mevcut parseller */}
-            {parcels.map((p) => {
+            {visibleParcels.map((p) => {
               if (!p.geometry) return null;
               const isMergeSelected = mergeIds.includes(p.id);
               const isEditOrSplitTarget = editTarget?.id === p.id || splitTarget?.id === p.id;
@@ -448,7 +462,7 @@ export default function Parcels() {
             <>
               <h3 className="font-display text-lg mb-3">Parsel Listesi</h3>
               <div className="space-y-2">
-                {parcels.slice(0, 60).map((p) => (
+                {visibleParcels.slice(0, 60).map((p) => (
                   <div
                     key={p.id}
                     onClick={() => nav(`/parseller/${p.id}`)}

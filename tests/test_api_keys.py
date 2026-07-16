@@ -34,7 +34,7 @@ async def _make_key(raw_db, scopes, expires_at=None, rate_limit_per_minute=60):
     plaintext = _generate_key()
     doc = {
         "id": str(uuid.uuid4()), "tenant_id": "t1", "name": "test-key",
-        "key_hash": _hash_key(plaintext), "key_prefix": "tabsis_key_xxxxxx…",
+        "key_hash": _hash_key(plaintext), "key_prefix": "toprax_key_xxxxxx…",
         "scopes": scopes, "rate_limit_per_minute": rate_limit_per_minute,
         "expires_at": expires_at, "revoked": False,
         "created_at": datetime.now(timezone.utc).isoformat(), "created_by": "test",
@@ -96,5 +96,5 @@ async def test_rate_limit_exceeded_returns_429():
 @pytest.mark.asyncio
 async def test_invalid_key_returns_none():
     raw_db = AsyncMongoMockClient()["t"]
-    user = await resolve_api_key_user(raw_db, "tabsis_key_bu-hic-var-olmayan-bir-anahtar")
+    user = await resolve_api_key_user(raw_db, "toprax_key_bu-hic-var-olmayan-bir-anahtar")
     assert user is None

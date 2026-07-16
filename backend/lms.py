@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Farmer LMS: Eğitim Kataloğu + İçerik Yönetimi + Atama +
+Toprax — Farmer LMS: Eğitim Kataloğu + İçerik Yönetimi + Atama +
 Durum + Zorunlu Eğitim (IT-29 / FAZ 10 başlangıç)
 =====================================================================
 ROADMAP notu: "Tam kapsamlı bir LMS değil — merkezi eğitim yönetimi +

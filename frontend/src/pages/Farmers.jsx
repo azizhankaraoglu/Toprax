@@ -2,7 +2,7 @@
  * ÇİFTÇİLER SAYFASI — Liste + Yeni Çiftçi modalı
  */
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/api";
 import { Search, UserPlus, Phone, X } from "lucide-react";
 import DynamicFieldsSection from "@/components/DynamicFieldsSection";
@@ -10,11 +10,14 @@ import FilterPanel from "@/components/FilterPanel";
 
 export default function Farmers() {
   const nav = useNavigate();
+  // KONU 3 (drill-down): Dashboard'ın "A Karne Çiftçi" kartı /ciftciler?karne=A ile
+  // gelir; buradaki karne/bölge filtresi URL parametresinden başlatılır (CLAUDE.md Kural 11).
+  const [searchParams] = useSearchParams();
   const [farmers, setFarmers] = useState([]);
   const [regions, setRegions] = useState([]);
   const [q, setQ] = useState("");
-  const [regionFilter, setRegionFilter] = useState("");
-  const [karneFilter, setKarneFilter] = useState("");
+  const [regionFilter, setRegionFilter] = useState(searchParams.get("region_id") || "");
+  const [karneFilter, setKarneFilter] = useState(searchParams.get("karne") || "");
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
 

@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Financial Ledger + Cari Hesap Modülü (IT-19 / FAZ 7 — UFYD)
+Toprax — Financial Ledger + Cari Hesap Modülü (IT-19 / FAZ 7 — UFYD)
 =====================================================================
 UFYD omurgasının ikinci halkası (IT-18'in devamı):
 
@@ -98,7 +98,9 @@ async def create_ledger_entry(
     return doc
 
 
-def register_ledger_routes(api_router, db, current_user, require_permission, log_audit):
+def register_ledger_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "ufyd" flag'i kapatılınca liste GERÇEKTEN 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     @api_router.get("/ledger")
     async def list_ledger_entries(
@@ -106,6 +108,7 @@ def register_ledger_routes(api_router, db, current_user, require_permission, log
         farmer_id: Optional[str] = None,
         entry_type: Optional[str] = None,
         user=Depends(require_permission("ledger:view")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         filt = {}
         if production_cycle_id:

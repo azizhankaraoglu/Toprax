@@ -1,6 +1,6 @@
-# TabSIS — On-Premise Kurulum Kılavuzu (IT Yöneticisi Seviyesi)
+# Toprax — On-Premise Kurulum Kılavuzu (IT Yöneticisi Seviyesi)
 
-> Bu kılavuz, TabSIS'i kendi sunucunuzda (on-premise) sıfırdan kurmak için
+> Bu kılavuz, Toprax'i kendi sunucunuzda (on-premise) sıfırdan kurmak için
 > yazılmıştır. Hedef okuyucu: kurumunuzun IT ekibi. Yazılımcı olmanıza
 > gerek yok, ama Linux/Windows sunucu yönetimi ve terminal kullanımına
 > aşina olmanız beklenir. Sorularınız için satıcı firmayla iletişime
@@ -10,7 +10,7 @@
 
 ## 1. Ne Kuruyorsunuz?
 
-TabSIS üç ana bileşenden oluşur, hepsi Docker container'ları olarak paketlenmiştir:
+Toprax üç ana bileşenden oluşur, hepsi Docker container'ları olarak paketlenmiştir:
 
 | Bileşen | Ne işe yarar | Varsayılan port |
 |---|---|---|
@@ -63,7 +63,7 @@ bash scripts/check-requirements.sh
   veya sağlanan .zip).
 - **B) İnternetsiz (air-gapped) sunucu:** internete açık ayrı bir makinede
   `bash scripts/build-offline-bundle.sh` çalıştırıp üretilen
-  `tabsis-offline-bundle-*.tar.gz` dosyasını USB/harici diskle taşıyın,
+  `toprax-offline-bundle-*.tar.gz` dosyasını USB/harici diskle taşıyın,
   hedef sunucuda açıp `bash scripts/install-from-bundle.sh` ile devam edin
   (bu script Bölüm 4-6'daki adımların hepsini otomatik yapar — sadece
   `.env` dosyasını düzenlemeniz istenecektir).
@@ -84,7 +84,7 @@ cp .env.example .env
 - `JWT_SECRET` — şu komutla üretebilirsiniz: `python3 -c "import secrets; print(secrets.token_hex(32))"`
 - `PLATFORM_ADMIN_EMAIL` / `PLATFORM_ADMIN_PASSWORD` — kurulum sihirbazında
   gireceğiniz platform yöneticisi hesabı.
-- `CORS_ORIGINS` — kurumunuzun gerçek domain'i (örn. `https://tabsis.kurumunuz.com.tr`).
+- `CORS_ORIGINS` — kurumunuzun gerçek domain'i (örn. `https://toprax.kurumunuz.com.tr`).
 
 Varsayılan/zayıf değerlerle `ENVIRONMENT=production` iken sistem **açılmayı
 reddeder** (fail-fast) — bu kasıtlı bir güvenlik önlemidir.
@@ -147,7 +147,7 @@ Ardından normal giriş sayfasına yönlendirilirsiniz.
 Domain'inizin DNS kaydı sunucunuzun IP'sine işaret ediyorsa:
 
 ```bash
-bash scripts/setup-tls.sh tabsis.kurumunuz.com.tr admin@kurumunuz.com.tr
+bash scripts/setup-tls.sh toprax.kurumunuz.com.tr admin@kurumunuz.com.tr
 ```
 
 Bu script Let's Encrypt sertifikasını otomatik alır ve **12 saatte bir**
@@ -192,7 +192,7 @@ veya `docker-compose.yml`'de port eşlemesini değiştirin.
 **S: Air-gapped (internetsiz) sunucuda "image not found" hatası alıyorum.**
 C: `docker load` adımının başarıyla tamamlandığından emin olun
 (`scripts/install-from-bundle.sh` çıktısını kontrol edin) — imaj adları
-tam olarak `tabsis-backend:latest` / `tabsis-frontend:latest` /
+tam olarak `toprax-backend:latest` / `toprax-frontend:latest` /
 `mongo:7` olmalı.
 
 **S: Sürüm yükseltmesi (`./upgrade.sh`) migration hatası veriyor.**

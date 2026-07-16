@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Universal Query & Filter Engine, çekirdek (IT-08)
+Toprax — Universal Query & Filter Engine, çekirdek (IT-08)
 =====================================================================
 Modül bazlı liste ekranlarının (Çiftçi/Parsel/Sözleşme/Ekim Planlama/
 Toprak/Üretim Sezonu) tek bir generic sorgu ucuna indirgenmesini
@@ -56,6 +56,9 @@ MODULE_COLLECTIONS = {
     # IT-29 — LMS Segment atamasının "users" hedefini (personel/rol bazlı
     # eğitim ataması) Query Engine üzerinden yapabilmesi için.
     "users": "users",
+    # IT-47 — AI Bilgi Kütüphanesi araması KENDİ motorunu yazmaz; Query
+    # Engine'in genişletilmiş MODULE_COLLECTIONS'ına girer.
+    "ai_knowledge_records": "ai_knowledge_records",
 }
 
 MODULE_PERMISSIONS = {
@@ -71,7 +74,9 @@ MODULE_PERMISSIONS = {
     "field_tasks": "field_ops:view",
     "visits": "field_ops:view",
     "users": "settings:users_view",
+    "ai_knowledge_records": "ai_knowledge:view",
 }
+# (FAZ 18 IT-47 kaydı — ai_knowledge_records Query Engine'e bağlandı)
 
 # field_definitions'a sahip modüller — sadece bunlar için filterable
 # field_definitions satırları + Field-Level Security maskesi sorgulanır.
@@ -193,6 +198,18 @@ CORE_FILTERABLE_FIELDS = {
         {"key": "task_type_id", "label": "Görev Tipi", "type": "text"},
         {"key": "started_at", "label": "Başlangıç", "type": "date"},
         {"key": "ended_at", "label": "Bitiş", "type": "date"},
+    ],
+    # IT-47 — AI Bilgi Kütüphanesi (Knowledge Search) filtre şeması.
+    "ai_knowledge_records": [
+        {"key": "dataset_id", "label": "Dataset", "type": "text"},
+        {"key": "object_type", "label": "Nesne Tipi", "type": "text"},
+        {"key": "approval_status", "label": "Onay Durumu", "type": "text"},
+        {"key": "source_type", "label": "Kaynak", "type": "text"},
+        {"key": "parcel_id", "label": "Parsel", "type": "text"},
+        {"key": "production_cycle_id", "label": "Üretim Sezonu", "type": "text"},
+        {"key": "farmer_id", "label": "Çiftçi", "type": "text"},
+        {"key": "quality_score", "label": "Kalite Skoru", "type": "number"},
+        {"key": "version", "label": "Versiyon", "type": "number"},
     ],
 }
 

@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Saved Queries / Portföy (Favorilerim) (IT-09)
+Toprax — Saved Queries / Portföy (Favorilerim) (IT-09)
 =====================================================================
 query_engine.py'nin (IT-08) filter DSL'ini (filters/logic/sort/fields)
 adlandırılmış kayıtlar olarak saklar. Üç kullanım:

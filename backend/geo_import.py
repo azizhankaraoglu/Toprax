@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Geo Dosya İçe Aktarma (IT-13.5)
+Toprax — Geo Dosya İçe Aktarma (IT-13.5)
 =====================================================================
 SHP (pyshp) + GeoJSON + KML + DXF (ezdxf) dosyalarını ayrıştırıp WGS84
 (EPSG:4326) GeoJSON geometrisine çevirir. NCZ (NetCAD) dosyaları

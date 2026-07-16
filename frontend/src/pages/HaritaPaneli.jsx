@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "@/api";
-import { MapContainer, TileLayer, Polygon, Popup, CircleMarker, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Polygon, Polyline, Popup, CircleMarker, useMapEvents } from "react-leaflet";
 import * as turf from "@turf/turf";
 import FilterPanel from "@/components/FilterPanel";
 import WidgetCard from "@/components/WidgetCard";
@@ -11,7 +11,7 @@ import { moduleDetailPath } from "@/lib/moduleRoutes";
 import { directionsUrl } from "@/lib/directions";
 import {
   SlidersHorizontal, Save, RotateCcw, X, Check, Layers, Globe, PenTool, Wrench, ListChecks,
-  Camera, Link2, Navigation, Trash2, Plus, History, Play, Pause, Sparkles,
+  Camera, Link2, Navigation, Trash2, Plus, History, Play, Pause, Sparkles, Copy,
 } from "lucide-react";
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
@@ -28,6 +28,12 @@ const BASEMAPS = {
   light: { label: "Açık", url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap &copy; CARTO" },
   streets: { label: "Sokak", url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap katkıcıları" },
   satellite: { label: "Uydu", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attribution: "Tiles &copy; Esri" },
+  // KONU 2.3 — IT-15'in istediği 6 basemap'e tamamlandı. Hepsi anahtarsız/ücretsiz.
+  // Hibrit = uydu ortofoto + yer adı/sınır etiket overlay'i (ikinci TileLayer).
+  hibrit: { label: "Hibrit", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            overlay: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+            attribution: "Tiles &copy; Esri" },
+  topografik: { label: "Topografik", url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenTopoMap (CC-BY-SA)" },
 };
 const DEFAULT_BASEMAP = "dark";
 
@@ -118,6 +124,86 @@ function MapSync({ onChange }) {
   return null;
 }
 
+// KONU 2.4 — Canlı koordinat gösterimi (imleç WGS84). MapSync ile AYNI ref
+// kalıbı (mousemove yüksek frekanslı olduğundan handler sabit tutulmalı, aksi
+// halde her render'da off/on ile yeniden bağlanır — dosya başındaki uyarı).
+function CoordinateReadout() {
+  const [pos, setPos] = useState(null);
+  const handlersRef = useRef();
+  if (!handlersRef.current) {
+    handlersRef.current = {
+      mousemove(e) { setPos(e.latlng); },
+      mouseout() { setPos(null); },
+    };
+  }
+  useMapEvents(handlersRef.current);
+  if (!pos) return null;
+  return (
+    <div className="leaflet-bottom leaflet-left" style={{ pointerEvents: "none" }}>
+      <div className="leaflet-control m-2 px-2 py-1 rounded bg-[var(--surface)]/90 border border-[var(--border)] text-[10px] font-mono">
+        {pos.lat.toFixed(5)}, {pos.lng.toFixed(5)} · WGS84
+      </div>
+    </div>
+  );
+}
+
+// KONU 2.4 — Ölçüm aracı: haritaya tıklanan noktalarla mesafe (turf.length) +
+// 3+ noktada alan (turf.area). Canlı gösterim (sonuç panelde).
+function MeasureLayer({ active, onResult }) {
+  const [pts, setPts] = useState([]);
+  const activeRef = useRef(active); activeRef.current = active;
+  const handlersRef = useRef();
+  if (!handlersRef.current) {
+    handlersRef.current = {
+      click(e) { if (activeRef.current) setPts((p) => [...p, [e.latlng.lat, e.latlng.lng]]); },
+    };
+  }
+  useMapEvents(handlersRef.current);
+  useEffect(() => { if (!active) setPts([]); }, [active]);
+  useEffect(() => {
+    if (pts.length < 2) { onResult(null); return; }
+    const line = turf.lineString(pts.map(([la, ln]) => [ln, la]));
+    const distM = turf.length(line, { units: "kilometers" }) * 1000;
+    let areaM2 = null;
+    if (pts.length >= 3) {
+      const ring = [...pts.map(([la, ln]) => [ln, la]), [pts[0][1], pts[0][0]]];
+      try { areaM2 = turf.area(turf.polygon([ring])); } catch { areaM2 = null; }
+    }
+    onResult({ distM, areaM2, count: pts.length });
+  }, [pts, onResult]);
+  if (!active || pts.length === 0) return null;
+  return (
+    <>
+      {pts.map((pt, i) => <CircleMarker key={i} center={pt} radius={4} pathOptions={{ color: "#22d3ee", fillOpacity: 0.9 }} />)}
+      {pts.length >= 2 && <Polyline positions={pts.length >= 3 ? [...pts, pts[0]] : pts} pathOptions={{ color: "#22d3ee", dashArray: "4" }} />}
+    </>
+  );
+}
+
+// KONU 2.4 — Dışa aktarma: seçili parselleri GeoJSON / KML olarak indir.
+function geojsonToKml(fc) {
+  const esc = (s) => String(s == null ? "" : s).replace(/[<&>]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+  const placemarks = (fc.features || []).map((f) => {
+    const g = f.geometry || {};
+    const rings = g.type === "MultiPolygon" ? g.coordinates.flat() : (g.type === "Polygon" ? g.coordinates : []);
+    const polys = rings.map((ring) => {
+      const coordStr = ring.map(([ln, la]) => `${ln},${la},0`).join(" ");
+      return `<Polygon><outerBoundaryIs><LinearRing><coordinates>${coordStr}</coordinates></LinearRing></outerBoundaryIs></Polygon>`;
+    }).join("");
+    const p = f.properties || {};
+    return `<Placemark><name>${esc(p.parcel_code || p.name || p.id)}</name>${polys}</Placemark>`;
+  }).join("");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document>${placemarks}</Document></kml>`;
+}
+
+function downloadBlob(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function HaritaPaneli() {
   const nav = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -143,6 +229,25 @@ export default function HaritaPaneli() {
   // IT-15 — basemap değiştirici + katman yönetimi
   const [basemapKey, setBasemapKey] = useState(DEFAULT_BASEMAP);
   const [basemapOpen, setBasemapOpen] = useState(false);
+  // KONU 2.4 — ölçüm aracı + dışa aktarma menüsü durumu
+  const [measureActive, setMeasureActive] = useState(false);
+  const [measureResult, setMeasureResult] = useState(null);
+  const [exportOpen, setExportOpen] = useState(false);
+
+  // KONU 2.4 — seçili parselleri GeoJSON/KML olarak indir (istemci tarafında,
+  // ek bağımlılık yok; Shapefile ikili format olduğu için kapsam dışı).
+  const exportSelected = (format) => {
+    const feats = selectedParcels.filter((p) => p.geometry).map((p) => ({
+      type: "Feature",
+      properties: { id: p.id, parcel_code: p.parcel_code, name: p.name, area_dekar: p.area_dekar },
+      geometry: p.geometry,
+    }));
+    if (!feats.length) return;
+    const fc = { type: "FeatureCollection", features: feats };
+    if (format === "kml") downloadBlob(geojsonToKml(fc), "parseller.kml", "application/vnd.google-earth.kml+xml");
+    else downloadBlob(JSON.stringify(fc, null, 2), "parseller.geojson", "application/geo+json");
+    setExportOpen(false);
+  };
   const [visibleLayers, setVisibleLayers] = useState(DEFAULT_LAYERS);
   const [layersOpen, setLayersOpen] = useState(false);
   const [adminAreas, setAdminAreas] = useState([]);
@@ -169,7 +274,11 @@ export default function HaritaPaneli() {
   const [snapshotsLoaded, setSnapshotsLoaded] = useState(false);
   const [snapshotPanelOpen, setSnapshotPanelOpen] = useState(false);
   const [snapshotName, setSnapshotName] = useState("");
-  const [snapshotShared, setSnapshotShared] = useState(false);
+  // KONU 2.2 — paylaşım kapsamı: private | org_unit | tenant (eski is_shared
+  // checkbox'ının yerine geçer, "tenant" onun karşılığıdır).
+  const [snapshotScope, setSnapshotScope] = useState("private");
+  const [snapshotUnitId, setSnapshotUnitId] = useState("");
+  const [orgUnits, setOrgUnits] = useState([]);
   const [savingSnapshot, setSavingSnapshot] = useState(false);
   const [snapshotMsg, setSnapshotMsg] = useState("");
 
@@ -552,6 +661,10 @@ export default function HaritaPaneli() {
     const { data } = await api.get("/map-snapshots");
     setSnapshots(data);
     setSnapshotsLoaded(true);
+    // KONU 2.2 — organizasyon birimlerini paylaşım seçici için yükle (bir kez).
+    if (orgUnits.length === 0) {
+      api.get("/organization-units").then((r) => setOrgUnits(r.data)).catch(() => {});
+    }
   }
 
   async function saveSnapshot() {
@@ -570,10 +683,12 @@ export default function HaritaPaneli() {
         basemap_key: basemapKey,
         visible_layers: visibleLayers,
         selected_parcel_ids: [...selectedIds],
-        is_shared: snapshotShared,
+        share_scope: snapshotScope,
+        shared_unit_id: snapshotScope === "org_unit" ? snapshotUnitId : null,
       });
       setSnapshotName("");
-      setSnapshotShared(false);
+      setSnapshotScope("private");
+      setSnapshotUnitId("");
       setSnapshotMsg("Snapshot kaydedildi.");
       await loadSnapshots();
     } catch (err) {
@@ -601,6 +716,18 @@ export default function HaritaPaneli() {
     navigator.clipboard?.writeText(url.toString());
     setSnapshotMsg("Bağlantı kopyalandı.");
     setTimeout(() => setSnapshotMsg(""), 3000);
+  }
+
+  // KONU 2.2 — paylaşılan (salt-okunur) bir görünümü kendi workspace'ime klonla.
+  async function copySnapshotToMine(id) {
+    try {
+      await api.post(`/map-snapshots/${id}/copy`);
+      setSnapshotMsg("Görünüm kendinize kopyalandı.");
+      await loadSnapshots();
+    } catch (err) {
+      setSnapshotMsg(err.response?.data?.detail || "Kopyalanamadı.");
+    }
+    setTimeout(() => setSnapshotMsg(""), 4000);
   }
 
   async function deleteSnapshot(id) {
@@ -768,10 +895,22 @@ export default function HaritaPaneli() {
                     <Save size={13} /> {savingSnapshot ? "…" : "Kaydet"}
                   </button>
                 </div>
-                <label className="flex items-center gap-2 text-xs mt-2 cursor-pointer">
-                  <input type="checkbox" checked={snapshotShared} onChange={(e) => setSnapshotShared(e.target.checked)} />
-                  Tenant içinde paylaş
-                </label>
+                {/* KONU 2.2 — paylaşım kapsamı: kendime / organizasyon birimi / tenant */}
+                <div className="flex items-center gap-2 mt-2">
+                  <select className="input text-xs flex-1" value={snapshotScope}
+                          onChange={(e) => setSnapshotScope(e.target.value)} data-testid="snapshot-scope">
+                    <option value="private">Sadece kendim</option>
+                    <option value="org_unit">Bir organizasyon birimi</option>
+                    <option value="tenant">Tüm tenant (şirket geneli)</option>
+                  </select>
+                  {snapshotScope === "org_unit" && (
+                    <select className="input text-xs flex-1" value={snapshotUnitId}
+                            onChange={(e) => setSnapshotUnitId(e.target.value)} data-testid="snapshot-unit">
+                      <option value="">Birim seç…</option>
+                      {orgUnits.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
+                  )}
+                </div>
               </div>
 
               <div className="border-t border-[var(--border)] pt-2">
@@ -781,12 +920,19 @@ export default function HaritaPaneli() {
                   {snapshots.map((s) => (
                     <div key={s.id} className="flex items-center justify-between gap-2 text-xs p-1.5 rounded hover:bg-[var(--surface-2)]">
                       <div className="min-w-0">
-                        <div className="truncate">{s.name}{s.is_shared && <span className="text-[var(--primary)]"> · paylaşılan</span>}</div>
+                        <div className="truncate">{s.name}
+                          {s.share_scope === "org_unit" && <span className="text-[var(--primary)]"> · birim</span>}
+                          {(s.share_scope === "tenant" || (s.is_shared && !s.share_scope)) && <span className="text-[var(--primary)]"> · tenant</span>}
+                          {!s.is_owner && <span className="text-[var(--text-dim)]"> · salt-okunur</span>}
+                        </div>
                         <div className="text-[10px] text-[var(--text-dim)] truncate">{s.created_by}</div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button onClick={() => openSnapshot(s)} className="btn btn-ghost text-[10px] px-2 py-1" data-testid={`snapshot-open-${s.id}`}>Aç</button>
                         <button onClick={() => copySnapshotLink(s.id)} className="btn btn-ghost text-[10px] px-2 py-1" title="Bağlantıyı kopyala"><Link2 size={11} /></button>
+                        {!s.is_owner && (
+                          <button onClick={() => copySnapshotToMine(s.id)} className="btn btn-ghost text-[10px] px-2 py-1" title="Kendime kopyala" data-testid={`snapshot-clone-${s.id}`}><Copy size={11} /></button>
+                        )}
                         {s.is_owner && (
                           <button onClick={() => deleteSnapshot(s.id)} className="btn btn-ghost text-[10px] px-2 py-1 text-red-400" title="Sil"><Trash2 size={11} /></button>
                         )}
@@ -989,7 +1135,13 @@ export default function HaritaPaneli() {
             attribution={BASEMAPS[basemapKey].attribution}
             url={BASEMAPS[basemapKey].url}
           />
+          {/* KONU 2.3 — Hibrit basemap: uydu üzerine yer adı/sınır etiket overlay'i */}
+          {BASEMAPS[basemapKey].overlay && (
+            <TileLayer url={BASEMAPS[basemapKey].overlay} />
+          )}
           <MapSync onChange={onMapChange} />
+          <CoordinateReadout />
+          <MeasureLayer active={measureActive} onResult={setMeasureResult} />
 
           {/* İdari Sınırlar katmanı — IT-13.6/Parcels.jsx ile aynı desen */}
           {visibleLayers.includes("admin_areas") && adminAreas.map((a) => {

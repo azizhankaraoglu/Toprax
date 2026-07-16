@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — AI Provider Soyutlaması (IT-32 / FAZ 11 — Integration Hub)
+Toprax — AI Provider Soyutlaması (IT-32 / FAZ 11 — Integration Hub)
 =====================================================================
 `satellite_provider.py`/`channel_providers.py` ile AYNI ABC + factory
 kalıbı. ÖNCESİNDE (IT-10/extras.py) OpenAI/Gemini/Anthropic'e yapılan

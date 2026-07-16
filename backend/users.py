@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Kullanıcı (Personel) Yönetimi (Sprint 4d)
+Toprax — Kullanıcı (Personel) Yönetimi (Sprint 4d)
 =====================================================================
 Rolleri/izinleri KİŞİLERE atayabilmek için gereken CRUD. Öncesinde
 sistemde hiç kullanıcı listeleme/oluşturma endpoint'i yoktu — sadece
@@ -42,7 +42,7 @@ def register_user_routes(api_router, db, current_user, require_permission, hash_
 
     @api_router.get("/users")
     async def list_users(user=Depends(require_permission("settings:users_view"))):
-        docs = await db.users.find({}, {"_id": 0, "password": 0}).to_list(500)
+        docs = await db.users.find({}, {"_id": 0, "password": 0, "totp_secret": 0}).to_list(500)
         return docs
 
     @api_router.get("/users/roles")
@@ -59,6 +59,10 @@ def register_user_routes(api_router, db, current_user, require_permission, hash_
         existing = await db.users.find_one({"email": body.email.lower()})
         if existing:
             raise HTTPException(409, "Bu e-posta zaten kayıtlı")
+
+        from platform_core import check_and_consume_limit
+        active_count = await db.users.count_documents({"active": {"$ne": False}})
+        await check_and_consume_limit(db, user.get("tenant_id"), "user_limit", active_count, "Kullanıcı")
 
         doc = {
             "id": str(uuid.uuid4()),
@@ -80,7 +84,7 @@ def register_user_routes(api_router, db, current_user, require_permission, hash_
     @api_router.put("/users/{user_id}/role")
     async def update_user_role(user_id: str, body: UserRoleUpdate, request: Request,
                                 user=Depends(require_permission("settings:users_manage"))):
-        old = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+        old = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0, "totp_secret": 0})
         if not old:
             raise HTTPException(404, "Kullanıcı bulunamadı")
         if body.role and body.role not in ROLE_HIERARCHY:
@@ -98,7 +102,7 @@ def register_user_routes(api_router, db, current_user, require_permission, hash_
         updates["permission_overrides"] = {"grant": body.grant, "revoke": body.revoke}
 
         await db.users.update_one({"id": user_id}, {"$set": updates})
-        new = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+        new = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0, "totp_secret": 0})
         await log_audit(db, user, action="update_role", entity="user", entity_id=user_id,
                          old_value=old, new_value=new, request=request)
         # IT-33 — get_effective_permissions 30sn cache'liyor (bkz. permissions.py);
@@ -110,7 +114,7 @@ def register_user_routes(api_router, db, current_user, require_permission, hash_
     @api_router.put("/users/{user_id}/status")
     async def update_user_status(user_id: str, body: UserStatusUpdate, request: Request,
                                   user=Depends(require_permission("settings:users_manage"))):
-        old = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+        old = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0, "totp_secret": 0})
         if not old:
             raise HTTPException(404, "Kullanıcı bulunamadı")
         if user_id == user.get("id") and not body.active:

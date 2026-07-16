@@ -1,4 +1,4 @@
-# TabSIS Kullanım Kılavuzu — Uzman
+# Toprax Kullanım Kılavuzu — Uzman
 
 > Hedef Kitle: Ziraat Mühendisleri ve Teknik Uzmanlar
 

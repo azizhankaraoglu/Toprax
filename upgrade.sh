@@ -29,7 +29,7 @@ if ! docker compose version >/dev/null 2>&1; then
   COMPOSE="docker-compose"
 fi
 
-echo "=== TABSIS Surum Yukseltme ==="
+echo "=== TOPRAX Surum Yukseltme ==="
 
 echo "[1/5] Mevcut imaj ID'leri kaydediliyor (rollback icin)..."
 PREV_BACKEND_IMAGE=$($COMPOSE images -q backend 2>/dev/null)
@@ -60,10 +60,10 @@ fi
 if [ -n "${ROLLBACK:-}" ]; then
   echo "=== OTOMATIK ROLLBACK ==="
   if [ -n "${PREV_BACKEND_IMAGE:-}" ] && [ -n "${PREV_FRONTEND_IMAGE:-}" ]; then
-    docker tag "$PREV_BACKEND_IMAGE" tabsis-backend:rollback 2>/dev/null || true
-    docker tag "$PREV_FRONTEND_IMAGE" tabsis-frontend:rollback 2>/dev/null || true
+    docker tag "$PREV_BACKEND_IMAGE" toprax-backend:rollback 2>/dev/null || true
+    docker tag "$PREV_FRONTEND_IMAGE" toprax-frontend:rollback 2>/dev/null || true
     $COMPOSE stop backend frontend
-    docker run -d --rm --name tabsis-backend-rollback-tmp "$PREV_BACKEND_IMAGE" >/dev/null 2>&1 || true
+    docker run -d --rm --name toprax-backend-rollback-tmp "$PREV_BACKEND_IMAGE" >/dev/null 2>&1 || true
     echo "Onceki imajlar geri yuklendi: backend=$PREV_BACKEND_IMAGE frontend=$PREV_FRONTEND_IMAGE"
     echo "UYARI: otomatik container rollback'i tamamlamak icin 'docker-compose up -d' ile eski imaj ID'lerini"
     echo "referans alan bir 'docker-compose.override.yml' olusturmaniz veya kaydedilen ID'lerle"

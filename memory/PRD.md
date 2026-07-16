@@ -579,5 +579,5 @@ Kooperatiflerin sözleşmeli üreticilerini, parsellerini, ekim-hasat döngüler
 ---
 
 **Doküman sahibi:** [Müşteri adı]  
-**Hazırlayan:** TabSIS Ekibi + [Senin adın]  
+**Hazırlayan:** Toprax Ekibi + [Senin adın]  
 **Sürüm geçmişi:** v1.0 — İlk taslak (Ocak 2026)

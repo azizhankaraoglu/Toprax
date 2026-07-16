@@ -1,4 +1,4 @@
-# ROADMAP-DETAY-FAZ7-12.md — TABSİS Detaylı Teknik Spesifikasyon (IT-18 → IT-35)
+# ROADMAP-DETAY-FAZ7-12.md — TOPRAX Detaylı Teknik Spesifikasyon (IT-18 → IT-35)
 
 > Bu dosya **ROADMAP.md'nin yerine geçmez, onu tamamlar.** ROADMAP.md faz/iterasyon
 > sırasını ve bağımlılıkları tanımlar; bu dosya ise IT-18'den IT-35'e kadar her
@@ -202,7 +202,7 @@ Tetikleyici örnekleri: Toprak Analizi tamamlandı, Gübreleme zamanı geldi, Ha
 
 ## FAZ 9 — Sprint 9: Communication Hub (İletişim ve Bildirim Merkezi)
 
-**Stratejik mimari not (docx'ün vurgusu):** Comm Hub sadece mesaj gönderen bir servis değil; TABSİS içindeki tüm iş olaylarını (Event) dinleyip doğru kişiye doğru zamanda doğru kanaldan ileten merkezi bir hub olmalı. Yeni modüller iletişim kodu yazmaz, sadece event yayınlar.
+**Stratejik mimari not (docx'ün vurgusu):** Comm Hub sadece mesaj gönderen bir servis değil; TOPRAX içindeki tüm iş olaylarını (Event) dinleyip doğru kişiye doğru zamanda doğru kanaldan ileten merkezi bir hub olmalı. Yeni modüller iletişim kodu yazmaz, sadece event yayınlar.
 
 ### IT-25 — Kanal Provider Pattern + Şablon Yönetimi + Kişi Kartı İletişim Sekmesi
 
@@ -337,7 +337,7 @@ Her eğitim içinde "Uzman Desteği" seçeneği — kullanıcı eğitimden ayrı
 
 ### IT-32 — Integration Hub Formalizasyonu + Webhook Engine
 
-**Integration Hub:** TABSİS dışarıya doğrudan bağlanmaz; Google Maps, AI servisleri (OpenAI/Anthropic/Gemini), SMS/WhatsApp/E-posta, GeoServer, NASA/Sentinel/Planet, MERNİS/TAKBİS dahil tüm 3. parti çağrılar **tek bir Integration Hub modülünden** geçer. Extras altındaki dağınık simüle servisler (S4 uydu, S9 kanal provider'ları vb.) bu ortak provider pattern'e taşınır (refactor değil, konsolidasyon — mevcut arayüzler korunur).
+**Integration Hub:** TOPRAX dışarıya doğrudan bağlanmaz; Google Maps, AI servisleri (OpenAI/Anthropic/Gemini), SMS/WhatsApp/E-posta, GeoServer, NASA/Sentinel/Planet, MERNİS/TAKBİS dahil tüm 3. parti çağrılar **tek bir Integration Hub modülünden** geçer. Extras altındaki dağınık simüle servisler (S4 uydu, S9 kanal provider'ları vb.) bu ortak provider pattern'e taşınır (refactor değil, konsolidasyon — mevcut arayüzler korunur).
 
 **Webhook Engine:** her önemli iş olayı (FarmerCreated, HarvestCompleted, PaymentCompleted, ContractApproved, TaskCompleted vb.) dış sistemlere webhook olarak gönderilebilir. Webhook kuralları (hangi event → hangi URL, hangi header/auth) admin tarafından yönetilebilir olmalı, event bus'ın (IT-27) bir subscriber'ı olarak çalışır.
 

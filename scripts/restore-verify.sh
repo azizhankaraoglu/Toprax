@@ -16,7 +16,7 @@ if [ -z "$ARCHIVE" ] || [ ! -f "$ARCHIVE" ]; then
   exit 1
 fi
 
-TEST_CONTAINER="tabsis-restore-verify-test"
+TEST_CONTAINER="toprax-restore-verify-test"
 
 cleanup() {
   docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1 || true

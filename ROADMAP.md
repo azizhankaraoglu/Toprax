@@ -1,4 +1,4 @@
-# ROADMAP.md — TABSİS Uzun Vadeli Geliştirme Planı
+# ROADMAP.md — TOPRAX Uzun Vadeli Geliştirme Planı
 
 > Kaynak: `geliştirmeler.pdf` (109 sayfa, Global Kural + Sprint A1, A2, 3–12)
 > Bu plan iş atama sözleşmemizdir: kullanıcı bir **IT-XX** kodu verir,

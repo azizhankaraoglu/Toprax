@@ -5,7 +5,7 @@
 #           (varsayilan: ./backups/)
 #
 # Cron ornegi (her gece 03:00'te, son 14 yedegi tutar):
-#   0 3 * * * cd /path/to/tabsis && bash scripts/backup.sh >> /var/log/tabsis-backup.log 2>&1
+#   0 3 * * * cd /path/to/toprax && bash scripts/backup.sh >> /var/log/toprax-backup.log 2>&1
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -20,9 +20,9 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 mkdir -p "$BACKUP_DIR"
-DUMP_PATH="$BACKUP_DIR/tabsis-$TIMESTAMP"
+DUMP_PATH="$BACKUP_DIR/toprax-$TIMESTAMP"
 
-echo "=== TABSIS Yedekleme: $TIMESTAMP ==="
+echo "=== TOPRAX Yedekleme: $TIMESTAMP ==="
 
 # .env'den kimlik bilgilerini oku (docker-compose ile ayni kaynak)
 if [ -f .env ]; then
@@ -31,17 +31,17 @@ if [ -f .env ]; then
 fi
 
 echo "[1/3] mongodump calistiriliyor (container icinde)..."
-docker exec tabsis-mongo mongodump \
+docker exec toprax-mongo mongodump \
   --username "${MONGO_ROOT_USERNAME:?}" --password "${MONGO_ROOT_PASSWORD:?}" \
   --authenticationDatabase admin \
-  --archive="/tmp/tabsis-backup-$TIMESTAMP.archive" --gzip
+  --archive="/tmp/toprax-backup-$TIMESTAMP.archive" --gzip
 
 echo "[2/3] Yedek container'dan host'a kopyalaniyor..."
-docker cp "tabsis-mongo:/tmp/tabsis-backup-$TIMESTAMP.archive" "$DUMP_PATH.archive.gz"
-docker exec tabsis-mongo rm -f "/tmp/tabsis-backup-$TIMESTAMP.archive"
+docker cp "toprax-mongo:/tmp/toprax-backup-$TIMESTAMP.archive" "$DUMP_PATH.archive.gz"
+docker exec toprax-mongo rm -f "/tmp/toprax-backup-$TIMESTAMP.archive"
 
 echo "[3/3] ${RETENTION_DAYS} günden eski yedekler temizleniyor..."
-find "$BACKUP_DIR" -name "tabsis-*.archive.gz" -mtime +$RETENTION_DAYS -delete
+find "$BACKUP_DIR" -name "toprax-*.archive.gz" -mtime +$RETENTION_DAYS -delete
 
 BACKUP_SIZE=$(du -h "$DUMP_PATH.archive.gz" | cut -f1)
 echo "=== Tamamlandı: $DUMP_PATH.archive.gz ($BACKUP_SIZE) ==="

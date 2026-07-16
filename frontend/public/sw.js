@@ -1,5 +1,5 @@
 /**
- * TabSIS PWA — Service Worker (IT-35 / FAZ 12)
+ * Toprax PWA — Service Worker (IT-35 / FAZ 12)
  *
  * BİLİNÇLİ OLARAK basit: sadece app-shell'i (statik build çıktısı)
  * cache'ler, offline'ken navigasyonun boş bir tarayıcı hatası yerine
@@ -9,7 +9,7 @@
  * BİLİNÇLİ OLARAK kullanılmadı (tarayıcı desteği tutarsız + HTTPS
  * gerektirir, bkz. offlineQueue.js docstring'i).
  */
-const CACHE_NAME = "tabsis-shell-v1";
+const CACHE_NAME = "toprax-shell-v1";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

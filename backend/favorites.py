@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Favoriler (IT-12)
+Toprax — Favoriler (IT-12)
 =====================================================================
 Herhangi bir modüldeki (farmers/parcels/contracts/plantings/soil/
 production_cycles) tek bir KAYDI favorileme. Saved Queries'in (IT-09)

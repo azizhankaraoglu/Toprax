@@ -1,4 +1,4 @@
-# ROADMAP.md — TABSİS Uzun Vadeli Geliştirme Planı
+# ROADMAP.md — TOPRAX Uzun Vadeli Geliştirme Planı
 
 > Kaynak: `geliştirmeler.pdf` (109 sayfa, Global Kural + Sprint A1, A2, 3–12)
 > Bu plan iş atama sözleşmemizdir: kullanıcı bir **IT-XX** kodu verir,
@@ -16,7 +16,7 @@
 | S9 kanalları (SMS/WhatsApp/IVR) | **Provider pattern + simülasyon** — gerçek gateway hesabı bağlandığında sadece provider dosyası yazılır, mimari hazır olur |
 | Redis/RabbitMQ/Elasticsearch/GeoServer | **Soyutlama arkasında Mongo/in-process karşılık** — arayüz korunur, ileride gerçek servis takılabilir |
 | MERNİS/TAKBİS/e-Devlet | ⏸ **Ertelendi** — resmi erişim gerektirir; Integration Hub'da yuva (slot) bırakılır |
-| S12 Flutter mobil | ⚠️ **Bu ortamda Flutter derlenemez.** İki seçenek: (a) **PWA** (önerilen — mevcut React'ten görev odaklı mobil deneyim, offline destekli, tek oturumda ilerletilebilir), (b) Flutter proje iskeleti üretilir ama test edilemez. Karar IT-38'de kullanıcıya sorulacak |
+| S12 Flutter mobil | ⚠️ **Bu ortamda Flutter derlenemez.** İki seçenek: (a) **PWA** (önerilen — mevcut React'ten görev odaklı mobil deneyim, offline destekli, tek oturumda ilerletilebilir), (b) Flutter proje iskeleti üretilir ama test edilemez. Karar IT-35'te kullanıcıya soruldu, **PWA seçildi** |
 
 ## B. Uyarlama Kararları (doküman → mevcut stack)
 
@@ -76,7 +76,6 @@ her şeyden önce, çünkü tüm sonraki modüller onu kullanır.
 | **IT-12** ✅ | Drawer (yan panel) altyapısı + breadcrumb + Son Açılanlar + Favoriler + bildirim çekmecesi | IT-11 |
 | **IT-13** ✅ | Workspace dönüşümü: Çiftçi ve Parsel kartları context-aware CRUD'a geçer (kart içinden yeni sözleşme/sezon/görev — bağlam otomatik dolar), Quick Actions | IT-12 |
 
-
 ### FAZ 5.5 — GIS Veri Altyapısı
 | ID | Kapsam | Bağımlılık |
 |---|---|---|
@@ -114,11 +113,10 @@ her şeyden önce, çünkü tüm sonraki modüller onu kullanır.
 | **IT-27** | **Event bus v1** (`platform/events.py`) + olay bazlı iletişim kuralları (Communication Policy) + tercih merkezi + kara liste (KVKK) | IT-26 |
 | **IT-28** | **Inbound Case yönetimi** (Konu/Case: talep+şikayet+ihbar tek modelde) + iki yönlü mesajlaşma + atama/devir + kategoriler + Saha Operasyonlarına otomatik görev köprüsü | IT-27, IT-24 |
 
-
 ### FAZ 9.5 — Akıllı Tarım Motoru (AI + Uydu/Drone)
 | ID | Kapsam | Bağımlılık |
 |---|---|---|
-| **IT-28.1** | **Uydu Veri Boru Hattı + Provider Soyutlaması:** `SatelliteProvider` arayüzü (`get_imagery`, `get_index_series`, `request_tasking`); ilk sağlayıcılar: Sentinel-2 (Copernicus, ücretsiz, varsayılan) + Planet + yüksek çözünürlük tasking yuvası (Integration Center'a bağlı, anahtar girilince aktif); parsel geometrisine göre periyodik NDVI/NDMI hesaplama ve zaman serisi saklama (`parcel_index_series` koleksiyonu); görüntü metadata etiketi (kaynak/tarih/çözünürlük/bulut oranı); bulutlu kare eleme; `extras.py`'deki simüle NDVI bu gerçek boru hattına geçer, demo modu fallback kalır | IT-17, IT-32 (önerilir) |
+| **IT-28.1** 🔄 | **Uydu Veri Boru Hattı + Provider Soyutlaması:** `SatelliteProvider` arayüzü (`get_imagery`, `get_index_series`, `request_tasking`); ilk sağlayıcılar: Sentinel-2 (Copernicus, ücretsiz, varsayılan) + Planet + yüksek çözünürlük tasking yuvası (Integration Center'a bağlı, anahtar girilince aktif); parsel geometrisine göre periyodik NDVI/NDMI hesaplama ve zaman serisi saklama (`parcel_index_series` koleksiyonu); görüntü metadata etiketi (kaynak/tarih/çözünürlük/bulut oranı); bulutlu kare eleme; `extras.py`'deki simüle NDVI bu gerçek boru hattına geçer, demo modu fallback kalır | IT-17, IT-32 (önerilir) |
 | **IT-28.2** | **Parsel Analitiği:** Parsel Sağlık Skoru (haftalık, trendli); anomali alt-bölge tespiti (koordinatlı poligon + haritada kırmızı alert); ekili/boş tespiti + kooperatif "beyan-gerçek" listesi; fenoloji kütüphanesi (ürün bazlı NDVI eğri şablonları, admin yönetir) ile ürün doğrulama + ekim/çıkış tarihi tespiti; NDMI su stresi uyarısı; komşu kıyas (aynı köy + aynı ürün benchmark); hasat zamanı + verim tahmini (NDVI eğrisi + geçmiş kantar regresyonu, kota-gerçekleşme öngörüsü); parsel detayında zaman makinesi slider gerçek seriye bağlanır | IT-28.1 |
 | **IT-28.3** | **Vision AI + Bilgi Kütüphaneleri:** Yönetilebilir hastalık/zararlı kütüphanesi (belirti, foto örnekleri, öneri; admin günceller); foto teşhis akışı: drone ortofoto importu (parsele bağlama + anomali bölgesinde yüksek çözünürlük inceleme) ve çiftçi portalı/mobil foto-teşhis kanalı (AI ön teşhis + güven skoru, kritikse mühendise eskalasyon); görüntü destekli gübre önerisi (VRA): toprak analizi + NDVI/NDMI zon haritası birleşimi → parsel içi 2-3 uygulama zonu + zon bazlı doz önerisi + yazdırılabilir reçete; su stresi zonunda "önce sulama" kuralı. AI çağrıları Integration Hub AI provider'ı üzerinden | IT-28.2, IT-04 |
 | **IT-28.4** | **Alert→Aksiyon Zinciri + Sezon Karnesi:** Anomali/stres/hastalık tespitlerinde otomatik zincir: çiftçiye + sorumlu personele bildirim (Comm Hub) ve otomatik saha görevi (Sprint 8 kural motoru); alert yaşam döngüsü (yeni→incelemede→doğrulandı/yanlış alarm→kapandı, yanlış alarm geri bildirimi eşik ayarına döner); Sezon Karnesi (parsel bazlı otomatik PDF: sağlık eğrisi, olaylar, müdahaleler, verim vs. tahmin; kooperatife karşılaştırmalı tablo); AI Copilot'a parsel bağlamı (gerçek NDVI/alert verisiyle soru-cevap) | IT-28.3, IT-27, IT-24 |
@@ -126,7 +124,6 @@ her şeyden önce, çünkü tüm sonraki modüller onu kullanır.
 > Not: Uydu sağlayıcı hesap açılışları (Copernicus/Planet) kullanıcının
 > sorumluluğunda — anahtarlar Integration Center'dan girilecek, kod
 > anahtar yokken demo moduyla çalışacak.
-
 
 ### FAZ 10 — Sprint 10 (Farmer LMS)
 | ID | Kapsam | Bağımlılık |
@@ -148,7 +145,38 @@ her şeyden önce, çünkü tüm sonraki modüller onu kullanır.
 | **IT-35** | Karar + uygulama: **PWA yolu** (önerilen) → görev odaklı mobil dashboard, offline temel (service worker + kuyruk), kamera/GPS web API'leri; **veya** Flutter iskeleti (test edilemez, kullanıcı derler) | IT-34 |
 
 > Not: IT-35 sonrası kalan mobil özellikler (dijital imza, barkod, derin
-> offline senkron) ihtiyaca göre IT-36+ olarak açılır.
+> offline senkron) ihtiyaca göre IT-36+ olarak açılır — bkz. FAZ 13.
+
+### FAZ 13 — Mobil Rol Tabanlı Görev & Self-Servis Ekosistemi (2026-07-11 eklendi)
+| ID | Kapsam | Bağımlılık |
+|---|---|---|
+| **IT-36** ✅ | Saha personeli görev yaşam döngüsü tam mobil ekranı (kabul/red/yolda/ulaştı/çalışıyor/tamamlandı + checklist+medya, offline kuyruk) | IT-22/23, IT-35 |
+| **IT-37** ✅ | Ziraat mühendisi saha formları (M18) mobilden doldurma, görev bağlamından otomatik parsel/çiftçi | forms_module.py, IT-36 |
+| **IT-38** ✅ (4/7 akış) | Çiftçi mobil self-servis genişletmesi: sulama girişi, uydu görüntüsü, finansal özet, ziyaret onaylama YAPILDI — sözleşme onaylama/ekim planlama/randevu alma veri modeli kararı gerektirdiği için ERTELENDİ | IT-34, IT-35 |
+| **IT-39** ✅ | QR kod tabanlı teslim-tesellüm (support.py'nin eksik `qr_kod` onay yöntemini tamamlar — gerçek barkod yerine 6 haneli kod) | IT-18 |
+
+### FAZ 14 — UX Tutarlılık Kuralları + Menü/Rapor Konsolidasyonu (2026-07-11 eklendi)
+| ID | Kapsam | Bağımlılık |
+|---|---|---|
+| **IT-40** | Genel tasarım kuralları (convention #11-14: serbest metin yasağı, filtre satırı genişlik sınırı, overlay kontrol paneli, kalıp uyumu) + FilterPanel/Zaman Makinesi somut düzeltmesi | — |
+| **IT-41** | "Raporlar" menü konsolidasyonu (tüm SmartDataGrid/rapor ekranları tek sidebar grubunda, kendi filtreleri korunur) | IT-11 |
+
+### FAZ 15 — Organizasyon Hiyerarşisi + Onay Zincirleri (2026-07-11 eklendi)
+| ID | Kapsam | Bağımlılık |
+|---|---|---|
+| **IT-42** ✅ | Organizasyon birimi (OrgUnit) + yönetici ağacı (`manager_id`) veri modeli, manager-chain sorgusu, OrganizationChart.jsx — `organization.py` + `OrganizationChart.jsx` (2026-07-11) | IT-07 |
+| **IT-43** ✅ | Onay zincirleri/approval routing — mevcut durum makinelerine opsiyonel yönetici-onayı adımı (`approval.py` ortak yardımcı) — support.py + campaigns.py'ye entegre, `PendingApprovals.jsx` (2026-07-11) | IT-42 |
+
+### FAZ 16 — GodMode + Platform Operasyon Konsolu (2026-07-11 eklendi)
+| ID | Kapsam | Bağımlılık |
+|---|---|---|
+| **IT-44** | GodMode kimlik doğrulama — sabit e-posta + gerçek TOTP (RFC 6238), ayrı `godmode_token`, rate limiting | IT-01 |
+| **IT-45** | GodMode operasyon ekranı — sunucu sağlığı/kaynak izleme/restart, entegrasyon ekleme, tenant modül yönetimi, süper admin atama, tema/menü override, global audit/feature-flag, impersonation | IT-44, IT-33 |
+
+### FAZ 17 — Bize Ulaşın (2026-07-11 eklendi — IT-28'i gerçekleştirir)
+| ID | Kapsam | Bağımlılık |
+|---|---|---|
+| **IT-46** ✅ | IT-28'in Case modelini gerçekleştirir + web/mobil "Bize Ulaşın" yönlendirilmiş giriş noktası + otomatik platform_admin atamalı "Hata Bildirimi" kategorisi — `case_management.py` + `CaseManagement.jsx` (2026-07-11, platform_admin otomatik atama HENÜZ eklenmedi — bkz. bilinen borç) | IT-28 |
 
 ## D. Oturum Çalışma Sözleşmesi
 
@@ -181,7 +209,13 @@ her şeyden önce, çünkü tüm sonraki modüller onu kullanır.
 | FAZ 7 | IT-18 ✅ · IT-19 ✅ · IT-20 ✅ · IT-21 ✅ | ✅ |
 | FAZ 8 | IT-22 ✅ · IT-23 ✅ · IT-24 ✅ | ✅ |
 | FAZ 9 | IT-25 · IT-26 · IT-27 · IT-28 | ⬜ |
-| FAZ 9.5 | IT-28.1 · IT-28.2 · IT-28.3 · IT-28.4 | ⬜ |
+| FAZ 9.5 | IT-28.1 🔄 (provider katmanı — Sentinel Hub/NASA FIRMS/UP42 — 2026-07-11'de kuruldu; periyodik ingestion + `parcel_index_series` HENÜZ yok) · IT-28.2 · IT-28.3 · IT-28.4 | 🔄 |
 | FAZ 10 | IT-29 · IT-30 · IT-31 | ⬜ |
 | FAZ 11 | IT-32 · IT-33 | ⬜ |
 | FAZ 12 | IT-34 · IT-35 | ⬜ |
+| FAZ 13 | IT-36 ✅ · IT-37 ✅ · IT-38 ✅ (4/7 akış) · IT-39 ✅ | ✅ |
+| FAZ 14 | IT-40 · IT-41 | ⬜ |
+| FAZ 15 | IT-42 ✅ · IT-43 ✅ | ✅ (IT-07b — organization.py + approval.py olarak uygulandı) |
+| FAZ 16 | IT-44 · IT-45 | ⬜ |
+| FAZ 17 | IT-46 ✅ | ✅ (IT-28 — case_management.py, "Bize Ulaşın") |
+| FAZ 18 | IT-47 · IT-48 · IT-49 · IT-50 · IT-51 · IT-52 · IT-53 | ⬜ (Agricultural Intelligence Engine — plan hazır, `AI-VIZYON-PLATFORMU-MIMARI.md` + ROADMAP-DETAY-TAM.md'ye eklendi 2026-07-11; DB/kuyruk kararı: Mongo+in-process, menü kararı: Ayarlar altı alt-grup — henüz KOD YAZILMADI) |

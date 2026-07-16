@@ -2,7 +2,7 @@
 # build-offline-bundle.sh -- PR-05: Offline/Air-Gapped Kurulum Paketi
 #
 # Internet erisimi olan bir makinede calistirilir. Tum Docker imajlarini
-# (mongo:7 + derlenmis tabsis-backend/tabsis-frontend -- npm/pip
+# (mongo:7 + derlenmis toprax-backend/toprax-frontend -- npm/pip
 # bagimliliklari zaten imaj icine gomulu oldugu icin ayrica indirilmez)
 # tek bir .tar.gz paketine toplar. Bu paket USB/harici disk ile internetsiz
 # hedef sunucuya tasinip install-from-bundle.sh ile kurulur.
@@ -15,26 +15,26 @@ cd "$(dirname "$0")/.."
 
 OUT_DIR="${1:-./offline-bundle}"
 IMAGES_DIR="$OUT_DIR/images"
-BUNDLE_NAME="tabsis-offline-bundle-$(date +%Y%m%d).tar.gz"
+BUNDLE_NAME="toprax-offline-bundle-$(date +%Y%m%d).tar.gz"
 
 COMPOSE="docker compose"
 if ! docker compose version >/dev/null 2>&1; then
   COMPOSE="docker-compose"
 fi
 
-echo "=== TABSIS Offline Bundle Olusturuluyor ==="
+echo "=== TOPRAX Offline Bundle Olusturuluyor ==="
 mkdir -p "$IMAGES_DIR"
 
 echo "[1/4] mongo:7 imaji cekiliyor..."
 docker pull mongo:7
 
-echo "[2/4] backend/frontend imajlari derleniyor (image: tabsis-backend:latest / tabsis-frontend:latest)..."
+echo "[2/4] backend/frontend imajlari derleniyor (image: toprax-backend:latest / toprax-frontend:latest)..."
 $COMPOSE build backend frontend
 
 echo "[3/4] Imajlar .tar dosyalarina kaydediliyor (docker save)..."
 docker save mongo:7 -o "$IMAGES_DIR/mongo-7.tar"
-docker save tabsis-backend:latest -o "$IMAGES_DIR/tabsis-backend.tar"
-docker save tabsis-frontend:latest -o "$IMAGES_DIR/tabsis-frontend.tar"
+docker save toprax-backend:latest -o "$IMAGES_DIR/toprax-backend.tar"
+docker save toprax-frontend:latest -o "$IMAGES_DIR/toprax-frontend.tar"
 
 echo "[4/4] Kurulum dosyalari kopyalaniyor ve paket sikistiriliyor..."
 cp docker-compose.yml "$OUT_DIR/"

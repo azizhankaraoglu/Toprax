@@ -1,10 +1,10 @@
 """
 =====================================================================
-TabSIS — Communication Hub: Kanallar + Şablon Yönetimi + Gönderim +
+Toprax — Communication Hub: Kanallar + Şablon Yönetimi + Gönderim +
 Kişi Kartı İletişim Timeline'ı (IT-25 / FAZ 9 — Sprint 9 başlangıç)
 =====================================================================
 Stratejik mimari not (ROADMAP): Comm Hub sadece mesaj gönderen bir
-servis değil, TabSİS içindeki iş olaylarını dinleyip doğru kişiye doğru
+servis değil, Toprax içindeki iş olaylarını dinleyip doğru kişiye doğru
 zamanda doğru kanaldan ileten merkezi bir hub olacak. IT-25 SADECE elle
 tetiklenen (kişi kartından "Gönder" butonu) gönderim akışını + şablon
 yönetimini + timeline'ı kurmuştu; event bus'a (`event_bus.py`) gerçek
@@ -134,6 +134,30 @@ async def _final_gate_check(db, contact_type: str, contact_id: str, channel: str
         from platform_core import is_feature_enabled
         if not await is_feature_enabled(db, "whatsapp"):
             return "'WhatsApp Kanalı' özelliği bu kurum için kapatılmış"
+
+    # God Mode Modül Yönetimi — "communication" modülü tenant için kapatılmışsa
+    # (whatsapp'ın kendi bayrağından AYRI, İletişim Merkezi'nin TAMAMI) burada engellenir.
+    from platform_core import is_feature_enabled
+    if not await is_feature_enabled(db, "communication"):
+        return "'İletişim Merkezi' modülü bu kurum için kapatılmış"
+
+    # God Mode Lisans limiti — SADECE SMS/WhatsApp (aylık, ücretli kanallar).
+    if channel in ("sms", "whatsapp"):
+        from platform_core import get_tenant_license
+        from tenant_context import current_tenant_id
+        tid = current_tenant_id.get()
+        if tid:
+            lic = await get_tenant_license(db, tid)
+            limit_field = "sms_limit" if channel == "sms" else "whatsapp_limit"
+            if lic and lic.get(limit_field) is not None:
+                month_start = datetime.now(timezone.utc).replace(
+                    day=1, hour=0, minute=0, second=0, microsecond=0
+                ).isoformat()
+                used = await db.communications.count_documents(
+                    {"channel": channel, "sent_at": {"$gte": month_start}}
+                )
+                if used >= lic[limit_field]:
+                    return f"Lisans limiti aşıldı: {CHANNELS.get(channel, channel)} ({used}/{lic[limit_field]} bu ay)"
 
     blacklisted = await db.communication_blacklist.find_one(
         {"contact_type": contact_type, "contact_id": contact_id}, {"_id": 0},

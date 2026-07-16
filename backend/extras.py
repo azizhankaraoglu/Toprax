@@ -30,7 +30,8 @@ import random
 import json
 import re
 from tenant_context import current_tenant_id
-from satellite_provider import get_satellite_provider, ndvi_to_health, ndvi_to_risk_level, DemoSatelliteProvider
+from satellite_provider import (get_satellite_provider, ndvi_to_health, ndvi_to_risk_level, DemoSatelliteProvider,
+                                 get_satellite_provider_tiered, build_image_meta, maybe_auto_task_on_anomaly)
 from ai_provider import get_ai_provider
 from config_service import ALLOW_DATA_SEEDING
 
@@ -41,6 +42,30 @@ def register_extra_routes(api_router, db, current_user, is_admin, require_featur
     _no_check = lambda key: (lambda: True)
     require_feature = require_feature or _no_check
     """Bu fonksiyon ana server.py tarafından çağrılır, tüm yeni endpoint'leri ekler"""
+
+    async def _check_ai_limit(user, feature: str):
+        """God Mode Lisans limiti (aylık AI isteği) — SADECE gerçek AI çağrısı
+        yapılacaksa çağrılır (rule-based fallback yolu HİÇ saymaz, gerçekte
+        AI kullanılmıyor). Limit aşılmışsa 403; aşılmadıysa `ai_usage_logs`'a
+        bir kayıt düşer (God Mode istatistik dashboard'unun/limit sayacının
+        TEK gerçek veri kaynağı)."""
+        from platform_core import get_tenant_license
+        tenant_id = user.get("tenant_id")
+        if tenant_id:
+            lic = await get_tenant_license(db, tenant_id)
+            if lic and lic.get("ai_limit") is not None:
+                month_start = datetime.now(timezone.utc).replace(
+                    day=1, hour=0, minute=0, second=0, microsecond=0
+                ).isoformat()
+                used = await db.ai_usage_logs.count_documents(
+                    {"created_at": {"$gte": month_start}}
+                )
+                if used >= lic["ai_limit"]:
+                    raise HTTPException(403, f"Lisans limiti aşıldı: Yapay Zeka isteği ({used}/{lic['ai_limit']} bu ay)")
+        await db.ai_usage_logs.insert_one({
+            "id": str(uuid.uuid4()), "feature": feature, "user_id": user.get("id"),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
 
     # =====================================================================
     # AI HASTALIK TESPİTİ — Gemini Vision
@@ -84,6 +109,8 @@ def register_extra_routes(api_router, db, current_user, is_admin, require_featur
             "5) Aciliyet seviyesi. Sadece JSON formatında dön: "
             '{"plant": "...", "disease": "...", "severity": "...", "action": "...", "urgency": "..."}'
         )
+
+        await _check_ai_limit(user, "disease_detect")
 
         # IT-32 — Integration Hub: doğrudan OpenAI/Gemini/Anthropic HTTP çağrısı
         # burada YOK, tek bir ai_provider.py üzerinden geçer (bkz. modül docstring'i).
@@ -243,6 +270,7 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
         ai_cfg = await get_ai_service_config(db)
 
         if ai_cfg:
+            await _check_ai_limit(user, "copilot")
             raw = await _call_ai_text(ai_cfg, COPILOT_SCHEMA_PROMPT, body.query)
             # AI bazen JSON'u ```json ... ``` bloğu içinde döner — temizle
             cleaned = raw.strip()
@@ -322,7 +350,7 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
         Geriye dönük uyumluluk sarmalayıcısı: eski çağrı imzasını korur
         ama artık merkezi audit.log_audit()'i kullanır.
         """
-        user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0}) or {"id": user_id}
+        user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0, "totp_secret": 0}) or {"id": user_id}
         await _log_audit(db, user, action=action, entity="misc", new_value=details, request=request)
 
     # =====================================================================
@@ -342,7 +370,10 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
             raise HTTPException(404, "Parsel bulunamadı")
 
         geometry = parcel.get("geometry") or parcel.get("geojson")
-        provider = await get_satellite_provider(db, "ndvi")
+        # KONU 1.2 — Kademeli kalite: sağlayıcı, tenant'ın abonelik seviyesine
+        # göre seçilir (izin yoksa Demo'ya düşer). "Eldeki en iyi görüntüyle
+        # çalış" (1.1): sağlayıcı hata verse bile analiz BLOKLANMAZ, Demo'ya düşer.
+        provider, tier = await get_satellite_provider_tiered(db, "ndvi")
         try:
             time_series = provider.get_ndvi_time_series(parcel_id, geometry)
             data_source = f"CANLI ({provider.name})" if provider.name != "demo" else "MOCK (Sentinel Hub aktivasyonu sözleşme sonrası)"
@@ -351,10 +382,24 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
             # (ör. ağ hatası, kota) — kullanıcının ekranı KIRILMAZ, sessizce
             # Demo'ya düşer (aynı davranış Integration Hub'ın diğer
             # provider'larındaki resilience yaklaşımıyla tutarlı).
-            time_series = DemoSatelliteProvider().get_ndvi_time_series(parcel_id, geometry)
+            provider = DemoSatelliteProvider()
+            time_series = provider.get_ndvi_time_series(parcel_id, geometry)
             data_source = "MOCK (gerçek sağlayıcıya şu an ulaşılamadı, geçici olarak demo veriye düşüldü)"
         latest = time_series[-1]
         health = ndvi_to_health(latest["ndvi"])
+
+        # KONU 1.1 — Görüntü künyesi (kaynak/tarih/çözünürlük) HER ZAMAN döner.
+        image_meta = build_image_meta(provider, latest["date"], tier)
+
+        # KONU 1.3 — Akıllı tasking: GÜÇLÜ anomali (çok düşük NDVI) şüphesinde,
+        # bu TEK parsel için otomatik yüksek çözünürlük talebi (tier + kotaya tabi;
+        # değilse sessizce atlanır). Pahalı veri sadece şüphe oluşan yerde harcanır.
+        auto_task = None
+        if latest["ndvi"] < 0.45:
+            try:
+                auto_task = await maybe_auto_task_on_anomaly(db, parcel, reason="dusuk_ndvi_anomali")
+            except Exception:
+                auto_task = None
 
         return {
             "parcel_id": parcel_id,
@@ -368,6 +413,8 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
                 {"date": "2025-07-15", "type": "Düşük NDVI sapması", "severity": "orta"}
             ] if latest["ndvi"] < 0.55 else [],
             "data_source": data_source,
+            "image_meta": image_meta,   # 1.1 künye
+            "auto_task": auto_task,     # 1.3 otomatik tasking sonucu (varsa)
         }
 
     class NdviSnapshotRequest(BaseModel):
@@ -440,7 +487,8 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
     @api_router.get("/iot/sensors")
     async def list_iot_sensors(status: str = None, region_id: str = None, parcel_id: str = None, user=Depends(current_user)):
         """IoT sensör listesi — durum/bölge/parsele göre filtrelenebilir"""
-        q = {}
+        # BULGU 1 düzeltmesi: soft-delete edilmiş sensörler listelenmez.
+        q = {"is_active": {"$ne": False}}
         if status:
             q["status"] = status
         if region_id:

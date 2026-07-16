@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Dosya Depolama Soyutlaması (IT-04)
+Toprax — Dosya Depolama Soyutlaması (IT-04)
 =====================================================================
 Şimdilik dosyalar yerel diske (`backend/uploads/`) yazılır. İleride
 S3/MinIO gibi bir sağlayıcıya geçilirse SADECE bu dosya değişir —
@@ -43,6 +43,53 @@ ALLOWED_EXTENSIONS = {
 }
 MAX_FILE_SIZE_MB = 10
 
+# =====================================================================
+# BULGU 3 (Orta) düzeltmesi — GERÇEK içerik tipi doğrulaması
+# =====================================================================
+# Uzantı allow-list'i TEK BAŞINA yetmez: kötü niyetli içerik `shell.jpg`
+# olarak yeniden adlandırılıp uzantı kontrolünden geçebiliyordu. Artık
+# dosyanın ilk baytlarındaki "sihirli bayt" (magic byte) imzasından gerçek
+# tip tespit edilir ve beyan edilen uzantıyla uyuşması ZORUNLUDUR. Ayrıca
+# saklanan content_type istemcinin beyanına değil, tespit sonucuna göre
+# belirlenir (istemci content_type'ı spooflanabilir).
+
+# Beyan edilen uzantı -> kabul edilen içerik "türü" (magic'ten çıkan)
+_EXT_ALLOWED_KIND = {
+    ".jpg": {"jpg"}, ".jpeg": {"jpg"}, ".png": {"png"},
+    ".gif": {"gif"}, ".webp": {"webp"}, ".pdf": {"pdf"},
+    ".docx": {"zip"}, ".xlsx": {"zip"},         # OOXML = ZIP kabı
+    ".doc": {"ole"}, ".xls": {"ole"},           # eski Office = OLE2 kabı
+}
+
+# Beyan edilen uzantı -> saklanacak (güvenilir) MIME tipi
+_EXT_MIME = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".doc": "application/msword", ".xls": "application/vnd.ms-excel",
+}
+
+
+def _detect_kind(contents: bytes) -> Optional[str]:
+    """İlk baytlardan gerçek dosya türünü döndürür (bilinmiyorsa None)."""
+    b = contents[:16]
+    if b[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if b[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if b[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    if b[:4] == b"RIFF" and contents[8:12] == b"WEBP":
+        return "webp"
+    if b[:4] == b"%PDF":
+        return "pdf"
+    if b[:4] in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):
+        return "zip"      # docx / xlsx (OOXML)
+    if b[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+        return "ole"      # eski doc / xls
+    return None
+
 
 def _safe_ext(filename: str) -> str:
     ext = Path(filename or "").suffix.lower()
@@ -52,12 +99,29 @@ def _safe_ext(filename: str) -> str:
     return ext
 
 
+def _verify_content(ext: str, contents: bytes) -> str:
+    """Sihirli bayt doğrulaması: beyan edilen uzantı ile gerçek içerik
+    uyuşmuyorsa 400 döner. Döndürdüğü: güvenilir content_type."""
+    kind = _detect_kind(contents)
+    allowed = _EXT_ALLOWED_KIND.get(ext, set())
+    if kind is None or kind not in allowed:
+        raise HTTPException(
+            400,
+            "Dosya içeriği beyan edilen türle uyuşmuyor. Uzantısı değiştirilmiş "
+            f"veya bozuk bir dosya olabilir ({ext}).",
+        )
+    return _EXT_MIME.get(ext, "application/octet-stream")
+
+
 async def save_upload(file: UploadFile, subfolder: str) -> dict:
     """Dosyayı diske kaydeder, meta bilgi (id, stored_name, url, size_bytes, content_type) döner."""
     ext = _safe_ext(file.filename)
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE_MB * 1024 * 1024:
         raise HTTPException(400, f"Dosya çok büyük (maksimum {MAX_FILE_SIZE_MB}MB)")
+
+    # BULGU 3: gerçek içerik tipini doğrula (uzantı yeniden adlandırma bypass'ı)
+    verified_content_type = _verify_content(ext, contents)
 
     file_id = str(uuid.uuid4())
     stored_name = f"{file_id}{ext}"
@@ -71,7 +135,7 @@ async def save_upload(file: UploadFile, subfolder: str) -> dict:
         "stored_name": stored_name,
         "url": f"/api/uploads/file/{subfolder}/{stored_name}",
         "size_bytes": len(contents),
-        "content_type": file.content_type,
+        "content_type": verified_content_type,   # BULGU 3: istemcinin beyanı değil, tespit
     }
 
 
@@ -114,7 +178,7 @@ def register_storage_routes(api_router: APIRouter, db, current_user, log_audit=N
             raise HTTPException(401, "Refresh token bu uçta kullanılamaz")
 
         user = await db.users.find_one(
-            {"id": payload.get("user_id")}, {"_id": 0, "password": 0}
+            {"id": payload.get("user_id")}, {"_id": 0, "password": 0, "totp_secret": 0}
         )
         if not user:
             raise HTTPException(401, "Kullanıcı yok")
@@ -144,6 +208,20 @@ def register_storage_routes(api_router: APIRouter, db, current_user, log_audit=N
         field_key: Optional[str] = Form(None),   # verilirse belirli bir dinamik alana bağlanır
         user=Depends(current_user),
     ):
+        # God Mode Lisans limiti — depolama (MB). Dosya diske YAZILMADAN önce
+        # kontrol edilir (limit aşılmışsa yazma hiç denenmez).
+        tenant_id = user.get("tenant_id")
+        if tenant_id:
+            from platform_core import get_tenant_license
+            lic = await get_tenant_license(db, tenant_id)
+            if lic and lic.get("storage_limit_mb") is not None:
+                agg = await db.uploads.aggregate(
+                    [{"$group": {"_id": None, "total_bytes": {"$sum": "$size_bytes"}}}]
+                ).to_list(1)
+                used_mb = (agg[0]["total_bytes"] if agg else 0) / (1024 * 1024)
+                if used_mb >= lic["storage_limit_mb"]:
+                    raise HTTPException(403, f"Lisans limiti aşıldı: Depolama ({used_mb:.1f}/{lic['storage_limit_mb']} MB)")
+
         meta = await save_upload(file, subfolder=module)
         doc = {
             "id": meta["file_id"],

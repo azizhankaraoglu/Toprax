@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Saha Operasyonları: İş Emri / Görev / Ziyaret Üçlü Modeli
+Toprax — Saha Operasyonları: İş Emri / Görev / Ziyaret Üçlü Modeli
 (IT-22 / FAZ 8 — Sprint 8, Saha Operasyonları başlangıcı)
 =====================================================================
 ROADMAP'in özellikle vurguladığı kavramsal ayrım — ÜÇÜ AYRI ENTITY,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-requirements.sh — TABSIS on-premise kurulum ON-KOSUL kontrolcusu (PR-03)
+# check-requirements.sh — TOPRAX on-premise kurulum ON-KOSUL kontrolcusu (PR-03)
 #
 # docker-compose up'tan ONCE calistirilir. Docker henuz kurulu/calisir
 # olmayabilir, bu yuzden script yalnizca standart POSIX araclarina (bash,
@@ -30,7 +30,7 @@ ok()   { echo "  ${GREEN}[OK]${RESET} $1"; }
 fail() { echo "  ${RED}[HATA]${RESET} $1"; PASS=0; }
 warn() { echo "  ${YELLOW}[UYARI]${RESET} $1"; }
 
-echo "${BOLD}=== TABSIS Kurulum On-Kosul Kontrolu ===${RESET}"
+echo "${BOLD}=== TOPRAX Kurulum On-Kosul Kontrolu ===${RESET}"
 echo
 
 # ---- 1) Isletim sistemi ----

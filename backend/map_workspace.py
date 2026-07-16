@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Harita Paneli: Kişisel Çalışma Alanı (IT-14)
+Toprax — Harita Paneli: Kişisel Çalışma Alanı (IT-14)
 =====================================================================
 IT-14'ün "kişisel çalışma alanı kaydetme" maddesi: kullanıcının Harita
 Paneli'ndeki tercihini (hangi widget'lar açık, harita merkezi/zoom,

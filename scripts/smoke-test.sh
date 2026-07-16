@@ -23,7 +23,7 @@ PASS=1
 ok()   { echo "  ${GREEN}[OK]${RESET} $1"; }
 fail() { echo "  ${RED}[HATA]${RESET} $1"; PASS=0; }
 
-echo "${BOLD}=== TABSIS Kurulum Sonrasi Smoke Test ===${RESET}"
+echo "${BOLD}=== TOPRAX Kurulum Sonrasi Smoke Test ===${RESET}"
 echo "Backend:  $BASE_URL"
 echo "Frontend: $FRONTEND_URL"
 echo

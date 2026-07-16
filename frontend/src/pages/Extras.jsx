@@ -960,6 +960,28 @@ export function UyduGorunutu() {
                   ⚠️ {data.anomalies.length} anomali tespit edildi: {data.anomalies[0].type} ({data.anomalies[0].date})
                 </div>
               )}
+
+              {/* KONU 1.1 — Görüntü künyesi: kaynak/tarih/çözünürlük HER ZAMAN görünür,
+                  kullanıcı hangi veriye dayanarak karar verdiğini bilir. */}
+              {data.image_meta && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px]">
+                  <span className="text-[var(--text-dim)] uppercase tracking-wider">Görüntü künyesi:</span>
+                  <span className="badge badge-neutral">Kaynak: {data.image_meta.source}{data.image_meta.is_real ? " (canlı)" : " (demo)"}</span>
+                  <span className="badge badge-neutral">Tarih: {data.image_meta.date}</span>
+                  <span className="badge badge-neutral">Çözünürlük: {data.image_meta.resolution_m} m/px</span>
+                  {data.image_meta.tier && <span className="badge badge-neutral">Abonelik: {data.image_meta.tier}</span>}
+                </div>
+              )}
+
+              {/* KONU 1.3 — Anomali şüphesinde otomatik VHR tasking sonucu */}
+              {data.auto_task && (
+                <div className={`mt-2 text-[10px] px-2 py-1 rounded inline-block ${data.auto_task.status === "talep_edildi" ? "bg-cyan-500/10 text-cyan-400" : "bg-[var(--surface-2)] text-[var(--text-dim)]"}`}>
+                  {data.auto_task.status === "talep_edildi"
+                    ? `🛰️ Anomali → otomatik yüksek çözünürlük talebi oluşturuldu (${data.auto_task.provider})`
+                    : `Otomatik tasking atlandı: ${data.auto_task.reason}`}
+                </div>
+              )}
+
               <div className="text-[10px] text-[var(--text-dim)] mt-3">{data.data_source}</div>
             </>
           ) : <div className="text-[var(--text-dim)] text-center py-12">Parsel seçin</div>}
@@ -972,7 +994,7 @@ export function UyduGorunutu() {
 // =====================================================================
 // SAHA PWA — Mobil saha ziyaret raporu (ziraat mühendisi)
 // =====================================================================
-const OFFLINE_QUEUE_KEY = "tabsis_offline_visits";
+const OFFLINE_QUEUE_KEY = "toprax_offline_visits";
 
 function readQueue() {
   try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]"); } catch { return []; }
@@ -1243,7 +1265,7 @@ export function AICopilot() {
   return (
     <div className="p-8 max-w-[1200px]" data-testid="copilot-page">
       <header className="mb-6">
-        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">TABSIS AI</div>
+        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">TOPRAX AI</div>
         <h1 className="font-display text-4xl">AI Copilot</h1>
         <p className="text-[var(--text-dim)] text-sm mt-1">
           Parsel verinizi doğal dille sorgulayın — AI sadece filtre üretir, sonuçlar her zaman gerçek veritabanından gelir.

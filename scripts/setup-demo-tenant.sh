@@ -18,10 +18,10 @@ BASE_URL="${1:-http://localhost:8001}"
 PLATFORM_EMAIL="${2:?platform admin e-postası gerekli}"
 PLATFORM_PASSWORD="${3:?platform admin şifresi gerekli}"
 
-DEMO_EMAIL="demo-admin@tabsis-demo.local"
+DEMO_EMAIL="demo-admin@toprax-demo.local"
 DEMO_PASSWORD="Demo-$(date +%s)-Sunum!"
 
-echo "=== TABSIS Demo Tenant Kurulumu ==="
+echo "=== TOPRAX Demo Tenant Kurulumu ==="
 
 echo "[1/5] Platform yöneticisi olarak giriş yapılıyor..."
 PLATFORM_TOKEN=$(curl -fsS -X POST "$BASE_URL/api/auth/login" \
@@ -31,7 +31,7 @@ PLATFORM_TOKEN=$(curl -fsS -X POST "$BASE_URL/api/auth/login" \
 echo "[2/5] 'Demo Kooperatifi' tenant'ı oluşturuluyor..."
 TENANT_ID=$(curl -fsS -X POST "$BASE_URL/api/platform/tenants" \
   -H "Authorization: Bearer $PLATFORM_TOKEN" -H "Content-Type: application/json" \
-  -d '{"name":"TabSIS Demo Kooperatifi (Satış Gösterimi)","contact_email":"demo@tabsis-demo.local","plan":"deneme"}' \
+  -d '{"name":"Toprax Demo Kooperatifi (Satış Gösterimi)","contact_email":"demo@toprax-demo.local","plan":"deneme"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 echo "  tenant_id: $TENANT_ID"
 

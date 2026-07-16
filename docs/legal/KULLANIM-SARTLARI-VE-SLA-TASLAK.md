@@ -7,7 +7,7 @@
 
 ## Bölüm A — Kullanım Şartları (ToS) Taslağı
 
-1. **Taraflar:** [SATICI FİRMA ADI] ("Sağlayıcı") ile TabSIS'i kullanan
+1. **Taraflar:** [SATICI FİRMA ADI] ("Sağlayıcı") ile Toprax'i kullanan
    kurum ("Müşteri") arasındaki ilişkiyi düzenler.
 2. **Lisans Kapsamı:** Müşteri'ye, satın aldığı plan (bkz. platform_core.py
    `licenses` koleksiyonu — trial/standard/premium) kapsamında, on-premise
@@ -24,7 +24,7 @@
 
 ## Bölüm B — Gizlilik Politikası Taslağı
 
-TabSIS on-premise bir kurulum olduğu için veriler Müşteri'nin kendi
+Toprax on-premise bir kurulum olduğu için veriler Müşteri'nin kendi
 sunucusunda/veri merkezinde tutulur — Sağlayıcı bu verilere doğrudan
 erişmez (destek amaçlı erişim ayrı bir yetkilendirme gerektirir). Detaylı
 işlenen veri kategorileri için bkz. `KVKK-AYDINLATMA-METNI.md`.

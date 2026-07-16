@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Organizasyon Hiyerarşisi (IT-07b / FAZ 3 devam)
+Toprax — Organizasyon Hiyerarşisi (IT-07b / FAZ 3 devam)
 =====================================================================
 ROADMAP: "Kullanıcılara sadece bir Role (yetki seti) değil, aynı zamanda
 bir Organizasyon Pozisyonu atanmalı — kim kime bağlı, kim kimin onayını

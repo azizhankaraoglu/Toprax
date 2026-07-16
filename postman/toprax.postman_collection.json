@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "TabSIS API",
+    "name": "Toprax API",
     "description": "OpenAPI semasindan OTOMATIK uretildi -- elle DUZENLEMEYIN, scripts/generate_postman_collection.py'yi tekrar calistirin.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -5079,7 +5079,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phone\": \"string\",\n  \"message\": \"TabSIS test mesajı: entegrasyon çalışıyor.\"\n}",
+              "raw": "{\n  \"phone\": \"string\",\n  \"message\": \"Toprax test mesajı: entegrasyon çalışıyor.\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

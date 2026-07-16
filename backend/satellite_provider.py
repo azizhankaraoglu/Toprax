@@ -1,10 +1,10 @@
 """
 =====================================================================
-TabSIS — Uydu Görüntü Provider Soyutlaması (IT-17 → gerçek çoklu-
+Toprax — Uydu Görüntü Provider Soyutlaması (IT-17 → gerçek çoklu-
 sağlayıcı mimarisi, 2026-07-11 araştırma raporuna göre genişletildi)
 =====================================================================
 Bu dosya artık TEK bir mock sağlayıcı değil, gerçek bir **Provider
-Abstraction Layer**: `TABSIS_Uydu_Goruntu_Ekosistemi_Arastirma.md`
+Abstraction Layer**: `TOPRAX_Uydu_Goruntu_Ekosistemi_Arastirma.md`
 raporunun §5 (Kurumsal Mimari Önerisi) ve §8 (Kod Tabanına Entegrasyon
 Notu) bölümlerinde tanımlanan öncelik sırasıyla üç GERÇEK sağlayıcı
 eklendi:
@@ -44,13 +44,14 @@ noktasını (NDVI zaman serisi + yangın alarmı + tasking talebi) kurar.
 import random
 import zlib
 import requests
+import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 
 class SatelliteProvider(ABC):
-    """Araştırma raporu §Teknik Beklentiler'deki ortak arayüzün TABSİS'e
+    """Araştırma raporu §Teknik Beklentiler'deki ortak arayüzün TOPRAX'e
     uyarlanmış asgari alt kümesi. Yeni bir yetenek (ör. calculate_index,
     search_images) eklemek isteyen gelecek bir iterasyon SADECE bu sınıfa
     yeni bir metot ekler + ilgili sağlayıcı(lar)da uygular — registry ve
@@ -246,7 +247,7 @@ class NasaFirmsProvider(SatelliteProvider):
 
 class Up42Provider(SatelliteProvider):
     """
-    UP42 pazaryeri — TABSİS'in kendi başına onlarca VHR sağlayıcıya
+    UP42 pazaryeri — TOPRAX'in kendi başına onlarca VHR sağlayıcıya
     (Airbus Pléiades Neo, Planet SkySat, ICEYE, Capella) ayrı ayrı entegre
     olmak yerine TEK API'den eriştiği katman (araştırma raporu §2.10,
     §4 sıralama #3). Bu iterasyonda SADECE tasking TALEBİ kimlik
@@ -270,7 +271,7 @@ class Up42Provider(SatelliteProvider):
         if self.mock_mode:
             return {
                 "status": "simule_edildi",
-                "message": "[MOCK MOD] Talep TABSİS içinde kaydedildi, UP42'ye GÖNDERİLMEDİ "
+                "message": "[MOCK MOD] Talep TOPRAX içinde kaydedildi, UP42'ye GÖNDERİLMEDİ "
                            "(mock_mode kapatılmadan gerçek sipariş oluşturulmaz).",
             }
         resp = requests.post(
@@ -286,7 +287,7 @@ class Up42Provider(SatelliteProvider):
         return {
             "status": "kimlik_dogrulandi",
             "message": "UP42 kimlik doğrulaması başarılı — sipariş oluşturma akışı hesap "
-                       "aktivasyonu sonrası tamamlanacak (bkz. TABSIS_Uydu_Goruntu_Ekosistemi_Arastirma.md §8).",
+                       "aktivasyonu sonrası tamamlanacak (bkz. TOPRAX_Uydu_Goruntu_Ekosistemi_Arastirma.md §8).",
         }
 
 
@@ -325,6 +326,115 @@ async def get_satellite_provider(db, capability: str = "ndvi") -> SatelliteProvi
         return SentinelHubProvider(client_id=cfg["client_id"], client_secret=cfg["client_secret"])
 
     return DemoSatelliteProvider()
+
+
+# =====================================================================
+# KONU 1 (3ONCELIK.md) — Görüntü Künyesi + Kademeli Kalite + Akıllı Tasking
+# =====================================================================
+
+# 1.1 — Her sağlayıcının nominal yer çözünürlüğü (metre/piksel). Görüntü
+# künyesinde HER ZAMAN gösterilir; kullanıcı hangi çözünürlükteki veriye
+# dayanarak karar verdiğini bilmeli.
+PROVIDER_RESOLUTION_M = {"demo": 10.0, "sentinel_hub": 10.0, "nasa_firms": 375.0, "up42": 0.5}
+
+
+def provider_resolution_m(provider) -> float:
+    return PROVIDER_RESOLUTION_M.get(getattr(provider, "name", ""), 10.0)
+
+
+def build_image_meta(provider, date: Optional[str], tier: Optional[str] = None) -> Dict:
+    """1.1 — Görüntü künyesi: her analiz sonucunun yanında kaynak + tarih +
+    çözünürlük (+ gerçek/mock + abonelik seviyesi). UI küçük bir künye gösterir."""
+    name = getattr(provider, "name", "demo")
+    return {
+        "source": name, "date": date, "resolution_m": provider_resolution_m(provider),
+        "is_real": name != "demo", "tier": tier,
+    }
+
+
+# 1.2 — Kademeli kalite: abonelik seviyesi (Feature Flags/Licensing, IT-33)
+# hangi sağlayıcıya/çözünürlüğe/tazeliğe erişileceğini belirler. KOD DALLANMASI
+# YOK — davranış bu tablodan gelir (provider değişince kod değişmez).
+SATELLITE_TIERS = {
+    "basic":    {"allowed": ["demo"], "max_resolution_m": 10.0, "min_refresh_days": 30, "tasking": False},
+    "standard": {"allowed": ["sentinel_hub", "nasa_firms", "demo"], "max_resolution_m": 10.0, "min_refresh_days": 7, "tasking": False},
+    "premium":  {"allowed": ["sentinel_hub", "nasa_firms", "up42", "demo"], "max_resolution_m": 0.5, "min_refresh_days": 1, "tasking": True},
+}
+DEFAULT_TIER = "standard"
+
+
+async def resolve_tenant_satellite_tier(db) -> str:
+    """Tenant'ın uydu abonelik seviyesi (config/flag-driven, kod dallanması değil).
+    Kaynak: feature_flags `satellite_premium`/`satellite_basic` (IT-33) → yoksa
+    DEFAULT_TIER."""
+    try:
+        flags = {f["key"]: f.get("enabled") for f in await db.feature_flags.find({}, {"_id": 0}).to_list(200)}
+        if flags.get("satellite_premium"):
+            return "premium"
+        if flags.get("satellite_basic"):
+            return "basic"
+    except Exception:
+        pass
+    return DEFAULT_TIER
+
+
+async def get_satellite_provider_tiered(db, capability: str = "ndvi"):
+    """get_satellite_provider'ın abonelik-farkında sarmalayıcısı: tenant tier'ı
+    seçilen sağlayıcıya izin vermiyorsa Demo'ya düşer (yüksek çözünürlük düşük
+    abonelikte harcanmaz). Mevcut get_satellite_provider DEĞİŞMEDEN korunur."""
+    provider = await get_satellite_provider(db, capability)
+    tier = await resolve_tenant_satellite_tier(db)
+    allowed = SATELLITE_TIERS.get(tier, SATELLITE_TIERS[DEFAULT_TIER])["allowed"]
+    if provider.name not in allowed:
+        provider = DemoSatelliteProvider()
+    return provider, tier
+
+
+# 1.3 — Akıllı Tasking: anomali şüphesinde TEK parsel için otomatik VHR talebi,
+# tenant aylık kotasına tabi (pahalı veri sadece şüphe oluşan yerde harcanır).
+DEFAULT_MONTHLY_TASKING_QUOTA = 20
+
+
+async def _tasking_quota(db) -> dict:
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    doc = await db.satellite_tasking_quota.find_one({"month": month}, {"_id": 0})
+    if not doc:
+        doc = {"month": month, "used": 0, "monthly_limit": DEFAULT_MONTHLY_TASKING_QUOTA}
+        await db.satellite_tasking_quota.insert_one(dict(doc))
+    return doc
+
+
+async def _consume_tasking_quota(db) -> bool:
+    """Atomik $inc + limit guard (race condition önlenir)."""
+    await _tasking_quota(db)
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    res = await db.satellite_tasking_quota.find_one_and_update(
+        {"month": month, "$expr": {"$lt": ["$used", "$monthly_limit"]}},
+        {"$inc": {"used": 1}}, return_document=True, projection={"_id": 0},
+    )
+    return res is not None
+
+
+async def maybe_auto_task_on_anomaly(db, parcel: dict, reason: str) -> Dict:
+    """1.3'ün can alıcı noktası — anomali şüphesinde otomatik tasking. SADECE
+    tier tasking'e izin veriyorsa VE aylık kota müsaitse çalışır; aksi halde
+    'atlandi' döner (sessiz hata YOK). Sonuç satellite_tasking_requests'e yazılır."""
+    tier = await resolve_tenant_satellite_tier(db)
+    if not SATELLITE_TIERS.get(tier, {}).get("tasking"):
+        return {"status": "atlandi", "reason": "abonelik seviyesi tasking desteklemiyor", "tier": tier}
+    if not await _consume_tasking_quota(db):
+        return {"status": "atlandi", "reason": "aylik tasking kotasi dolu", "tier": tier}
+    provider = await get_satellite_provider(db, "tasking")
+    geometry = parcel.get("geometry") or parcel.get("geojson")
+    result = provider.request_tasking(geometry, resolution_cm=50, priority="high")
+    doc = {
+        "id": str(uuid.uuid4()), "parcel_id": parcel.get("id"), "reason": reason,
+        "provider": provider.name, "auto": True, "priority": "high", "tier": tier,
+        "created_at": datetime.now(timezone.utc).isoformat(), **result,
+    }
+    await db.satellite_tasking_requests.insert_one(doc)
+    doc.pop("_id", None)
+    return {"status": "talep_edildi", **doc}
 
 
 def ndvi_to_health(ndvi: float) -> Dict:
@@ -428,6 +538,25 @@ def register_satellite_routes(api_router, db, current_user, require_permission, 
         geometry = parcel.get("geometry") or parcel.get("geojson")
         provider = await get_satellite_provider(db, "tasking")
         result = provider.request_tasking(geometry, body.resolution_cm, body.priority)
+        # Manuel tasking talebi de kayıt altına alınır (auto=False) — otomatik
+        # (1.3) ile aynı koleksiyon, izlenebilirlik için.
+        rec = {"id": str(uuid.uuid4()), "parcel_id": body.parcel_id, "reason": "manuel",
+               "provider": provider.name, "auto": False, "priority": body.priority,
+               "resolution_cm": body.resolution_cm,
+               "created_at": datetime.now(timezone.utc).isoformat(), **result}
+        await db.satellite_tasking_requests.insert_one(dict(rec))
         await log_audit(db, user, action="request", entity="satellite_tasking", entity_id=body.parcel_id,
                          new_value={"provider": provider.name, **result}, request=request)
         return {"parcel_id": body.parcel_id, "provider": provider.name, **result}
+
+    @api_router.get("/satellite/tasking-quota")
+    async def tasking_quota_status(user=Depends(current_user)):
+        """1.3 — Aylık VHR tasking kotası + tenant abonelik seviyesi (kademeli kalite)."""
+        q = await _tasking_quota(db)
+        tier = await resolve_tenant_satellite_tier(db)
+        return {**q, "remaining": max(0, q["monthly_limit"] - q["used"]),
+                "tier": tier, "tasking_allowed": SATELLITE_TIERS.get(tier, {}).get("tasking", False)}
+
+    @api_router.get("/satellite/tasking-requests")
+    async def list_tasking_requests(user=Depends(current_user)):
+        return await db.satellite_tasking_requests.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)

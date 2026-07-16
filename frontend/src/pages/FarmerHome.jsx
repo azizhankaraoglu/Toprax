@@ -13,6 +13,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "@/api";
+import AnnouncementPopup from "@/components/AnnouncementPopup";
 import { LogOut, Droplets, FileText, Wallet, Award, MapPin, Plus, Wheat, X, User, FlaskConical, Brain, Download, Upload, Camera, Loader2, HandCoins, Check, AlertTriangle, Bell, GraduationCap, PlayCircle, CheckCircle2 } from "lucide-react";
 
 // IT-27 — Tercih Merkezi: kanal etiketleri (backend/channel_providers.py CHANNELS ile birebir).
@@ -317,6 +318,7 @@ export default function FarmerHome() {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] grain" data-testid="farmer-home">
+      <AnnouncementPopup />
       {/* TOP BAR */}
       <header className="border-b border-[var(--border)] bg-[#070b09] sticky top-0 z-30">
         <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">

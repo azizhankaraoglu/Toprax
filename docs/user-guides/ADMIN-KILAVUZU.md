@@ -1,12 +1,12 @@
-# TabSIS Kullanım Kılavuzu — Admin
+# Toprax Kullanım Kılavuzu — Admin
 
 > Hedef Kitle: Sistem Yöneticisi / Kurum Yöneticisi
 
 ## 1. Admin Rolü Ne İşe Yarar
 
-Bu kılavuz, TabSIS'in TEKNİK/SİSTEMSEL yönetimini yapan kişiler içindir: kullanıcı ve rol yönetimi, entegrasyon (SMS/e-posta/AI/uydu) yapılandırması, form/lookup tanımları, denetim izi ve platform ayarları. Günlük iş yönetimi (hakediş, onaylar, raporlar) için "Yönetici Kullanım Kılavuzu"na bakın.
+Bu kılavuz, Toprax'in TEKNİK/SİSTEMSEL yönetimini yapan kişiler içindir: kullanıcı ve rol yönetimi, entegrasyon (SMS/e-posta/AI/uydu) yapılandırması, form/lookup tanımları, denetim izi ve platform ayarları. Günlük iş yönetimi (hakediş, onaylar, raporlar) için "Yönetici Kullanım Kılavuzu"na bakın.
 
-> **NOT:** TabSIS'te teknik olarak ayrı bir "Admin" rolü yoktur — bu yetkiler super_admin, kurum_yöneticisi, il_yöneticisi ve fabrika_müdürü rollerinin hepsinde birden vardır ("Admin Katmanı"). Bu kılavuz, kurumunuzda bu işleri fiilen kimin yaptığına göre size veya bir iş arkadaşınıza yöneliktir.
+> **NOT:** Toprax'te teknik olarak ayrı bir "Admin" rolü yoktur — bu yetkiler super_admin, kurum_yöneticisi, il_yöneticisi ve fabrika_müdürü rollerinin hepsinde birden vardır ("Admin Katmanı"). Bu kılavuz, kurumunuzda bu işleri fiilen kimin yaptığına göre size veya bir iş arkadaşınıza yöneliktir.
 
 ## 2. Kurulum Sonrası İlk Adımlar
 
@@ -73,7 +73,7 @@ Platform Core ekranından kurumunuz için hangi modüllerin (örn. AI Copilot, L
 
 ## 12. Platform Yönetimi (Sadece Platform Yöneticisi)
 
-Eğer kurumunuz TabSIS'i birden fazla kooperatif/kurum için merkezi olarak barındırıyorsa, yeni kurum (tenant) açma, lisans tanımlama ve kurum bazlı istatistikler /platform adresindeki Platform Admin panelinden yönetilir. Tek kurumluk (on-premise) kurulumlarda bu bölüm genelde kullanılmaz.
+Eğer kurumunuz Toprax'i birden fazla kooperatif/kurum için merkezi olarak barındırıyorsa, yeni kurum (tenant) açma, lisans tanımlama ve kurum bazlı istatistikler /platform adresindeki Platform Admin panelinden yönetilir. Tek kurumluk (on-premise) kurulumlarda bu bölüm genelde kullanılmaz.
 
 ## 13. Yedekleme ve Güvenlik
 

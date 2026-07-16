@@ -27,6 +27,7 @@ from dotenv import load_dotenv                              # .env dosyasını o
 from starlette.middleware.cors import CORSMiddleware        # CORS kuralları
 from motor.motor_asyncio import AsyncIOMotorClient          # Async MongoDB sürücüsü
 import logging                                              # Log altyapısı
+import time                                                 # API çağrı süre ölçümü (God Mode Faz 2)
 import jwt                                                  # JSON Web Token (giriş tokeni)
 from pathlib import Path                                    # Dosya yolu (cross-platform)
 from pydantic import BaseModel, Field                       # Veri model doğrulama
@@ -46,10 +47,12 @@ from config_service import (APP_NAME, APP_FULL_NAME, APP_VERSION, JWT_SECRET, JW
                              SENTRY_DSN, IS_PRODUCTION, ENVIRONMENT)
 from security import (hash_password, verify_password, needs_rehash,
                        make_access_token, make_refresh_token, decode_token)
+from totp import verify_totp
 from audit import log_audit, register_audit_routes
 from integrations import register_integration_routes
 from tenant_context import TenantScopedDB, current_tenant_id
 from public_contact import resolve_bootstrap_tenant, create_public_contact_case
+from search_utils import safe_regex, TR_COLLATION            # BULGU 2/4: güvenli arama + TR collation
 
 # MongoDB bağlantısı kur (MONGO_URL/DB_NAME artık config_service.py'den okunur)
 client = AsyncIOMotorClient(MONGO_URL)                      # Async client
@@ -102,10 +105,29 @@ async def tenant_context_middleware(request: Request, call_next):
             pass  # current_user dependency zaten 401 dönecek
 
     reset_token = current_tenant_id.set(tenant_id)
+    start = time.monotonic()
     try:
         response = await call_next(request)
     finally:
         current_tenant_id.reset(reset_token)
+    duration_ms = (time.monotonic() - start) * 1000
+
+    # Faz 2 — God Mode API çağrı istatistikleri (`GET /god-mode/api-stats`).
+    # Fire-and-forget DEĞİL (asyncio.create_task ile kaybolma riski yerine
+    # doğrudan await) ama HATA yutulur — bu log'un asıl isteği ASLA
+    # etkilememesi gerekir (bkz. event_bus.py'nin "otomasyon bir yan
+    # etkidir" felsefesiyle AYNI karar).
+    try:
+        await raw_db.api_call_logs.insert_one({
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": round(duration_ms, 1),
+            "tenant_id": tenant_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:  # noqa: BLE001
+        pass
     return response
 
 
@@ -115,7 +137,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     Merkezi hata yakalayıcı. Beklenmeyen tüm hataları loglar ve istemciye
     stack trace sızdırmadan temiz bir JSON hata döner.
     """
-    logging.getLogger("tabsis.errors").exception(f"Beklenmeyen hata: {request.method} {request.url.path}")
+    logging.getLogger("toprax.errors").exception(f"Beklenmeyen hata: {request.method} {request.url.path}")
     return JSONResponse(
         status_code=500,
         content={"detail": "Sunucu tarafında beklenmeyen bir hata oluştu.", "path": str(request.url.path)},
@@ -152,7 +174,7 @@ async def current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
     Bearer token'ı doğrular, kullanıcı objesini geri döner.
     Token yoksa veya geçersizse 401 fırlatır.
 
-    PR-24 (ROADMAP-URUNLESTIRME.md): Authorization header'i "tabsis_key_"
+    PR-24 (ROADMAP-URUNLESTIRME.md): Authorization header'i "toprax_key_"
     ile basliyorsa bu bir JWT degil, makine-makine API key'idir (bkz.
     api_keys.py). TEK entegrasyon noktasi burasi -- boylece asagidaki JWT
     kodu hic degismeden, ~370 mevcut endpoint API key'i de otomatik kabul
@@ -178,7 +200,7 @@ async def current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
         # DB'den kullanıcıyı çek (şifre hash'ini geri dönmüyoruz)
         user = await db.users.find_one(
             {"id": payload["user_id"]},
-            {"_id": 0, "password": 0}                       # _id ve password'ü hariç tut
+            {"_id": 0, "password": 0, "totp_secret": 0}                       # _id ve password'ü hariç tut
         )
         if not user:
             raise HTTPException(401, "Kullanıcı yok")
@@ -206,7 +228,7 @@ from permissions import make_require_permission
 require_permission = make_require_permission(current_user, db)
 
 # IT-33 — Feature Flags guard'ı (permissions.make_require_permission ile AYNI factory kalıbı).
-from platform_core import make_require_feature
+from platform_core import make_require_feature, check_and_consume_limit
 require_feature = make_require_feature(db)
 
 
@@ -231,6 +253,7 @@ class LoginReq(BaseModel):
     """Login endpoint'i için body şeması"""
     email: str
     password: str
+    totp_code: Optional[str] = None   # SADECE totp_enabled=True hesaplarda (God Mode) zorunlu
 
 
 class RefreshTokenReq(BaseModel):
@@ -449,6 +472,17 @@ async def login(body: LoginReq, request: Request):
         await log_audit(db, user, action="login_blocked_inactive", entity="user", entity_id=user["id"], request=request)
         raise HTTPException(403, "Hesabınız pasif duruma alınmış, sistem yöneticinizle iletişime geçin")
 
+    # God Mode ikinci faktör (TOTP) — SADECE totp_enabled=True taşıyan
+    # hesaplarda devreye girer (bkz. totp.py docstring), diğer TÜM
+    # kullanıcılar bu bloktan hiç etkilenmez.
+    if user.get("totp_enabled"):
+        if not body.totp_code:
+            raise HTTPException(401, "TOTP_REQUIRED")
+        if not verify_totp(user.get("totp_secret", ""), body.totp_code):
+            record_failed_attempt(body.email, client_ip)
+            await log_audit(db, user, action="login_failed_totp", entity="user", entity_id=user["id"], request=request)
+            raise HTTPException(401, "Geçersiz TOTP kodu")
+
     # Şifre hâlâ eski SHA256 formatındaysa sessizce bcrypt'e yükselt
     if needs_rehash(user["password"]):
         await db.users.update_one({"id": user["id"]}, {"$set": {"password": hash_password(body.password)}})
@@ -459,7 +493,7 @@ async def login(body: LoginReq, request: Request):
 
     await log_audit(db, user, action="login", entity="user", entity_id=user["id"], request=request)
 
-    user_safe = {k: v for k, v in user.items() if k not in ("_id", "password")}
+    user_safe = {k: v for k, v in user.items() if k not in ("_id", "password", "totp_secret")}
     return {"token": access_token, "access_token": access_token, "refresh_token": refresh_token, "user": user_safe}
 
 
@@ -478,7 +512,7 @@ async def refresh_access_token(body: RefreshTokenReq):
     except jwt.PyJWTError:
         raise HTTPException(401, "Geçersiz veya süresi dolmuş refresh token")
 
-    user = await db.users.find_one({"id": payload["user_id"]}, {"_id": 0, "password": 0})
+    user = await db.users.find_one({"id": payload["user_id"]}, {"_id": 0, "password": 0, "totp_secret": 0})
     if not user:
         raise HTTPException(401, "Kullanıcı bulunamadı")
 
@@ -808,7 +842,8 @@ async def list_farmers(
     region_id: Optional[str] = None,
     karne: Optional[str] = None,
     limit: int = 500,
-    user=Depends(require_permission("farmers:view"))
+    user=Depends(require_permission("farmers:view")),
+    _feature=Depends(require_feature("farmer")),
 ):
     """
     Çiftçi listesi — admin arar/filtreler.
@@ -823,14 +858,20 @@ async def list_farmers(
     if karne:
         filt["karne_score"] = karne
     if q:
+        # BULGU 2 düzeltmesi: kullanıcı girdisi $regex'e KAÇIŞSIZ verilmez.
+        # safe_regex() re.escape + uzunluk limiti uygular (regex injection/ReDoS).
+        rq = safe_regex(q)
         # OR araması — birden fazla alanda eşleşme
         filt["$or"] = [
-            {"full_name": {"$regex": q, "$options": "i"}},   # i = case-insensitive
-            {"tc_no": {"$regex": q}},
-            {"phone": {"$regex": q}},
-            {"member_no": {"$regex": q, "$options": "i"}}
+            {"full_name": {"$regex": rq, "$options": "i"}},   # i = case-insensitive
+            {"tc_no": {"$regex": rq}},
+            {"phone": {"$regex": rq}},
+            {"member_no": {"$regex": rq, "$options": "i"}}
         ]
-    docs = await db.farmers.find(filt, {"_id": 0}).limit(limit).to_list(limit)
+    # BULGU 4 düzeltmesi: Türkçe collation — 'istanbul' aratınca 'İstanbul'
+    # bulunur, sıralama Türk alfabesine uygun yapılır. collation, find()
+    # kwarg'ı olarak verilir (zincirleme .collation() yerine).
+    docs = await db.farmers.find(filt, {"_id": 0}, collation=TR_COLLATION).limit(limit).to_list(limit)
     docs = await mask_sensitive_fields_many(db, "farmers", docs, user)
     return docs
 
@@ -981,10 +1022,13 @@ async def list_parcels(
     region_id: Optional[str] = None,
     farmer_id: Optional[str] = None,
     limit: int = 500,
-    user=Depends(require_permission("parcels:view"))
+    user=Depends(require_permission("parcels:view")),
+    _feature=Depends(require_feature("parcel")),
 ):
     """Parsel listesi (filtreli)"""
-    filt: Dict[str, Any] = {}
+    # BULGU 1 düzeltmesi: soft-delete edilmiş (is_active=False) parseller
+    # listede gösterilmez.
+    filt: Dict[str, Any] = {"is_active": {"$ne": False}}
     if region_id: filt["region_id"] = region_id
     if farmer_id: filt["farmer_id"] = farmer_id
     docs = await db.parcels.find(filt, {"_id": 0}).limit(limit).to_list(limit)
@@ -1051,8 +1095,9 @@ async def create_parcel(body: ParcelCreate, request: Request, user=Depends(curre
     
     doc = body.model_dump()
     doc["id"] = str(uuid.uuid4())
-    
+
     count = await db.parcels.count_documents({})
+    await check_and_consume_limit(db, user.get("tenant_id"), "parcel_limit", count, "Parsel")
     doc["parcel_code"] = f"PRS-{(count+1):05d}"
     doc["current_crop"] = "Şeker Pancarı"
     doc["active_season"] = datetime.now().year
@@ -1193,7 +1238,9 @@ async def delete_parcel(parcel_id: str, request: Request, user=Depends(require_m
     if not old:
         raise HTTPException(404, "Parsel bulunamadı")
 
-    linked_contracts = await db.contracts.count_documents({"parcel_id": parcel_id})
+    linked_contracts = await db.contracts.count_documents(
+        {"parcel_id": parcel_id, "is_active": {"$ne": False}}
+    )
     if linked_contracts > 0:
         raise HTTPException(
             409,
@@ -1201,9 +1248,18 @@ async def delete_parcel(parcel_id: str, request: Request, user=Depends(require_m
             "kapatın/taşıyın, sonra parseli silin."
         )
 
-    await db.parcels.delete_one({"id": parcel_id})
-    await log_audit(db, user, action="delete", entity="parcel", entity_id=parcel_id, old_value=old, request=request)
-    return {"status": "deleted"}
+    # BULGU 1 (Kritik) düzeltmesi: hard-delete -> soft-delete. Parsel geçmişi
+    # (geometri, ekim/verim ilişkisi) korunur; sadece görünürlük kapanır.
+    await db.parcels.update_one(
+        {"id": parcel_id},
+        {"$set": {
+            "is_active": False,
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
+            "deleted_by": user.get("full_name") or user.get("email"),
+        }},
+    )
+    await log_audit(db, user, action="soft_delete", entity="parcel", entity_id=parcel_id, old_value=old, request=request)
+    return {"status": "deactivated"}
 
 
 class ParcelSplitRequest(BaseModel):
@@ -1237,7 +1293,9 @@ async def split_parcel(parcel_id: str, body: ParcelSplitRequest, request: Reques
     if not old:
         raise HTTPException(404, "Parsel bulunamadı")
 
-    linked_contracts = await db.contracts.count_documents({"parcel_id": parcel_id})
+    linked_contracts = await db.contracts.count_documents(
+        {"parcel_id": parcel_id, "is_active": {"$ne": False}}
+    )
     if linked_contracts > 0:
         raise HTTPException(409, "Bu parsele bağlı sözleşme var, bölünmeden önce kapatılmalı")
 
@@ -1256,7 +1314,17 @@ async def split_parcel(parcel_id: str, body: ParcelSplitRequest, request: Reques
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
     await db.parcels.insert_many(new_parcels)
-    await db.parcels.delete_one({"id": parcel_id})
+    # BULGU 1 düzeltmesi: orijinal parsel fiziksel silinmez; is_active=False +
+    # split_to ile arşivlenir (böl/birleştir izi ve eski geometri korunur).
+    await db.parcels.update_one(
+        {"id": parcel_id},
+        {"$set": {
+            "is_active": False,
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
+            "deleted_by": user.get("full_name") or user.get("email"),
+            "split_to": [p["id"] for p in new_parcels],
+        }},
+    )
 
     for p in new_parcels:
         p.pop("_id", None)
@@ -1294,7 +1362,9 @@ async def merge_parcels(body: ParcelMergeRequest, request: Request,
         raise HTTPException(409, "Farklı çiftçilere ait parseller birleştirilemez")
 
     for p in parcels_to_merge:
-        linked = await db.contracts.count_documents({"parcel_id": p["id"]})
+        linked = await db.contracts.count_documents(
+            {"parcel_id": p["id"], "is_active": {"$ne": False}}
+        )
         if linked > 0:
             raise HTTPException(409, f"{p['parcel_code']} parseline bağlı sözleşme var, önce kapatılmalı")
 
@@ -1311,7 +1381,17 @@ async def merge_parcels(body: ParcelMergeRequest, request: Request,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.parcels.insert_one(merged)
-    await db.parcels.delete_many({"id": {"$in": body.parcel_ids}})
+    # BULGU 1 düzeltmesi: birleştirilen parseller fiziksel silinmez; is_active=
+    # False + merged_to ile arşivlenir (eski geometri ve birleştirme izi kalır).
+    await db.parcels.update_many(
+        {"id": {"$in": body.parcel_ids}},
+        {"$set": {
+            "is_active": False,
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
+            "deleted_by": user.get("full_name") or user.get("email"),
+            "merged_to": merged["id"],
+        }},
+    )
     merged.pop("_id", None)
 
     await log_audit(db, user, action="merge", entity="parcel", entity_id=merged["id"],
@@ -1541,7 +1621,8 @@ async def soil_summary(user=Depends(current_user)):
 
 @api_router.get("/contracts")
 async def list_contracts(season: Optional[int] = None, status: Optional[str] = None, user=Depends(current_user)):
-    filt: Dict[str, Any] = {}
+    # BULGU 1 düzeltmesi: soft-delete edilmiş sözleşmeler listelenmez.
+    filt: Dict[str, Any] = {"is_active": {"$ne": False}}
     if season: filt["season"] = season
     if status: filt["status"] = status
     docs = await db.contracts.find(filt, {"_id": 0}).to_list(5000)
@@ -1625,7 +1706,8 @@ async def list_irrigation_events(farmer_id: Optional[str] = None, limit: int = 2
 
 @api_router.get("/operations/tasks")
 async def list_tasks(status: Optional[str] = None, user=Depends(current_user)):
-    filt: Dict[str, Any] = {}
+    # BULGU 1 düzeltmesi: soft-delete edilmiş görevler listelenmez.
+    filt: Dict[str, Any] = {"is_active": {"$ne": False}}
     if status: filt["status"] = status
     docs = await db.tasks.find(filt, {"_id": 0}).sort([("scheduled_date", 1)]).to_list(1000)
     return docs
@@ -1633,12 +1715,14 @@ async def list_tasks(status: Optional[str] = None, user=Depends(current_user)):
 
 @api_router.get("/operations/machines")
 async def list_machines(user=Depends(current_user)):
-    return await db.machines.find({}, {"_id": 0}).to_list(500)
+    # BULGU 1 düzeltmesi: soft-delete edilmiş makineler listelenmez.
+    return await db.machines.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(500)
 
 
 @api_router.get("/operations/workers")
 async def list_workers(user=Depends(current_user)):
-    return await db.workers.find({}, {"_id": 0}).to_list(500)
+    # BULGU 1 düzeltmesi: soft-delete edilmiş işçiler listelenmez.
+    return await db.workers.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(500)
 
 
 @api_router.get("/operations/summary")
@@ -1848,9 +1932,9 @@ async def seed_data(force: bool = False, user=Depends(current_user)):
         if not default_tenant:
             default_tenant = {
                 "id": str(uuid.uuid4()),
-                "name": "TabSIS Demo Kooperatifi",
+                "name": "Toprax Demo Kooperatifi",
                 "slug": "default",
-                "contact_email": "demo@tabsis.local",
+                "contact_email": "demo@toprax.local",
                 "plan": "deneme",
                 "status": "aktif",
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -2470,12 +2554,12 @@ register_integration_routes(api_router, db, current_user, is_admin, log_audit=lo
 # Veri Giriş modülü (Sprint 4a) — sözleşme, ekim, toprak, sulama, operasyon,
 # lojistik, kantar, e-belge, IoT, drone, parsel düzenleme
 from data_entry import register_data_entry_routes
-register_data_entry_routes(api_router, db, current_user, require_permission, log_audit)
+register_data_entry_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # ProductionCycle — Üretim Sezonu (IT-05 / Sprint A2) — ikinci omurga:
 # Farmer → Parcel → ProductionCycle → Contract/Planting/SoilSample.
 from production_cycles import register_production_cycle_routes
-register_production_cycle_routes(api_router, db, current_user, require_permission, log_audit)
+register_production_cycle_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Tenant (Kurum) Yönetimi (Sprint 4c) — SADECE platform_admin, BİLEREK raw_db kullanır
 from tenants import register_tenant_routes
@@ -2539,7 +2623,7 @@ register_map_snapshot_routes(api_router, db, current_user, require_permission, l
 # bu yüzden support routes'tan ÖNCE tanımlı olmasına gerek yok (import
 # zamanında çözülür) ama okunabilirlik için Ledger önce kaydedilir.
 from ledger import register_ledger_routes
-register_ledger_routes(api_router, db, current_user, require_permission, log_audit)
+register_ledger_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Organizasyon Hiyerarşisi (IT-07b / FAZ 3 devam) — OrganizationUnit/Position/
 # UserPosition + org-chart + manager-chain resolver. approval.py bunu tüketir.
@@ -2647,6 +2731,34 @@ register_platform_core_routes(api_router, db, current_user, require_permission, 
 # Experience Profile Modeli (IT-34 / FAZ 12 — Mobil başlangıç).
 from experience_profile import register_experience_profile_routes
 register_experience_profile_routes(api_router, db, current_user, require_permission, log_audit)
+
+# FAZ 18 / IT-47..53 — Agricultural Intelligence Engine (AI Vision).
+# Knowledge Library + Confidence Engine + Cloud Escalation + Tenant Kota +
+# Active Learning + MLOps Model Registry. Async job worker request context
+# DIŞINDA çalıştığı için hem `db` (tenant scoped uçlar) hem `raw_db` (worker)
+# geçilir (god_mode.py'nin raw_db kullanma gerekçesiyle AYNI).
+from ai_engine import register_ai_engine_routes
+register_ai_engine_routes(api_router, db, raw_db, current_user, require_permission, log_audit, require_feature)
+
+# FAZ 9.5 / IT-28.1 — Remote Sensing (Uzaktan Algılama, EOSDA entegrasyonu).
+# Yeni backend paketi (remote_sensing/) — satellite_provider.py'yi KIRMAZ,
+# EOSDA onun yeni bir alt sınıfı gibi eklenir (REMOTE-SENSING-EOSDA-PROMPT.md
+# Karar 1). Tarama Politikası (Karar 2) + Integration Center EOSDA tipi
+# (Karar 3) + Monitoring + Task yönetimi + Communication Policy köprüsü.
+from remote_sensing import register_remote_sensing_routes
+register_remote_sensing_routes(api_router, db, current_user, require_permission, log_audit)
+
+# Duyurular — açılışta popup + Bildirimler çekmecesinde okundu-takipli yayın.
+from announcements import register_announcement_routes
+register_announcement_routes(api_router, db, current_user, require_permission, log_audit)
+
+# God Mode (Faz 1 + Faz 2) — tenant olarak gir/sil/sağlık/modül/lisans +
+# platform geneli istatistik + sistem sağlığı + API çağrı istatistikleri.
+# BİLİNÇLİ OLARAK raw_db (tenant_context.py'nin GLOBAL_COLLECTIONS
+# felsefesiyle AYNI) — platform_admin'in kendi context'inde tenant_id
+# olmadığından TenantScopedDB'nin otomatik filtresine güvenilemez.
+from god_mode import register_god_mode_routes
+register_god_mode_routes(api_router, raw_db, current_user, log_audit)
 
 app.include_router(api_router)
 

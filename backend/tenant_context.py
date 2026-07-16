@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Tenant İzolasyon Altyapısı (Sprint 4c)
+Toprax — Tenant İzolasyon Altyapısı (Sprint 4c)
 =====================================================================
 Her kooperatif/kurum ayrı bir "tenant" — verileri birbirinden TAMAMEN
 İZOLE. Bunu uygulamanın yüzlerce mevcut sorgu satırını tek tek

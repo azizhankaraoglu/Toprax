@@ -35,20 +35,20 @@ def register_dev_portal_routes(api_router):
 
     @api_router.get("/dev-portal/postman-collection")
     async def download_postman_collection():
-        path = POSTMAN_DIR / "tabsis.postman_collection.json"
+        path = POSTMAN_DIR / "toprax.postman_collection.json"
         if not path.exists():
             raise HTTPException(404, "Postman collection henüz üretilmemiş -- "
                                        "scripts/generate_postman_collection.py çalıştırın")
         return FileResponse(path, media_type="application/json",
-                              filename="tabsis.postman_collection.json")
+                              filename="toprax.postman_collection.json")
 
     @api_router.get("/dev-portal/postman-environment")
     async def download_postman_environment():
-        path = POSTMAN_DIR / "tabsis.postman_environment.json"
+        path = POSTMAN_DIR / "toprax.postman_environment.json"
         if not path.exists():
             raise HTTPException(404, "Postman environment henüz üretilmemiş")
         return FileResponse(path, media_type="application/json",
-                              filename="tabsis.postman_environment.json")
+                              filename="toprax.postman_environment.json")
 
     @api_router.get("/dev-portal/changelog")
     async def get_changelog():

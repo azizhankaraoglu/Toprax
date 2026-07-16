@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Platform Core: Feature Flags + Module Manifest + Licensing
+Toprax — Platform Core: Feature Flags + Module Manifest + Licensing
 İskeleti + Health Center (IT-33 / FAZ 11 TAMAMLANDI)
 =====================================================================
 Bu iterasyonun amacı yeni bir özellik DEĞİL, bundan sonraki her modülün
@@ -103,6 +103,37 @@ def make_require_feature(db):
     return require_feature
 
 
+async def get_tenant_license(db, tenant_id: str) -> Optional[dict]:
+    """God Mode'un bir tenant için tanımladığı lisansı döner (yoksa None —
+    `check_license()`'daki AYNI "lisans yoksa serbest" felsefesi). `db`
+    tenant-scoped normal `db` olabilir (o tenant'ın kendi request context'i
+    içinde çağrılır) — `god_mode.py` lisansı YARATIRKEN `tenant_id` alanını
+    EXPLICIT olarak scope_value ile AYNI değere stamp'lediği için bu sorgu
+    TenantScopedCollection'ın otomatik `{"tenant_id": tid}` filtresiyle de
+    doğru satırı bulur, ayrı bir raw_db gerekmez."""
+    return await db.licenses.find_one(
+        {"scope_type": "tenant", "scope_value": tenant_id, "is_active": True}, {"_id": 0}
+    )
+
+
+async def check_and_consume_limit(db, tenant_id: str, limit_field: str, current_usage: int, label: str) -> None:
+    """Kullanıcı/parsel/AI/SMS/WhatsApp/depolama limitlerinin HEPSİNİN
+    kullandığı tek nokta — `current_usage` çağıran tarafından hesaplanır
+    (kaynak türüne göre farklı bir sayım sorgusu gerekir), bu fonksiyon
+    SADECE lisansı okuyup karşılaştırır. Limit tanımsız/lisans yoksa
+    SESSİZCE izin verir (`check_license()` ile AYNI "tanımsız = serbest"
+    kararı). Aşılmışsa 403 fırlatır."""
+    lic = await get_tenant_license(db, tenant_id)
+    if not lic:
+        return
+    limit = lic.get(limit_field)
+    if limit is None:
+        return
+    if current_usage >= limit:
+        raise HTTPException(403, f"Lisans limiti aşıldı: {label} ({current_usage}/{limit}). "
+                                  f"Limiti artırmak için platform yöneticinizle iletişime geçin.")
+
+
 async def check_license(db, scope_type: str, scope_value: str) -> bool:
     """Basit kontrol — lisans tanımlanmamışsa varsayılan SERBEST (bilinçli
     iskelet, gerçek satış/faturalama entegrasyonu kapsam dışı)."""
@@ -124,12 +155,27 @@ class LicenseCreate(BaseModel):
     plan: str = "standard"             # trial | standard | premium
     expires_at: Optional[str] = None
     note: Optional[str] = None
+    # God Mode — modülleri ayrı satmak için limit alanları. Hepsi opsiyonel:
+    # None = sınırsız (bkz. check_and_consume_limit, "tanımsız = serbest"
+    # felsefesi check_license()'daki "lisans yoksa serbest" ile AYNI).
+    user_limit: Optional[int] = None
+    parcel_limit: Optional[int] = None
+    storage_limit_mb: Optional[int] = None
+    ai_limit: Optional[int] = None             # aylık AI isteği
+    sms_limit: Optional[int] = None            # aylık SMS
+    whatsapp_limit: Optional[int] = None       # aylık WhatsApp
 
 
 class LicenseUpdate(BaseModel):
     plan: Optional[str] = None
     expires_at: Optional[str] = None
     is_active: Optional[bool] = None
+    user_limit: Optional[int] = None
+    parcel_limit: Optional[int] = None
+    storage_limit_mb: Optional[int] = None
+    ai_limit: Optional[int] = None
+    sms_limit: Optional[int] = None
+    whatsapp_limit: Optional[int] = None
 
 
 async def _integration_status(db, itype: str) -> dict:
@@ -259,6 +305,15 @@ def register_platform_core_routes(api_router, db, current_user, require_permissi
             {"service": "geoserver", "label": "GeoServer", "status": "kurulu_degil",
              "detail": "Bu ortamda kurulu değil — react-leaflet + genel XYZ servisleri kullanılıyor"},
         ]
+
+        # IT-51 — AI Model Sağlığı: yeni bir izleme ekranı İCAT EDİLMEZ, var
+        # olan Health Center listesine tek satır eklenir (mimari doküman Bölüm 11).
+        try:
+            from ai_engine import ai_model_health_summary
+            prod_model = await db.ai_models.find_one({"status": "production"}, {"_id": 0})
+            results.append(ai_model_health_summary(prod_model))
+        except Exception:
+            pass
 
         # PR-04: şema (migration) versiyonu Health Center'da görünür olmalı
         # (ROADMAP-URUNLESTIRME.md kabul kriteri). Mevcut response şekli

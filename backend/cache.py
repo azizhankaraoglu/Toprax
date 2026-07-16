@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Cache Soyutlaması (IT-33 / FAZ 11 — Platform Core)
+Toprax — Cache Soyutlaması (IT-33 / FAZ 11 — Platform Core)
 =====================================================================
 Redis KURULU DEĞİL (bkz. CLAUDE.md "Uyarlama Kararları") — bilinçli
 olarak basit, tek-process, in-process bir TTL cache. Arayüz (`cache_get_

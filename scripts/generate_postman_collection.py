@@ -11,8 +11,8 @@ Kullanim:
     cd backend && python ../scripts/generate_postman_collection.py
 
 Cikti:
-    postman/tabsis.postman_collection.json
-    postman/tabsis.postman_environment.json
+    postman/toprax.postman_collection.json
+    postman/toprax.postman_environment.json
 
 Insomnia notu: Insomnia, Postman v2.1 collection'larini DOGRUDAN import
 edebiliyor (File > Import > "From Postman") -- bu yuzden ayri bir Insomnia
@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 import os
 os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
-os.environ.setdefault("DB_NAME", "tabsis_postman_gen")
+os.environ.setdefault("DB_NAME", "toprax_postman_gen")
 os.environ.setdefault("JWT_SECRET", "postman-gen-only-not-a-real-secret")
 os.environ.setdefault("PLATFORM_ADMIN_EMAIL", "gen@local")
 os.environ.setdefault("PLATFORM_ADMIN_PASSWORD", "gen-placeholder-pass")
@@ -138,7 +138,7 @@ def build_collection() -> dict:
 
     collection = {
         "info": {
-            "name": "TabSIS API",
+            "name": "Toprax API",
             "description": "OpenAPI semasindan OTOMATIK uretildi -- elle DUZENLEMEYIN, "
                             "scripts/generate_postman_collection.py'yi tekrar calistirin.",
             "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
@@ -171,13 +171,13 @@ def build_collection() -> dict:
 
 def build_environment() -> dict:
     return {
-        "name": "TabSIS - Yerel",
+        "name": "Toprax - Yerel",
         "values": [
             {"key": "base_url", "value": "http://localhost:8001", "enabled": True},
             {"key": "bearer_token", "value": "", "enabled": True,
              "description": "POST /api/auth/login yanitindaki 'token' alani"},
             {"key": "api_key", "value": "", "enabled": True,
-             "description": "Opsiyonel -- PR-24 API key (tabsis_key_...). Doluysa bearer_token yerine kullanilir."},
+             "description": "Opsiyonel -- PR-24 API key (toprax_key_...). Doluysa bearer_token yerine kullanilir."},
         ],
     }
 
@@ -187,8 +187,8 @@ def main():
     collection = build_collection()
     environment = build_environment()
 
-    coll_path = OUT_DIR / "tabsis.postman_collection.json"
-    env_path = OUT_DIR / "tabsis.postman_environment.json"
+    coll_path = OUT_DIR / "toprax.postman_collection.json"
+    env_path = OUT_DIR / "toprax.postman_environment.json"
 
     coll_path.write_text(json.dumps(collection, ensure_ascii=False, indent=2), encoding="utf-8")
     env_path.write_text(json.dumps(environment, ensure_ascii=False, indent=2), encoding="utf-8")

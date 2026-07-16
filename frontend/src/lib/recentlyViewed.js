@@ -5,7 +5,7 @@
  * Cihazlar arası senkron OLMAZ (bilinçli — bu veri kritik değil, sadece
  * "az önce baktığım kayıtlara hızlı dönüş" kolaylığı).
  */
-const KEY = "tabsis_recently_viewed";
+const KEY = "toprax_recently_viewed";
 const MAX_ITEMS = 10;
 
 export function getRecentlyViewed() {

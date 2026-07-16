@@ -52,6 +52,9 @@ from typing import Any, Callable, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+# BULGU 2 (güvenli arama regex'i) + BULGU 4 (Türkçe collation)
+from search_utils import safe_regex, TR_COLLATION
+
 
 @dataclass
 class CrudConfig:
@@ -127,9 +130,16 @@ def build_crud_router(
             if val is not None:
                 query[f] = val
         if q and config.search_fields:
-            query["$or"] = [{f: {"$regex": q, "$options": "i"}} for f in config.search_fields]
+            # BULGU 2 düzeltmesi: girdi safe_regex ile kaçışlanır (regex
+            # injection/ReDoS). Bu base tüm YENİ modülleri etkilediğinden
+            # düzeltme merkezi olarak burada uygulanır.
+            rq = safe_regex(q)
+            query["$or"] = [{f: {"$regex": rq, "$options": "i"}} for f in config.search_fields]
         total = await coll.count_documents(query)
-        cursor = coll.find(query, {"_id": 0}).skip(skip).limit(limit)
+        # BULGU 4: Türkçe collation ile arama/sıralama. collation, cursor
+        # zincirleme metodu yerine find() kwarg'ı olarak verilir (hem gerçek
+        # MongoDB hem de test mock'u bu biçimi güvenle kabul eder).
+        cursor = coll.find(query, {"_id": 0}, collation=TR_COLLATION).skip(skip).limit(limit)
         items = await cursor.to_list(limit)
         return {"items": items, "total": total, "skip": skip, "limit": limit}
 

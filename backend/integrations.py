@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Entegrasyonlar / Ayarlar Modülü
+Toprax — Entegrasyonlar / Ayarlar Modülü
 =====================================================================
 Kullanıcı adı/şifre veya API key gerektiren tüm dış servisler
 (SMS, Email/SMTP, Planet Labs, AI Servisi) burada tek merkezden
@@ -56,13 +56,17 @@ SECRET_FIELDS = {
     "planet_labs": {"api_key"},
     "ai_service": {"api_key"},
     # (2026-07-11) Uydu Görüntü Ekosistemi araştırması sonrası eklendi —
-    # bkz. TABSIS_Uydu_Goruntu_Ekosistemi_Arastirma.md §5/§8 ve
+    # bkz. TOPRAX_Uydu_Goruntu_Ekosistemi_Arastirma.md §5/§8 ve
     # satellite_provider.py. Üçü de mock_mode=True VARSAYILANLA gelir —
     # gerçek anahtar girilip mock_mode kapatılmadan hiçbir gerçek dış
     # çağrı yapılmaz (planet_labs ile AYNI kalıp).
     "sentinel_hub": {"client_secret"},
     "nasa_firms": {"map_key"},
     "up42": {"client_secret"},
+    # (REMOTE-SENSING-EOSDA-PROMPT.md Karar 3) Uzaktan Algılama Sağlayıcısı
+    # EOSDA — Integration Center'a yeni entegrasyon tipi. Auth OAuth DEĞİL,
+    # sabit x-api-key; api_key/client_secret/access_token maskelenir.
+    "eosda": {"api_key", "client_secret", "access_token"},
 }
 
 VALID_TYPES = set(SECRET_FIELDS.keys())
@@ -96,7 +100,7 @@ class IntegrationUpdate(BaseModel):
 
 class SmsTestBody(BaseModel):
     phone: str
-    message: Optional[str] = "TabSIS test mesajı: entegrasyon çalışıyor."
+    message: Optional[str] = "Toprax test mesajı: entegrasyon çalışıyor."
 
 
 class EmailTestBody(BaseModel):
@@ -188,8 +192,8 @@ def _probe_sms_send(provider: str, cfg: dict, phone: str, message: str, timeout:
 
 def _probe_email_send(cfg: dict, to_email: str, timeout: int) -> Tuple[bool, str]:
     try:
-        msg = MIMEText("Bu, TabSIS Ayarlar modülünden gönderilen bir test e-postasıdır.")
-        msg["Subject"] = "TabSIS — Entegrasyon Test E-postası"
+        msg = MIMEText("Bu, Toprax Ayarlar modülünden gönderilen bir test e-postasıdır.")
+        msg["Subject"] = "Toprax — Entegrasyon Test E-postası"
         msg["From"] = cfg.get("from_address", cfg.get("username"))
         msg["To"] = to_email
 
@@ -291,6 +295,29 @@ def _probe_up42(cfg: dict, timeout: int) -> Tuple[bool, str]:
         )
         ok = resp.status_code == 200 and "access_token" in resp.json()
         return ok, f"UP42 kimlik doğrulaması: HTTP {resp.status_code}"
+    except Exception as e:
+        return False, f"Bağlantı hatası: {e}"
+
+
+def _probe_eosda(cfg: dict, timeout: int) -> Tuple[bool, str]:
+    """EOSDA x-api-key doğrulaması — görüntü/istatistik task'ı OLUŞTURMAZ,
+    sadece anahtarın erişilebilirliğini test eder (trial 1000 istek limiti
+    boşa harcanmasın diye hafif bir çağrı)."""
+    api_key = cfg.get("api_key")
+    if not api_key:
+        return False, "Önce EOSDA API Key girilmeli"
+    if cfg.get("mock_mode", True):
+        return True, "[MOCK MOD] API Key formatı geçerli görünüyor. Gerçek doğrulama için 'mock_mode' kapatılmalı."
+    try:
+        resp = requests.get(
+            "https://api-connect.eos.com/api/gdw/api",
+            headers={"x-api-key": api_key},
+            timeout=timeout,
+        )
+        # 200/400/422 = anahtar tanındı (endpoint parametre bekliyor);
+        # 401/403 = anahtar geçersiz.
+        ok = resp.status_code not in (401, 403)
+        return ok, f"EOSDA x-api-key doğrulaması: HTTP {resp.status_code}"
     except Exception as e:
         return False, f"Bağlantı hatası: {e}"
 
@@ -554,6 +581,8 @@ def register_integration_routes(api_router, db, current_user, is_admin, log_audi
             ok, message = _with_retry(lambda: _probe_nasa_firms(cfg, timeout), retry_count)
         elif itype == "up42":
             ok, message = _with_retry(lambda: _probe_up42(cfg, timeout), retry_count)
+        elif itype == "eosda":
+            ok, message = _with_retry(lambda: _probe_eosda(cfg, timeout), retry_count)
         elif itype == "ai_service":
             ok, message = _with_retry(lambda: _probe_ai_service(provider, cfg, timeout), retry_count)
         else:
@@ -706,6 +735,24 @@ def register_integration_routes(api_router, db, current_user, is_admin, log_audi
         if log_audit:
             await log_audit(db, user, action="test_integration", entity="integration",
                              entity_id="up42", new_value={"ok": ok, "message": message}, request=request)
+        if not ok:
+            raise HTTPException(502, message)
+        return {"status": "ok", "message": message}
+
+    @api_router.post("/integrations/eosda/test")
+    async def test_eosda(request: Request, user=Depends(current_user)):
+        await _check_manage(user)
+        doc = await db.integrations.find_one({"type": "eosda"}, {"_id": 0})
+        cfg = (doc or {}).get("config", {})
+        if not cfg.get("api_key"):
+            raise HTTPException(400, "Önce EOSDA API Key girilmeli")
+        timeout = _resolve_timeout(doc)
+        retry_count = _resolve_retry(doc)
+        ok, message = _with_retry(lambda: _probe_eosda(cfg, timeout), retry_count)
+        await _record_test_result("eosda", ok, message)
+        if log_audit:
+            await log_audit(db, user, action="test_integration", entity="integration",
+                             entity_id="eosda", new_value={"ok": ok, "message": message}, request=request)
         if not ok:
             raise HTTPException(502, message)
         return {"status": "ok", "message": message}

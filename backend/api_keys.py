@@ -1,13 +1,13 @@
 """api_keys.py -- PR-24: Bearer Token / API Key Mekanizmasi (M2M kimlik dogrulama).
 
 Kullanici login JWT'sinden AYRI, makine-makine entegrasyonlar icin. Anahtar
-formati: "tabsis_key_<url-safe-32-byte-secret>". DB'de SADECE sha256 hash'i
+formati: "toprax_key_<url-safe-32-byte-secret>". DB'de SADECE sha256 hash'i
 tutulur -- gercek deger SADECE uretim aninda bir kez donulur, bir daha
 gosterilmez (IT-01 secret maskeleme kurali ile ayni ruh).
 
 MIMARI KARAR (tek entegrasyon noktasi): server.py'deki `current_user`
 dependency'sine KUCUK bir dal eklenir -- Authorization header'i
-"tabsis_key_" ile basliyorsa JWT degil API key'dir, burada dogrulanip
+"toprax_key_" ile basliyorsa JWT degil API key'dir, burada dogrulanip
 SENTETIK bir 'user' dict'i donulur. Boylece TUM mevcut ~370 endpoint
 (hepsi zaten current_user/require_permission kullaniyor) SIFIR ek
 degisiklikle API key'i de kabul eder -- ayni RBAC/Permission mekanizmasi
@@ -32,7 +32,7 @@ from typing import Dict, List, Optional
 from fastapi import HTTPException, Depends, Request
 from pydantic import BaseModel
 
-KEY_PREFIX = "tabsis_key_"
+KEY_PREFIX = "toprax_key_"
 MANAGE_PERMISSION = "settings:integrations_manage"
 
 _rate_windows: Dict[str, deque] = defaultdict(deque)

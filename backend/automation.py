@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Kural Tabanlı Otomatik Görev Oluşturma (IT-24 / FAZ 8 TAMAMLANDI)
+Toprax — Kural Tabanlı Otomatik Görev Oluşturma (IT-24 / FAZ 8 TAMAMLANDI)
 =====================================================================
 `event_bus.py`'nin (IT-24'ün TEMEL kullanımı, IT-27'de formalize edilecek)
 üzerine kurulu basit bir kural motoru: admin bir `AutomationRule`

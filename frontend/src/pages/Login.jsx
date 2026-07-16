@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "@/api";
-import { Wheat, Lock, Mail, Loader2, MessageCircleQuestion, Send, CheckCircle2, X } from "lucide-react";
+import { Wheat, Lock, Mail, Loader2, MessageCircleQuestion, Send, CheckCircle2, X, KeyRound } from "lucide-react";
 
 export default function Login() {
-  const [email, setEmail] = useState("admin@turkseker.com.tr");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+  const [totpRequired, setTotpRequired] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
@@ -54,7 +56,9 @@ export default function Login() {
     setLoading(true);
     setError("");
     try {
-      const { data } = await api.post("/auth/login", { email, password });
+      const body = { email, password };
+      if (totpRequired) body.totp_code = totpCode;
+      const { data } = await api.post("/auth/login", body);
       localStorage.setItem("token", data.token);
       localStorage.setItem("refresh_token", data.refresh_token || "");
       localStorage.setItem("user", JSON.stringify(data.user));
@@ -67,7 +71,16 @@ export default function Login() {
         nav("/");
       }
     } catch (err) {
-      setError(err.response?.data?.detail || "Giriş başarısız");
+      // God Mode hesapları (totp_enabled=True) şifre doğrulandıktan sonra
+      // backend'den "TOTP_REQUIRED" döner — bu, form'u yeniden göndermeden
+      // sadece authenticator kodu alanını açar (e-posta/şifre yeniden
+      // istenmez, ikisi de state'te zaten duruyor).
+      if (err.response?.data?.detail === "TOTP_REQUIRED") {
+        setTotpRequired(true);
+        setError("");
+      } else {
+        setError(err.response?.data?.detail || "Giriş başarısız");
+      }
     } finally {
       setLoading(false);
     }
@@ -152,9 +165,29 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  disabled={totpRequired}
                 />
               </div>
             </div>
+
+            {totpRequired && (
+              <div>
+                <label className="text-xs text-[var(--text-dim)] mb-1.5 block">DOĞRULAMA KODU (AUTHENTICATOR)</label>
+                <div className="relative">
+                  <KeyRound size={16} className="absolute left-4 top-3.5 text-[var(--text-dim)]" />
+                  <input
+                    data-testid="login-totp-input"
+                    className="input pl-11 tracking-[0.3em]"
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="123456"
+                    inputMode="numeric"
+                    autoFocus
+                    required
+                  />
+                </div>
+              </div>
+            )}
 
             {error && <div className="text-sm text-[var(--danger)] bg-red-500/10 border border-red-500/20 rounded-lg p-3">{error}</div>}
 
@@ -263,13 +296,6 @@ export default function Login() {
               )}
             </div>
           )}
-
-          <div className="mt-8 pt-6 border-t border-[var(--border)] text-xs text-[var(--text-dim)] space-y-1">
-            <div className="text-[10px] tracking-widest mb-2">DEMO HESAPLAR</div>
-            <div>admin@turkseker.com.tr / admin123 <span className="text-[var(--primary)]">— Süper Admin</span></div>
-            <div>ahmet.yilmaz@turkseker.com.tr / ahmet123 <span className="text-[var(--text-dim)]">— Fabrika Müdürü</span></div>
-            <div>mehmet.demir@turkseker.com.tr / mehmet123 <span className="text-[var(--text-dim)]">— Ziraat Müh.</span></div>
-          </div>
         </div>
       </div>
     </div>

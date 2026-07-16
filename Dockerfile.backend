@@ -22,7 +22,7 @@ FROM python:3.11-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --uid 1000 tabsis
+    && useradd --create-home --uid 1000 toprax
 
 WORKDIR /app
 
@@ -33,9 +33,9 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.t
 
 COPY . .
 
-RUN mkdir -p /app/uploads && chown -R tabsis:tabsis /app
+RUN mkdir -p /app/uploads && chown -R toprax:toprax /app
 
-USER tabsis
+USER toprax
 
 EXPOSE 8001
 

@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Süreç-İçi Event Bus (IT-24 / FAZ 8 devam)
+Toprax — Süreç-İçi Event Bus (IT-24 / FAZ 8 devam)
 =====================================================================
 ROADMAP'in IT-27'de formalize edeceği genel event-driven altyapının
 TEMEL kullanımı — bu iterasyon SADECE `automation.py`'nin (kural tabanlı
@@ -41,6 +41,12 @@ EVENT_TYPES = {
     "approval_decided": "Onay Kararı Verildi",
     # IT-28 — Inbound Case Yönetimi (case_management.py).
     "case_created": "Case Oluşturuldu / Atandı",
+    # IT-28.1 / Remote Sensing (REMOTE-SENSING-EOSDA-PROMPT.md "Anomali
+    # Tespiti + Communication Policy Entegrasyonu") — RS modülü anomali
+    # döndürünce yayınlar; bildirim mantığı KENDİ modülünde DEĞİL, admin'in
+    # IT-27 kural ekranında tanımladığı politikadadır (KONU 1.4 onaylı/
+    # onaysız akış `requires_approval` ile aynı kuralda çalışır).
+    "remote_sensing_anomaly_detected": "Uzaktan Algılama Anomalisi Tespit Edildi",
 }
 
 _subscribers: Dict[str, List[Callable[..., Awaitable[None]]]] = {}

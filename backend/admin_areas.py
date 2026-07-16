@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — İdari Alanlar + Demografi + Layer v1 (IT-13.6)
+Toprax — İdari Alanlar + Demografi + Layer v1 (IT-13.6)
 =====================================================================
 İl/İlçe/Mahalle sınır geometrilerini (GeoJSON Polygon/MultiPolygon)
 saklar. Sınır verisi SİSTEME GÖMÜLMEZ/SEED EDİLMEZ — kullanıcı

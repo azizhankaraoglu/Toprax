@@ -96,7 +96,7 @@ export default function IntegrationHub() {
         <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">FAZ 11 — PLATFORM CORE</div>
         <h1 className="font-display text-4xl flex items-center gap-2"><Cable size={28}/> Integration Hub</h1>
         <p className="text-[var(--text-dim)] text-sm mt-1">
-          TabSİS dışarıya doğrudan bağlanmaz — tüm 3. parti çağrılar aşağıdaki envanterden geçer.
+          Toprax dışarıya doğrudan bağlanmaz — tüm 3. parti çağrılar aşağıdaki envanterden geçer.
           Webhook kuralları ile iş olaylarını dış sistemlere bildirin.
         </p>
       </header>

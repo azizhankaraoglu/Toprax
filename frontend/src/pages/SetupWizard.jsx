@@ -230,7 +230,7 @@ export default function SetupWizard() {
             <Wheat size={22} className="text-[#052e16]" />
           </div>
           <div>
-            <div className="font-display text-xl text-white">TabSIS Kurulum Sihirbazı</div>
+            <div className="font-display text-xl text-white">Toprax Kurulum Sihirbazı</div>
             <div className="text-xs text-[var(--text-dim)]">İlk kurulum — bu adımlar bir kez yapılır</div>
           </div>
         </div>
@@ -250,7 +250,7 @@ export default function SetupWizard() {
               <p className="text-xs text-[var(--text-dim)] mb-3">
                 .env dosyanızdaki PLATFORM_ADMIN_EMAIL / PLATFORM_ADMIN_PASSWORD ile giriş yapın.
               </p>
-              <input required type="email" placeholder="platform@tabsis.local" value={platformLogin.email}
+              <input required type="email" placeholder="platform@toprax.local" value={platformLogin.email}
                 onChange={(e) => setPlatformLogin((f) => ({ ...f, email: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg bg-black/20 border border-[var(--border)] text-white" />
               <input required type="password" placeholder="Şifre" value={platformLogin.password}

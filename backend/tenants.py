@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Tenant (Kurum) Yönetimi
+Toprax — Tenant (Kurum) Yönetimi
 =====================================================================
 Her kooperatif/kurum ayrı bir tenant olarak tanımlanır. Bu modül SADECE
 "platform_admin" rolündeki kullanıcılar tarafından kullanılır — normal

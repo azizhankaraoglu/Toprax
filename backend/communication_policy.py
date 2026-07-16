@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Communication Policy + Tercih Merkezi + Kara Liste
+Toprax — Communication Policy + Tercih Merkezi + Kara Liste
 (IT-27 / FAZ 9 TAMAMLANDI — Communication Hub)
 =====================================================================
 `event_bus.py`'nin (IT-24'te temeli atıldı) üzerine kurulu, admin
@@ -47,6 +47,10 @@ EVENT_CONTACT_RESOLVERS = {
     "entitlement_created": ("farmer", "farmer_id"),
     "contract_approved": ("farmer", "farmer_id"),
     "task_assigned": ("personnel", "assigned_to"),
+    # Remote Sensing anomali bildirimi — hedef, parselin çiftçisi (payload'da
+    # farmer_id gelir). KONU 1.4: bu event için tanımlanan politikada
+    # requires_approval=True ise önce Ziraat Mühendisi onayına düşer.
+    "remote_sensing_anomaly_detected": ("farmer", "farmer_id"),
 }
 
 DEFAULT_CHANNELS_ENABLED = {k: True for k in CHANNELS}
@@ -57,6 +61,10 @@ class CommunicationPolicyCreate(BaseModel):
     event_type: str
     channels: List[str]
     template_ids: Dict[str, str]
+    # KONU 1.4 — onaylı/onaysız bildirim akışı: True ise bu olayın bildirimi
+    # DOĞRUDAN gönderilmez, önce onay kuyruğuna (Seçenek A) düşer; yetkili
+    # onaylayınca gönderilir. False (varsayılan) = doğrudan gönderim (Seçenek B).
+    requires_approval: bool = False
 
 
 class CommunicationPolicyUpdate(BaseModel):
@@ -64,6 +72,7 @@ class CommunicationPolicyUpdate(BaseModel):
     channels: Optional[List[str]] = None
     template_ids: Optional[Dict[str, str]] = None
     is_active: Optional[bool] = None
+    requires_approval: Optional[bool] = None
 
 
 class BlacklistCreate(BaseModel):
@@ -98,6 +107,18 @@ async def _handle_policy_event(db, event_type: str, payload: dict) -> None:
         {"event_type": event_type, "is_active": True}, {"_id": 0},
     ).to_list(100)
     for policy in policies:
+        # KONU 1.4 — Seçenek A (onaylı): doğrudan göndermek yerine onay kuyruğuna
+        # düşür; yetkili `/communication-policies/pending-approvals/{id}/approve`
+        # ile onaylayınca gerçek gönderim yapılır. Seçenek B (onaysız) = eski akış.
+        if policy.get("requires_approval"):
+            await db.pending_notifications.insert_one({
+                "id": str(uuid.uuid4()), "policy_id": policy["id"], "policy_name": policy["name"],
+                "event_type": event_type, "contact_type": contact_type, "contact_id": contact_id,
+                "channels": policy["channels"], "template_ids": policy.get("template_ids") or {},
+                "payload": {k: str(v) for k, v in payload.items()},
+                "status": "onay_bekliyor", "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            continue
         for channel in policy["channels"]:
             template_id = (policy.get("template_ids") or {}).get(channel)
             if not template_id:
@@ -160,6 +181,54 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
         new = await db.communication_policies.find_one({"id": policy_id}, {"_id": 0})
         await log_audit(db, user, action="update", entity="communication_policy", entity_id=policy_id, old_value=old, new_value=new, request=request)
         return new
+
+    # =================================================================
+    # KONU 1.4 — ONAY BEKLEYEN BİLDİRİMLER (Seçenek A akışı)
+    # =================================================================
+    @api_router.get("/communication-policies/pending-approvals")
+    async def list_pending_notifications(user=Depends(require_permission("communications:view"))):
+        return await db.pending_notifications.find(
+            {"status": "onay_bekliyor"}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+    @api_router.post("/communication-policies/pending-approvals/{item_id}/approve")
+    async def approve_pending_notification(item_id: str, request: Request,
+                                            user=Depends(require_permission("communications:policies_manage"))):
+        item = await db.pending_notifications.find_one({"id": item_id}, {"_id": 0})
+        if not item:
+            raise HTTPException(404, "Onay bekleyen bildirim bulunamadı")
+        if item["status"] != "onay_bekliyor":
+            raise HTTPException(409, "Bu bildirim zaten işlenmiş")
+        sent = 0
+        for channel in item["channels"]:
+            template_id = (item.get("template_ids") or {}).get(channel)
+            if not template_id:
+                continue
+            await send_via_channel(
+                db, channel=channel, contact_type=item["contact_type"], contact_id=item["contact_id"],
+                template_id=template_id, variables=item.get("payload") or {},
+                sent_by=f"onaylı bildirim: {item['policy_name']} ({user.get('email')})", message_kind="operational",
+            )
+            sent += 1
+        await db.pending_notifications.update_one({"id": item_id}, {"$set": {
+            "status": "onaylandi", "approved_by": user.get("email"),
+            "approved_at": datetime.now(timezone.utc).isoformat(), "sent_channels": sent,
+        }})
+        await log_audit(db, user, action="approve", entity="pending_notification", entity_id=item_id,
+                         new_value={"sent_channels": sent}, request=request)
+        return {"status": "onaylandi", "sent_channels": sent}
+
+    @api_router.post("/communication-policies/pending-approvals/{item_id}/reject")
+    async def reject_pending_notification(item_id: str, request: Request,
+                                           user=Depends(require_permission("communications:policies_manage"))):
+        item = await db.pending_notifications.find_one({"id": item_id}, {"_id": 0})
+        if not item:
+            raise HTTPException(404, "Onay bekleyen bildirim bulunamadı")
+        await db.pending_notifications.update_one({"id": item_id}, {"$set": {
+            "status": "reddedildi", "approved_by": user.get("email"),
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+        }})
+        await log_audit(db, user, action="reject", entity="pending_notification", entity_id=item_id, request=request)
+        return {"status": "reddedildi"}
 
     # =================================================================
     # KARA LİSTE (KVKK)

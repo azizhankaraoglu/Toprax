@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Destek Kataloğu + Destek Talep Süreci Modülü (IT-18 / FAZ 7 — UFYD)
+Toprax — Destek Kataloğu + Destek Talep Süreci Modülü (IT-18 / FAZ 7 — UFYD)
 =====================================================================
 UFYD (Üretim Finans Yaşam Döngüsü) omurgasının ilk halkası:
 

@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Güvenlik Yardımcıları
+Toprax — Güvenlik Yardımcıları
 =====================================================================
 Şifre hash'leme (bcrypt) ve refresh token üretimi.
 

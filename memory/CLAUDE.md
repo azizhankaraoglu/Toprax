@@ -1,14 +1,15 @@
-# CLAUDE.md — TABSİS Proje Hafızası
+# CLAUDE.md — TOPRAX Proje Hafızası
 
 > Bu dosya her oturumun başında okunmalıdır. Amaç: yeni bir Claude oturumunun
 > projeyi sıfırdan keşfetmeden doğru kararlar verebilmesi.
-> Son güncelleme: 2026-07-10 (IT-24 sonrası — FAZ 8 TAMAMLANDI: Otomasyon Motoru + Saha Raporları + Modül Dashboard'u)
+> Son güncelleme: 2026-07-11 (güvenlik denetimi + FAZ 13-17 (IT-36..46) roadmap'e eklendi + FAZ 13 (IT-36..39) TAMAMLANDI — bkz. dosya sonu "Mevcut Durum")
+> Son güncelleme (devam): 2026-07-11 — ROADMAP-URUNLESTIRME.md (on-premise urunlestirme, PR-01..PR-26 + P1-P4) TAMAMLANDI; FAZ 18 (Agricultural Intelligence Engine, IT-47..53) PLANLANDI (`AI-VIZYON-PLATFORMU-MIMARI.md` + ROADMAP-DETAY-TAM.md) ama HENUZ KOD YAZILMADI — bkz. memory/CLAUDE.md Bolum 11-12.
 
 ---
 
 ## 1. Proje Kimliği
 
-**TABSİS (Dijital Tarım Platformu)** — kooperatif/fabrika/kamu kurumlarının
+**TOPRAX (Dijital Tarım Platformu)** — kooperatif/fabrika/kamu kurumlarının
 çiftçi, parsel, sözleşme, üretim, finans ve saha operasyonlarını yönettiği
 multi-tenant tarımsal operasyon platformu.
 
@@ -64,6 +65,12 @@ bu kavramlar soyutlama arkasında Mongo/in-process karşılıklarla geliştirili
 | `ledger.py` | **(IT-19 / FAZ 7 UFYD devam) Financial Ledger + Cari Hesap** — `ledger_entries` koleksiyonu **IMMUTABLE**: bilinçli olarak `PUT`/`DELETE /ledger/{id}` YOK (405 döner), sadece `POST /ledger` (yeni kayıt) ve `POST /ledger/{id}/reverse` (orijinali BOZMADAN ters işaretli YENİ kayıt ekler, `is_reversal`/`reversed_entry_id` ile referans verir; aynı kayıt iki kez reverse edilmeye çalışılırsa 409). `create_ledger_entry()` — diğer modüllerin (support.py, ileride IT-20) doğrudan import edip çağırdığı tek giriş noktası, whitelist (`ENTRY_TYPES`: destek_talebi/destek_teslimi/avans/cari_hareket/hakedis/mahsup/prim/kesinti/odeme/iade) HER ZAMAN buradan geçer. `GET /production-cycles/{id}/current-account` — `by_type` (entry_type→toplam) + `balance` (tüm kayıtların toplamı) + `entries` listesi döner. **`db.finance` ile KARIŞTIRMA** — Sprint 1-4d'den kalma, farmer_id bazlı (ProductionCycle'a bağlı DEĞİL), sadece seed_data'da statik üretilen, Dashboard/FarmerHome bakiye özetinde salt-okunur kullanılan ESKİ bir demo koleksiyonu; bu iterasyon ona DOKUNMADI (kantar_records'ın IT-05'te bilinçli kapsam dışı bırakılmasıyla AYNI karar). Yeni gerçek UFYD Ledger'ı `db.ledger_entries`'tir. |
 | `entitlement.py` | **(IT-20 / FAZ 7 UFYD devam) Hakediş Motoru** — girdiler: tartım/tonaj/kalite `kantar_records`'tan (bu iterasyonla eklenen opsiyonel `production_cycle_id` alanı üzerinden — bkz. `data_entry.py` notu), kota `contracts.kota_ton` toplamından, **birim fiyat bilinçli olarak Contract'a GÖMÜLMEDİ** — calculate/finalize isteğinin bir parametresi (fabrika fiyatı sezon geneli açıklanır, sözleşmeye gömülü olsaydı her güncellemede tüm sözleşmeler elle güncellenirdi). `calculate_gross_entitlement()`/`calculate_entitlement_chain()`/`resolve_definition_amount()` SAF fonksiyonlar (DB/HTTP'den bağımsız, bkz. `tests/test_entitlement.py` — 12 test, hepsi geçiyor). Hesap zinciri ROADMAP'teki sırayla BİREBİR: Brüt Hakediş → Toplam Kesinti (mahsup+kesintiler) → Net Hakediş → (+Primler) → Ödenecek Tutar. `POST /entitlement/calculate` dry-run (hiçbir şey yazmaz); `POST /entitlement/{id}/finalize` idempotent (aynı production_cycle_id için `entitlements` koleksiyonunda kayıt varsa 409) — `hakedis`(+brüt)/`kesinti`(-tutar,her tanım için ayrı)/`prim`(+tutar,her tanım için ayrı) YENİ LedgerEntry'ler yazar. **`mahsup` kaydı BİLİNÇLİ OLARAK 0 TUTARLIDIR** (audit/iz amaçlı) — bu sezonun destek borcu zaten IT-18/19'un otomatik yazdığı `destek_teslimi` negatif kayıtlarında Ledger bakiyesine dahil; ayrıca negatif bir "mahsup" kaydı daha yazmak borcu İKİNCİ KEZ düşüp bakiyeyi bozardı (double-counting) — bu modülün en kritik tasarım kararı, bkz. modül docstring'i. Prim/Kesinti tanımları (`entitlement_definitions`) `calculation_type`: `sabit_tutar`/`yuzde`/`formul` — `formul` HER ZAMAN `override_amount` ister (gerçek formül motoru kapsam dışı, bilinçli sadeleştirme). **Kapsam notu:** ROADMAP'in IT-20 bölümünde IT-18'in aksine ayrı bir "UI:" maddesi YOK — IT-05→IT-06 emsaliyle tutarlı, bu iterasyon BİLİNÇLİ OLARAK sadece backend. |
 | `reconciliation.py` | **(IT-21 / FAZ 7 UFYD TAMAMLANDI) İcmal Belgesi + Finansal Simülasyon + UFYD Dashboard** — `entitlement.py`'nin closure DIŞINA taşınan `gather_and_compute_entitlement()`'ı (query_engine.py'nin `execute_query()`'i extras.py'ye açmasıyla AYNI desen, IT-10) DOĞRUDAN import edip override parametreleriyle (tonnage/kota/destek_mahsup) çağırır — sonuç ASLA yazılmaz, yanıt HER ZAMAN `{"simulation": true, ...}` zarfında döner (kabul kriteri: "simülasyon ile gerçek hakediş ayrı response şeması"). İcmal PDF'i `extras.py`'deki `/musthsil/{farmer_id}/{season}` ile AYNI reportlab deseni — Helvetica Türkçe karakter desteklemediği için metin BİLİNÇLİ OLARAK ASCII'ye yakın (müstahsil makbuzuyla tutarlı, yeni font bağımlılığı YOK). `POST /reconciliation/{cycle_id}` idempotent (zaten üretilmişse mevcut kaydı döner, entitlement yoksa 404); `GET /reconciliation/{id}/pdf`+`/approve`+`/object` — sahiplik kontrolü `_check_reconciliation_access()` ile (ciftci rolü SADECE kendi farmer_id'si, staff `reconciliation:view`/`manage` permission'ı ile) — cross-farmer erişim denemesi gerçek tarayıcıda 403 ile doğrulandı. İtiraz (`objection_reason`) IT-28'in Case modeline bağlanana kadar basit bir alan (ROADMAP notuyla tutarlı bilinçli sadeleştirme). `GET /ufyd/dashboard` Ledger/SupportRequest/Entitlement'tan CANLI hesaplanır — `cash_need` v1'de bilinçli olarak `pending_payments` ile AYNI (henüz ayrı bir ödeme-takip mekanizması yok). |
+| `lms.py` | **(IT-29 / FAZ 10 başlangıç) Farmer LMS** — `course_categories` (support_types kalıbıyla AYNI, idempotent seed) + `Course`/`CourseContent` (8 içerik tipi, dosyalar mevcut `storage.py`/`/uploads` ile — YENİ yükleme mekanizması YOK) + 7 hedefli atama (`user`/`user_group`/`role`/`segment`/`production_cycle`/`region`/`il_ilce` → HER ZAMAN gerçek `users.id`'ye çözülür, segment Query Engine'i kullanır) + `user_course_status` (5 durum + computed `suresi_doldu`). `GET/POST /lms/my-courses*` permission GEREKTİRMEZ — herkese (çiftçi+personel) açık self-servis. |
+| `experience_profile.py` | **(IT-34 / FAZ 12) Experience Profile Modeli** — `ExperienceProfile` CRUD (dashboard_widgets/menu_items/quick_actions/map_tools/ai_features opak listeleri, map_workspace.py ile AYNI felsefe) + `users.experience_profile_id` atama + `GET /me/experience` (mobil PWA'nın açılışta çektiği birleşik config, DEFAULT_EXPERIENCE fallback'i ile). |
+| `platform_core.py` | **(IT-33 / FAZ 11) Platform Core** — Feature Flags (`feature_flags` koleksiyonu + `make_require_feature`, permissions.py'nin `make_require_permission` kalıbıyla AYNI) + Module Manifest (`MODULE_MANIFESTS` sabit registry) + Licensing İskeleti (`licenses` CRUD + `check_license()`) + Health Center (integrations.py'nin `enabled`/`last_success_at`'ini tüketir, YENİDEN ağ çağrısı yapmaz). |
+| `cache.py` | **(IT-33 / FAZ 11) Cache Soyutlaması** — Redis KURULU DEĞİL, basit in-process TTL cache (`cache_get_or_set`/`cache_invalidate_prefix`); `permissions.get_effective_permissions()` (30sn TTL) ve `server.py`'nin `/regions` ucu (60sn TTL) buradan besleniyor. |
+| `ai_provider.py` | **(IT-32 / FAZ 11) AI Provider Soyutlaması** — `satellite_provider.py`/`channel_providers.py` ile AYNI ABC+factory kalıbı; extras.py'nin AI Hastalık Tespiti + AI Copilot'ta tekrarladığı doğrudan OpenAI/Gemini/Anthropic çağrısı buraya konsolide edildi. |
+| `integration_hub.py` | **(IT-32 / FAZ 11) Integration Hub + Webhook Engine** — `INTEGRATION_REGISTRY` (AI/İletişim/Mekânsal envanteri) + `WebhookRule` CRUD, event_bus.py'nin (IT-24/27) HER event_type'ına bağlanan `_handle_webhook_event` (automation.py'nin kalıbıyla AYNI) gerçek `requests.post` ile dış URL'e teslim eder, `webhook_deliveries`'e loglar; `POST /webhook-rules/{id}/test` anlık deneme. |
 | `field_ops.py` | **(IT-22 / FAZ 8 Saha Operasyonları başlangıcı) İş Emri / Görev / Ziyaret Üçlü Modeli** — BİLİNÇLİ OLARAK YENİ/AYRI koleksiyonlar (`work_orders`/`field_tasks`/`visits`) — Sprint 4'ten kalma `db.tasks` (data_entry.py'deki basit Operasyon Görevi: düz `task_type` metni, 4 durum, work order/checklist/visit YOK, Operasyon.jsx+Hızlı İşlemler+Harita "+ Görev" kullanıyor) ile KARIŞTIRILMAZ/BİRLEŞTİRİLMEZ (ROADMAP'in "aynı tabloya sıkıştırılmamalı" ilkesi). `task_types` kataloğu (idempotent 12 varsayılan seed) — `default_checklist` her yeni FieldTask'a KOPYALANIR (task'ın kendi checklist'i sonradan bağımsız değişir). 11 durumlu SIRALI `TASK_ALLOWED_TRANSITIONS` (production_cycles.py/support.py'deki ALLOWED_TRANSITIONS kalıbıyla AYNI) — `reddedildi`'den `planlandi`'ye YENİDEN PLANLAMA dalı özel olarak eklendi (roadmap'te tek yönlü örnekler farklı, burada "atandi"dan hem kabul_edildi hem reddedildi'ye dallanabiliyor). **KRİTİK KURAL:** `kapandi` geçişi checklist'teki TÜM kalemler `done=true` DEĞİLSE 400 döner (kabul kriteri). Sahiplik modeli — `_check_task_access()`: görevi ÜSTLENEN kullanıcı (`assigned_to`) kendi görevini (transition/checklist/visit) `field_ops:manage` OLMADAN yönetebilir (reconciliation.py'nin `_check_reconciliation_access()` ile AYNI desen); başkasının görevine dokunmak `field_ops:manage` ister — gerçek backend'de saha_personeli kendi görevini yönetip BAŞKASININ görevinde 403 aldı, doğrulandı. `POST /work-orders` parcel_ids × assigned_users round-robin dağıtımıyla TOPLU FieldTask üretir (her task TaskType'ın default_checklist'ini miras alır). Visit 1:N (bir task için birden fazla ziyaret) gerçek veriyle doğrulandı. **Kapsam notu:** ROADMAP'in IT-22 bölümünde ayrı bir "UI:" maddesi YOK ve IT-23 zaten bu modelin Kanban/Takvim/Harita UI'ını kapsıyor — bu iterasyon BİLİNÇLİ OLARAK sadece backend (IT-05→IT-06, IT-20 emsalleriyle tutarlı). **(IT-23 eklemeleri):** `GET /field-ops/assignable-users` (personel seçim listesi — `settings:users_view` İSTEMEZ, field_ops:manage sahibi bir ziraat_muhendisi kullanıcı yönetimi izni olmadan da saha personelini görüp atayabilmeli, bilinçli bir izin-kapsamı ayrımı); `create_visit` artık `farmer_id`/`parcel_id`/`production_cycle_id`/`task_type_id`'yi task'tan DENORMALİZE ediyor (Ziyaret Geçmişi sekmesinin join'süz filtrelenebilmesi için) ve `GET /visits` bu üç alanı da filtre olarak kabul ediyor. |
 
 **Frontend sayfaları:** Dashboard, GlobalSearch (IT-10 — tek kutu arama, route
@@ -310,6 +317,15 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
    Yeni tasarım dili YASAK. `data-testid` eklenir.
 10. **Idempotent seed:** her modülün seed endpoint'i tekrar çağrılabilir olmalı
     (`_ensure_*` kalıbı, bkz. field_definitions.py).
+11. **Dashboard widget'ları drill-down olmalı (KONU 3):** Hiçbir widget/kart
+    sadece statik sayı göstermez; tıklandığında widget'ın temsil ettiği veriyle
+    önceden filtrelenmiş ilgili liste/detay ekranına götürür (ör. "Riskli
+    Parsel" kartı → `/parseller?risk=1`). Yeni eklenen her dashboard için bu
+    VARSAYILAN davranıştır. Teknik kalıp: kart `useNavigate` ile hedef
+    route'a + query param'a gider; hedef liste ekranı `useSearchParams` ile
+    param'ı okuyup mevcut filtre mekanizmasına (SmartDataGrid `initialFilters`
+    veya sayfa filtre state'i) uygular — yeni bir sorgu yolu İCAT EDİLMEZ
+    (widget'lar zaten Query Engine'den beslenir, IT-14).
 
 ## 5. Bilinen Tuzaklar
 
@@ -1480,8 +1496,588 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   **FAZ 8 (Saha Operasyonları) TAMAMEN BİTTİ (IT-22+IT-23+IT-24)** —
   Oturum Teslim Protokolü'ne göre bir fazın tüm IT'leri bittiğinde zip
   alınır.
-- ⏭️ Sıradaki iş: `ROADMAP-DETAY-FAZ7-12.md` (veya güncel roadmap dosyası)
-  → FAZ 9 (Sprint 9 — Communication Hub), IT-25'ten başlayarak.
+- ✅ **IT-25 (FAZ 9 başlangıç — Communication Hub: Kanal Provider Pattern +
+  Şablon Yönetimi + Kişi Kartı İletişim Sekmesi):** Yeni `backend/
+  channel_providers.py` — `satellite_provider.py` ile AYNI ABC+factory
+  kalıbı: `ChannelProvider` (ABC, `send(recipient, content, subject)` →
+  `{ok, status, detail, provider_ref}`), 5 kanal (SMS/E-Posta/WhatsApp/
+  Push/Sesli Arama) için `SimulatedXProvider` (alıcı boşsa başarısız,
+  doluysa her zaman "teslim_edildi" — gerçek ağ çağrısı YOK, roadmap'in
+  "ilk fazda hepsi simüle" kararıyla tutarlı), `get_channel_provider()`
+  factory (şimdilik hep simüle döner, gerçek sağlayıcı FAZ 9.5+ ile
+  buraya eklenir, çağıran kod DEĞİŞMEZ). Yeni `backend/communications.py`
+  — `GET /channels`; `templates` koleksiyonu (`GET/POST/PUT /templates`,
+  `GET /templates/{id}/versions`) — `subject`/`body` değişen her PUT'tan
+  ÖNCE eski hali `template_versions`'a yazılıp `version` artırılır (basit
+  "önceki sürümü sakla", event sourcing DEĞİL — gerçek tarayıcıda v1→v2
+  geçişi + eski sürümün `template_versions`'ta korunduğu doğrulandı);
+  `POST /communications/send` — `contact_type` (`farmer`/`personnel`) +
+  `contact_id`'den alıcı adresini/numarasını OTOMATİK çözer (kanal→alan
+  eşlemesi: sms/whatsapp/voice→phone, email→email, push→simülasyonda
+  gerçek cihaz token'ı olmadığından kişinin adı hedef kabul edilir),
+  `template_id` verilirse şablon render edilir (`{{FarmerName}}` gibi
+  basit `re.sub` değişken değişimi — entitlement.py'nin `formul`
+  kesintisi gibi bir mini-DSL İSTENMEDİ, sabit 6 değişken için gereksiz;
+  `FarmerName` kişi kaydından OTOMATİK doldurulur, diğer 5 değişken
+  çağıranın `variables` sözlüğünden), `communications` koleksiyonuna
+  timeline kaydı yazar (`support.py`'nin basit `notifications` insert'i
+  ile KARIŞTIRILMAMALI — AYRI/önceki bir kalıp, dokunulmadı). `GET
+  /contacts/{id}/timeline?contact_type=...` — kişi kartı İletişim
+  sekmesinin veri kaynağı. **Comm Hub'ın event bus'a (`event_bus.py`,
+  IT-24) gerçek olay-tetiklemeli bağlanması BİLİNÇLİ OLARAK bu
+  iterasyonun DIŞINDA** — IT-27'nin (Communication Policy) kapsamı; bu
+  iterasyon SADECE elle tetiklenen (kişi kartından "Gönder" butonu)
+  gönderim akışını + şablon yönetimini + timeline'ı kurar.
+  `permissions.py`'ye yeni `communications` modülü (`view`/`send`/
+  `templates_manage`) — `templates_manage` BİLİNÇLİ OLARAK sadece üst
+  katman rollere (`support:catalog_manage` emsaliyle tutarlı, ilce_
+  yoneticisi/ziraat_muhendisi'ne verilmedi), ilce_yoneticisi/ziraat_
+  muhendisi `view`+`send`, saha_personeli sadece `view`.
+  Frontend: yeni `components/CommunicationTab.jsx` (VisitHistory.jsx ile
+  AYNI kalıp — `contactType`/`contactId`/`contactName` prop'una göre
+  kendi verisini çeker) — kanal butonları (kişi kartından tek tıkla
+  gönderim, Sprint 6 context-aware CRUD prensibiyle uyumlu) + opsiyonel
+  şablon seçimi (seçilirse içerik/konu salt-okunur) + gönderim formu +
+  altında İletişim Geçmişi (timeline). `FarmerDetail.jsx`'e yeni
+  "İletişim" tab'ı (`CommunicationTab contactType="farmer"`) — Ziyaret
+  Geçmişi'nin hemen yanına eklendi, personel (`contactType="personnel"`)
+  tarafı BİLİNÇLİ OLARAK bu iterasyonun kapsamı DIŞINDA (UserManagement.jsx'in
+  ayrı bir "kişi kartı" detay sayfası yok, Sözleşme/Ekim'in IT-03'te
+  detay sayfası eklenmemesiyle AYNI kapsam kararı). Yeni `pages/
+  TemplateManagement.jsx` (`SablonYonetimi` export, route `/sablon-
+  yonetimi`, Layout.jsx SİSTEM grubunda "Destek Kataloğu"nun hemen
+  altında, `adminTierOnly`) — `SupportCatalog.jsx` ile AYNI liste+
+  QuickAddPanel kalıbı (oluşturma), satır bazlı basit inline düzenleme
+  (versiyon artışını tetikler). **Gerçek tarayıcıda uçtan uca
+  doğrulandı:** Şablon Yönetimi'nden bir SMS şablonu oluşturuldu;
+  Mehmet Yılmaz'ın (TS-00001) kartındaki yeni İletişim sekmesinden bu
+  şablon seçilip gönderildi — `POST /communications/send` 200 döndü,
+  timeline'da `{{FarmerName}}`'in "Mehmet Yılmaz" olarak render edildiği
+  (diğer 5 değişkenin değer verilmediği için OLDUĞU GİBİ kaldığı, beklenen
+  davranış) ve durumun "Teslim Edildi" olduğu doğrulandı; ayrıca API
+  üzerinden email/whatsapp/push/voice kanallarının da (recipient alanı
+  farmer kaydından doğru çözülerek: email→ts-00001@ciftci.tr, phone
+  bazlı kanallar→05379478454, push→isim) başarıyla `teslim_edildi`
+  döndüğü ve şablon PUT'unun `version:1→2` + eski halin
+  `template_versions`'ta korunduğu doğrulandı. Doğrulama sırasında
+  oluşan test kayıtları (`templates`/`template_versions`/`communications`)
+  doğrulama sonrası doğrudan MongoDB'den temizlendi (IT-24 emsaliyle
+  AYNI — bu koleksiyonlarda henüz bir DELETE endpoint'i yok, convention
+  #3 "soft delete" ile tutarlı, temizlik sadece test verisi içindi).
+- ✅ **IT-26 (FAZ 9 devam — Kampanya + Segment + Planlı Gönderim + Onay +
+  Retry/Fallback Zinciri):** Segment Yönetimi AYRI bir koleksiyon İCAT
+  ETMEDİ — `saved_queries.py`'nin (IT-09) zaten sağladığı "Query Engine
+  DSL'ini adlandırılmış + tekrar kullanılabilir kayıt olarak saklama"
+  işlevini DOĞRUDAN kullanıyor: `Campaign.segment_query_id` bir
+  `saved_queries` kaydına işaret eder (module HER ZAMAN "farmers").
+  **Dürüstlük notu:** Query Engine'in `farmers` modülünde ROADMAP'in
+  verdiği "Hakedişi oluşanlar"/"Son 90 gündür ziyaret edilmeyenler" gibi
+  HESAPLANMIŞ/çapraz-modül kriterler YOK — bu iterasyon YENİ bir
+  hesaplama motoru İCAT ETMEDİ, segment filtreleri bugün Query Engine'in
+  desteklediği (ad/telefon/köy/bölge/karne/üyelik yılı + field_definitions
+  filterable alanları) alanlarla sınırlı. Yeni `backend/campaigns.py` —
+  Kampanya durum makinesi ROADMAP'in verdiği 5 durum: `taslak→planlandi
+  →yayinda→tamamlandi` (+ herhangi bir aşamadan `iptal_edildi`) — AMA
+  `support.py`/`field_ops.py`'nin SIRALI `ALLOWED_TRANSITIONS` kalıbının
+  AKSİNE `taslak`'tan hem `planlandi` (zamanla) hem DOĞRUDAN `yayinda`ya
+  (şimdi gönder) geçilebiliyor — **bu, gerçek tarayıcı testinde YAKALANAN
+  bir tasarım hatasıydı:** ilk yazımda STATIC_FLOW'un sıralı döngüsü
+  taslak→yayinda'yı 400 ile reddediyordu ama UI "Şimdi Gönder" butonunu
+  hem taslak hem planlandı durumunda gösteriyordu; `ALLOWED_TRANSITIONS`
+  elle (döngü yerine) yeniden tanımlanarak düzeltildi. `requires_approval=
+  True` ise `yayinda`ya geçiş `approved=True` OLMADAN 400 döner (`POST
+  /campaigns/{id}/approve` ayrı adım, AYRI bir permission'a —
+  `communications:campaigns_approve` — bağlı, `templates_manage` gibi
+  BİLİNÇLİ OLARAK sadece üst katman rollere verildi, ilce_yoneticisi/
+  ziraat_muhendisi'ne bile verilmedi — onaylayanın kampanyayı oluşturandan
+  FARKLI/daha yetkili biri olması gerektiği fikriyle). Retry/Fallback:
+  `Campaign.channel_chain` sıralı liste, her alıcı için sırayla denenir
+  İLK BAŞARILI olanda durulur — bunun için `communications.py`'den
+  `send_via_channel()` DIŞA AÇILDI (route'lar artık ince sarmalayıcı,
+  `query_engine.execute_query()`'in hem route hem AI Copilot'tan
+  çağrılmasıyla AYNI desen) ve HTTPException yerine `(doc, ok)` döner —
+  kampanya zinciri exception yakalamadan `ok`'a bakıp sıradaki kanalı
+  dener. Her deneme (başarılı/başarısız) `communications`'a `campaign_id`
+  etiketiyle loglanır — AYRI bir "kampanya sonucu" koleksiyonu YOK,
+  `GET /campaigns/{id}/results` zaten bunu `communications`'tan filtreler.
+  Planlı gönderim: `POST /campaigns/run-scheduled` — gerçek bir OS cron/
+  Celery beat KURULU DEĞİL (bkz. CLAUDE.md "Redis/RabbitMQ kurulu değil"
+  kararı), bu uç "zamanı gelmiş kampanyaları çalıştır" tick'ini SİMÜLE
+  eder (prod'da periyodik bir scheduler çağırır); onay bekleyen bir
+  kampanya zamanı gelse bile OTOMATİK yayınlanmaz (skip edilir, admin
+  onaylayınca bir sonraki tick'te çalışır). `permissions.py`'ye
+  `communications` modülüne 3 yeni permission (`campaigns_view`/
+  `campaigns_manage`/`campaigns_approve`) — ilce_yoneticisi/ziraat_
+  muhendisi view+manage (approve YOK). Frontend: yeni `pages/
+  CampaignManagement.jsx` (route `/kampanyalar`, Layout.jsx SİSTEM
+  grubunda ama `adminTierOnly` DEĞİL — templates_manage'in aksine
+  campaigns_manage orta katmana da açık) — AutomationRules.jsx'teki
+  "seç+ekle" koşul listesi kalıbıyla AYNI aile: kanal zinciri chip'leri
+  (sıra = deneme önceliği) + her kanal için ayrı şablon seçimi + segment
+  (Farmers.jsx "Gelişmiş Filtre"nin kaydettiği Kayıtlı Sorgular'dan,
+  YENİ bir segment ekranı İCAT EDİLMEDİ) + onay/planlı gönderim alanları
+  + durum/sonuç tablosu + "Sonuçlar" ile genişleyen satır-içi timeline.
+  **Gerçek tarayıcıda uçtan uca doğrulandı:** Farmers.jsx'te "Gelişmiş
+  Filtre" ile `member_no=TS-00001` koşulu Kayıtlı Sorgu olarak kaydedildi;
+  bu segmenti kullanan, kanal zinciri `["email","sms"]` olan bir kampanya
+  UI'dan oluşturulup "Şimdi Gönder" ile çalıştırıldı — çiftçinin e-postası
+  GEÇİCİ OLARAK boşaltılarak (test sonrası geri yüklendi) gerçek bir
+  başarısızlık senaryosu üretildi: email denemesi "alıcı adresi bulunamadı"
+  ile başarısız oldu, zincir otomatik SMS'e düştü ve başarılı oldu —
+  `result_summary: {total:1, sent:1, failed:0}`, timeline'da HER İKİ
+  deneme de (başarısız email + başarılı SMS) doğru sırayla görüldü.
+  Ayrıca API üzerinden onay akışı da doğrulandı: `requires_approval=True`
+  bir kampanyada onaysız `yayinda` geçişi 400 döndü; `run-scheduled` tick'i
+  onaysız-ama-zamanı-gelmiş kampanyayı ATLADI (`executed:[]`); onaylandıktan
+  SONRA aynı tick kampanyayı ÇALIŞTIRDI. Doğrulama sırasında oluşan test
+  kayıtları (`templates`/`template_versions`/`communications`/`campaigns`/
+  test `saved_queries`) MongoDB'den temizlendi (IT-24/25 emsaliyle AYNI).
+- ✅ **IT-27 (FAZ 9 TAMAMLANDI — Event Bus v1 + Communication Policy +
+  Tercih Merkezi + Kara Liste):** ROADMAP `platform/events.py` önerse de
+  BİLİNÇLİ OLARAK yeni bir paket/dosya AÇILMADI — IT-24'ten beri var olan
+  `backend/event_bus.py` (o zamandan beri "IT-27'de formalize edilecek"
+  notuyla bekliyordu) DOĞRUDAN genişletildi: `EVENT_TYPES`'a 3 yeni olay
+  (`entitlement_created`/"Hakediş Oluştu", `task_assigned`/"Görev Atandı",
+  `contract_approved`/"Sözleşme Onaylandı" — ROADMAP'in kabul kriterinin
+  istediği "en az 3 iş olayı"). Gerçek `publish()` çağrıları 4 call site'a
+  eklendi: `entitlement.py` finalize ucu, `field_ops.py`'nin ÜÇ görev-atama
+  yolu (otomasyon kuralı `create_field_task_from_rule`, manuel `POST
+  /tasks`, iş emri round-robin döngüsü — task_assigned HANGİ yoldan
+  atanırsa atansın tetiklenir), `data_entry.py`'nin `update_contract`'ı
+  (SADECE status GERÇEKTEN "imzalı"ya değiştiyse, tekrar tekrar
+  tetiklenmesin diye `old.get("status") != "imzalı"` kontrolü).
+  Yeni `backend/communication_policy.py` — `automation.py`'nin (IT-24)
+  "event dinle, DB'den kural oku, gerçek yan etki üret" mimari kalıbının
+  BİREBİR AYNISI: `CommunicationPolicy` (event_type + kanal listesi +
+  kanal başına şablon) admin tanımlı, eşleşen HER aktif politika `communications.
+  send_via_channel()`'ı (IT-25/26'da zaten dışa açılmıştı) çağırır — DUPLİKE
+  gönderim mantığı YOK. **`EVENT_CONTACT_RESOLVERS`** (event_type →
+  (contact_type, payload_field)) sabit bir sözlük — admin'in her politikada
+  "kişi bu event'te hangi alanda" diye elle seçmesi İSTENMEDİ, automation.py'nin
+  basit eşitlik koşulu kadar bir sadeleştirme; `task_assigned` için
+  contact_type="personnel" (assigned_to alanı) — IT-25'in kurduğu ama hiç
+  gerçek veriyle egzersiz edilmemiş "personel" contact_type'ı burada İLK
+  KEZ gerçek uçtan uca çalıştı. **Kara Liste + Tercih Merkezi'nin GERÇEK
+  uygulaması `communications.py` içinde** (`_final_gate_check()`,
+  `send_via_channel()`'ın sağlayıcıyı çağırmadan HEMEN ÖNCEKİ son adımı) —
+  BÖYLECE elle gönderim (IT-25) + kampanya (IT-26) + policy (IT-27) ÜÇÜ DE
+  AYNI tek gerçek kaynaktan geçtiği için kontrol asla atlanamaz (ROADMAP'in
+  "bu kontrol gönderim motorunun en son adımında zorunlu olmalı" kararı
+  BİREBİR). `message_kind` ("operational" | "campaign") parametresi
+  eklendi — elle gönderim VE policy "operational", `campaigns.py`
+  "campaign" geçer; Tercih Merkezi'nin kampanya/operasyonel ayrımı
+  buradan çözülür. Tercih alanları: kanal bazlı aç/kapa
+  (`channels_enabled`), kampanya/operasyonel aç/kapa, hafta sonu izni,
+  sessiz saatler (`quiet_hours_start/end`, HH:MM UTC — gece yarısını aşan
+  aralık da desteklenir). Tercih Merkezi'nin çiftçi self-servisi
+  `support.py`'nin `/portal/*` kalıbıyla AYNI: `GET/PUT /portal/
+  communication-preferences`. `permissions.py`'ye `communications`
+  modülüne 3 yeni permission (`policies_manage`/`blacklist_manage`/
+  `preferences_manage`) — `templates_manage`/`campaigns_approve` emsaliyle
+  AYNI, BİLİNÇLİ OLARAK sadece üst katman rollere (ilce_yoneticisi/
+  ziraat_muhendisi'ne bile verilmedi — kara liste/politika yönetimi KVKK
+  hassasiyeti gerektirir). Frontend: yeni `pages/CommunicationPolicies.jsx`
+  (route `/iletisim-politikalari`, `adminTierOnly`) — AutomationRules.jsx'in
+  kural motoru admin ekranıyla AYNI aile, AYRICA aynı sayfada (backend'de
+  de aynı modülde yaşadıkları için) bir Kara Liste bölümü. `FarmerHome.jsx`'e
+  (çiftçi self-servis portalı) "İletişim Tercihlerim" kartı eklendi —
+  Destek Talebi/İcmal Belgelerim kartlarıyla AYNI görsel dil, kanal
+  chip'leri + 3 checkbox, her değişiklik ANINDA `PUT /portal/communication-
+  preferences` ile kaydedilir (ayrı bir "Kaydet" butonu YOK — checkbox/badge
+  toggle'ları optimistic update). **Gerçek tarayıcıda uçtan uca doğrulandı
+  (3 senaryo):** (1) "Görev Atandı → E-Posta" politikası oluşturulup
+  Mehmet Demir'e (ziraat_muhendisi, telefon yok ama e-postası var — bilinçli
+  seçildi) bir görev atandığında GERÇEKTEN bir e-posta communication kaydı
+  oluştuğu (`sent_by: "iletişim politikası: ..."`, `status: teslim_edildi`)
+  doğrulandı; (2) Mehmet Demir kara listeye eklenip AYNI politika TEKRAR
+  tetiklendiğinde (yeni bir görev atanarak) gönderimin `basarisiz` +
+  `provider_detail: "Kara listede — gönderim engellendi (KVKK)"` ile
+  BLOKLANDIĞI ve sağlayıcının HİÇ ÇAĞRILMADIĞI (`provider_ref: null`)
+  doğrulandı — ROADMAP'in tam istediği "policy tetiklense dahi mesaj
+  gitmiyor" kabul kriteri; (3) çiftçi TS-00001 kendi portalından SMS
+  kanalını kapattı, admin tarafından o çiftçiye elle SMS göndermeye
+  çalışıldığında `"Tercih: 'SMS' kanalı kişi tarafından kapatılmış"`
+  ile bloklandığı doğrulandı. Doğrulama sonrası test kayıtları
+  (`templates`/`communications`/`communication_policies`/
+  `communication_blacklist`/`communication_preferences`/2 test
+  `field_tasks`) MongoDB'den temizlendi. **FAZ 9 (Communication Hub)
+  TAMAMEN BİTTİ (IT-25+IT-26+IT-27)** — Oturum Teslim Protokolü'ne göre
+  bir fazın tüm IT'leri bittiğinde zip alınır.
+- ✅ **IT-29 (FAZ 10 başladı — Farmer LMS: Eğitim Kataloğu + İçerik
+  Yönetimi + Atama + Durum):** Yeni `backend/lms.py` — `course_categories`
+  (support.py'nin `SupportType` kataloğuyla AYNI desen: idempotent seed,
+  11 varsayılan kategori, soft delete) BİLİNÇLİ OLARAK field_definitions'ın
+  lookup_groups sistemine BAĞLANMADI (o sistem "dinamik alan" kavramına
+  hizmet eder, eğitim kategorisi kavramsal olarak support_types'a daha
+  yakın). `Course` (başlık/açıklama/kategori/eğitim türü [online/yuz_yuze/
+  karma]/zorluk/süre/geçerlilik ay/eğitmen/zorunlu/aktif) + `CourseContent`
+  (8 tip: video/pdf/word/powerpoint/resim/ses/harici_link/youtube, sıralı).
+  **İçerik dosyaları YENİ bir yükleme mekanizması İCAT ETMEDİ** — mevcut
+  genel `storage.py` (IT-04) `/uploads` ucu `module="lms_contents"` ile
+  AYNEN kullanılıyor (video sunucuda özel tutulmuyor, soyutlama üzerinden
+  — kabul kriteri). Atama (`course_assignments`+`user_course_status`)
+  YEDİ hedef tipini (`user`/`user_group`/`role`/`segment`/`production_cycle`/
+  `region`/`il_ilce`) gerçek `users.id` listesine çözer — `segment` Query
+  Engine'i (IT-08) DOĞRUDAN kullanır (kabul kriteri), `query_engine.py`'ye
+  bu amaçla yeni bir `"users"` modülü eklendi (`password` alanı whitelist'e
+  ASLA girmez — `DEFAULT_EXCLUDED_FIELDS` ile projection'dan elle
+  çıkarılır, whitelist dışı alan sızdırmama kuralının `users` moduluna
+  özel bir yan etkisi). farmer-bazlı hedeflerde (segment/production_cycle/
+  region/il_ilce) HER ZAMAN `role="ciftci"`+`farmer_id` eşleşmesiyle
+  gerçek `user_id`'ye atlanıyor — eğitim bir Farmer'a değil bir User'a
+  atanır (çiftçi de dahil herkes bir `users` kaydı). Durum makinesi 6
+  isim (Atandı/Başlamadı/Devam Ediyor/Tamamlandı/Başarısız/Süresi Doldu)
+  taşısa da sadece 5'i gerçek DB durumu (`atandi` "Başlamadı"nın da
+  karşılığıdır — aralarında ayrı bir geçiş olayı yok, bilinçli
+  sadeleştirme); `suresi_doldu` computed (`_effective_status`) + kalıcı
+  hale getiren `POST /lms/recompute-expirations` tick'i (support.py/
+  campaigns.py'deki "tick" kalıbıyla AYNI aile). `GET/POST /lms/
+  my-courses*` HERKESE (permission gerektirmeden, sadece current_user +
+  sahiplik) açık — support.py'nin `/portal/*` (SADECE ciftci) deseninden
+  BİLİNÇLİ FARKLI, çünkü LMS hem çiftçi hem personel eğitimi olabilir
+  (İSG, Kooperatif Süreçleri gibi kategoriler bunu ima ediyor). Yeni
+  `permissions.py` modülü `lms` (catalog_view/catalog_manage/assign/
+  groups_manage/status_view_all). Frontend: `pages/EgitimYonetimi.jsx`
+  (route `/egitim-yonetimi`, yeni "EĞİTİM" nav grubu) — kategori seed +
+  eğitim CRUD (QuickAddPanel) + içerik yönetimi (ekle/sırala/sil, dosya
+  tipleri için mevcut genel `/uploads` ile yükleme) + atama formu (7
+  hedef tipi, bazılarında — production_cycle/il_ilce — BİLİNÇLİ OLARAK
+  basit ID girişi, tam bir arama ekranı bu iterasyonun kapsamı dışı) +
+  durum özeti hepsi bir Drawer'da (AdminAreaManagement.jsx'in liste+
+  Drawer kalıbıyla AYNI aile). `FarmerHome.jsx`'e "Eğitimlerim" kartı
+  (zorunlu eğitimler önce, Başla/İçerik tamamlama checkbox'ları — kabul
+  kriteri "zorunlu eğitimler dashboard'da öncelikli"). **Gerçek
+  tarayıcıda uçtan uca doğrulandı:** admin tarafında kategori seed edildi,
+  "Şeker Pancarı Ekim Teknikleri" (zorunlu) eğitimi oluşturuldu, bir
+  YouTube içeriği eklendi, "Rol: Çiftçi" hedefiyle atama yapıldı — 200
+  çiftçi kullanıcısına gerçekten `user_course_status` kaydı (`atandi`)
+  oluştuğu (`200 kullanıcı bulundu, 200 yeni atama yapıldı` yanıtıyla)
+  ve Durum Özeti'nin `atandi:200` gösterdiği doğrulandı; çiftçi TS-00001
+  (Mehmet) portalına giriş yapıp "Eğitimlerim"de zorunlu rozetiyle
+  eğitimi gördü, "Başla" ile `devam_ediyor`'a geçti, tek içeriği
+  tamamlandı işaretleyince TÜM içerik bittiği için otomatik `tamamlandi`
+  durumuna geçtiği gözlemlendi. Konsolda hiç hata yok, hiç başarısız
+  network isteği yok. Test verisi (test course + contents + assignment +
+  200 user_course_status kaydı) doğrulama sonrası MongoDB'den doğrudan
+  temizlendi (IT-24 emsaliyle AYNI), `course_categories` seed'i (gerçek
+  katalog) korundu.
+  **Kullanıcı kararı:** IT-30 (Quiz+Sertifika+Learning Path) ve IT-31
+  (Uzman Desteği+FAQ+Analitik) bu oturumda ERTELENDİ — FAZ 10 tamamlanmadı,
+  doğrudan FAZ 11'e (Platform Core) geçildi.
+- ✅ **IT-32 (FAZ 11 — Integration Hub Formalizasyonu + Webhook Engine):**
+  Yeni `backend/ai_provider.py` — `satellite_provider.py`/`channel_
+  providers.py` ile AYNI ABC+factory kalıbı; `extras.py`'nin İKİ AYRI
+  yerde (AI Hastalık Tespiti + AI Copilot'un `_call_ai_text`'i) tekrarladığı
+  doğrudan OpenAI/Gemini/Anthropic HTTP çağrısı BURAYA konsolide edildi
+  (davranış AYNEN korundu — `integrations.py`'nin `get_ai_service_config`'i
+  DEĞİŞMEDİ, sadece config artık `get_ai_provider()`'a geçiyor). Yeni
+  `backend/integration_hub.py` — `INTEGRATION_REGISTRY` (AI/İletişim/
+  Mekânsal — hangi kategori hangi modülden geçiyor, admin görünürlüğü
+  için `GET /integration-hub/registry`) + **Webhook Engine**: `WebhookRule`
+  (event_type + target_url + headers) `event_bus.py`'nin (IT-24/27) HER
+  `EVENT_TYPES` girdisine `automation.py`'nin `_handle_automation_event`
+  kalıbıyla AYNI şekilde bağlanır (`_handle_webhook_event` — event
+  yayınlanınca eşleşen aktif kurallara GERÇEK bir `requests.post` denenir,
+  senkron — codebase'in mevcut `requests` deseniyle tutarlı, yeni bir
+  async http kütüphanesi eklenmedi); her deneme (başarılı/başarısız)
+  `webhook_deliveries`'e loglanır. `POST /webhook-rules/{id}/test` —
+  admin'in event'i beklemeden anlık bir deneme yapabilmesi için. Yeni
+  `permissions.py` modülü `integration_hub` (`view`/`manage` — webhook
+  kuralları header'larında secret taşıyabileceğinden `manage` sadece
+  admin-tier + ilce_yoneticisi/ziraat_muhendisi'ye `view`). Frontend:
+  `pages/IntegrationHub.jsx` (route `/integration-hub`, "SİSTEM" grubu)
+  — registry kartları + `AutomationRules.jsx`'in kural+çalışma geçmişi
+  kalıbıyla AYNI aile webhook kural formu/tablosu + genişleyen "Teslimatlar"
+  satırı. **Gerçek uçtan uca doğrulandı (yerel bir echo HTTP sunucusu
+  ile, `127.0.0.1:9099`):** (1) UI'dan bir webhook kuralı ("Sözleşme
+  Onaylandı" → yerel echo URL + özel `X-Test-Header`) oluşturuldu; (2)
+  "Test Et" ile ANLIK bir GERÇEK HTTP POST denendi — echo sunucusunun
+  log dosyasında `{"event_type":"contract_approved","payload":{"test":
+  true,...}}` + özel header'ın AYNEN ulaştığı doğrulandı, UI'da "200 —
+  BAŞARILI" göründü; (3) **asıl kabul kriteri:** gerçek bir sözleşme
+  `PUT /contracts/{id}` ile önce "taslak"a sonra TEKRAR "imzalı"ya
+  çekilerek data_entry.py'nin GERÇEK `contract_approved` `publish()`'i
+  tetiklendi — event bus otomatik olarak webhook'u ATEŞLEDİ, echo
+  sunucusu GERÇEK `{"event_type":"contract_approved","payload":
+  {"farmer_id":...,"parcel_id":...,"contract_id":...}}` payload'ını
+  aldı, UI'daki Teslimatlar listesinde İKİNCİ "200 — BAŞARILI" kaydı
+  olarak göründü — kodda hiçbir manuel tetikleme YOK, tamamen event_bus
+  → webhook zincirinin kendiliğinden çalıştığının kanıtı. AI Copilot
+  (`POST /ai/copilot`, AI yapılandırılmamış → anahtar-kelime fallback)
+  refactor SONRASI da eskisi gibi doğru sonuç döndü (`ai_powered:false`,
+  5 sonuç) — `ai_provider.py` konsolidasyonunun fallback yolunu
+  BOZMADIĞI doğrulandı. Konsolda hiç hata yok, hiç başarısız network
+  isteği yok. Test verisi (webhook_rules + webhook_deliveries) doğrulama
+  sonrası MongoDB'den temizlendi, sözleşme durumu zaten "imzalı"ya geri
+  döndüğü için ayrı bir düzeltme gerekmedi.
+- ✅ **IT-33 (FAZ 11 TAMAMLANDI — Feature Flags + Module Manifest +
+  Licensing İskeleti + Health Center + Cache Soyutlaması):** Yeni
+  `backend/platform_core.py` — dört alt konu TEK dosyada (IT-27'nin
+  Communication Policy+Tercih Merkezi+Kara Liste'yi tek dosyada
+  topladığı emsalle AYNI, hepsi bu IT'de birlikte doğdu): (1) **Feature
+  Flags** — `feature_flags` koleksiyonu (ai/drone/whatsapp/lms/gis),
+  `is_feature_enabled()` + `make_require_feature(db)` (permissions.py'nin
+  `make_require_permission` kalıbıyla AYNI factory deseni); `extras.py`'nin
+  İKİ AI ucuna (`/ai/copilot`, `/ai/disease-detect`) ve `lms.py`'nin İKİ
+  ucuna (`/courses`, `/lms/my-courses`) `Depends(require_feature(...))`
+  eklendi — TÜM endpoint'lere değil, kabul kriterini kanıtlayacak birer
+  temsilci (register fonksiyonlarına `require_feature=None` opsiyonel
+  parametresi eklendi, verilmezse no-op — geriye dönük uyumlu).
+  WhatsApp'ın kendi URL'i olmadığından (kanal seçimi body parametresiyle)
+  `communications.py`'nin `_final_gate_check()`'ine (IT-27'nin Kara
+  Liste+Tercih Merkezi kontrolüyle AYNI "son adım") kanal bazlı bir
+  `is_feature_enabled(db,"whatsapp")` kontrolü eklendi. (2) **Module
+  Manifest** — `MODULE_MANIFESTS` sabit liste (yeni DB koleksiyonu
+  İCAT EDİLMEDİ, `PERMISSION_CATALOG`/`INTEGRATION_REGISTRY` ile AYNI
+  "kod-seviyesi registry" kalıbı) — Farmer/GIS/Farmer LMS için ad/versiyon/
+  bağımlılık/menü/yetki/API/dashboard bileşeni kaydı, `GET /platform-core/
+  module-manifests`. (3) **Licensing İskeleti** — `licenses` koleksiyonu
+  (scope_type: module/tenant/user + plan + opsiyonel expires_at) + basit
+  CRUD + `check_license()` yardımcısı — HİÇBİR endpoint'e ZORUNLU
+  BAĞLANMADI (ROADMAP'in "sadece veri modeli + basit kontrol yeterli"
+  notuyla tutarlı, gerçek satış/faturalama kapsam dışı). (4) **Health
+  Center** — IT-01'in Integration Center'a (integrations.py) eklediği
+  `enabled`/`last_success_at` alanlarını TÜKETİR (yeniden ağ çağrısı
+  YAPMAZ) + gerçek bir MongoDB round-trip (`db.regions.count_documents`);
+  Redis/RabbitMQ/Elasticsearch/GeoServer bu ortamda kurulu OLMADIĞI için
+  (CLAUDE.md) "Hata" yerine dürüst 4. bir durum (`kurulu_degil`) döner.
+  Ayrı `backend/cache.py` — Redis KURULU DEĞİL, basit in-process TTL
+  cache (`cache_get_or_set`/`cache_invalidate_prefix`) — `permissions.
+  get_effective_permissions()` (HER yetkili istekte çalışır, 30sn TTL,
+  `users.py`'nin `update_user_role`'ü rol değişince ANINDA invalidate eder)
+  ve `server.py`'nin `/regions` ucu (60sn TTL, "lookup verisi" örneği)
+  buradan besleniyor. Yeni `permissions.py` modülü `platform_core`
+  (`view`/`manage`). Frontend: `pages/PlatformCore.jsx` (route
+  `/platform-core`, "SİSTEM" grubu, 4 sekme) + `Layout.jsx`'e feature-flag
+  farkındalığı (`GET /feature-flags` okunur, `featureFlag` etiketli nav
+  item'lar — AI Copilot/AI Hastalık/Eğitim Yönetimi — kapalıysa GERÇEKTEN
+  gizlenir, flag yüklenene kadar/bilinmeyen key'de varsayılan GÖRÜNÜR).
+  **Doğrulama notu:** bu oturumda embedded tarayıcı (preview_* sayfa
+  araçları) VE claude-in-chrome ikisi de erişilemez hale geldi (araç
+  düzeyinde bir kesinti, koddan bağımsız) — bu yüzden UI GÖRSEL olarak
+  tıklanarak doğrulanamadı. Bunun yerine backend uçtan uca gerçek API
+  çağrılarıyla (PowerShell/Invoke-RestMethod, login+bearer token) doğrulandı:
+  feature flag'ler seed edildi (5/5); `lms` flag'i kapatılınca `GET
+  /courses` GERÇEKTEN 403 döndü, `ai` flag'i kapatılınca `POST /ai/copilot`
+  GERÇEKTEN 403 döndü, ikisi de tekrar açılınca normale döndü; `whatsapp`
+  flag'i kapatılınca gerçek bir `POST /communications/send` (whatsapp
+  kanalı) 422 + "kapatılmış" mesajıyla ENGELLENDİ, açılınca "teslim_edildi"
+  ile BAŞARILI oldu (aynı çiftçiye, aynı içerikle — TEK fark flag durumu);
+  Health Center 10 serviste (5'i gerçek config/DB durumu: database=sağlıklı,
+  ai_service/sms/email/planet_labs=hata [yapılandırılmamış], 5'i dürüst
+  "kurulu_degil") doğru döndü; Module Manifest 3 modülü (Farmer/GIS/Farmer
+  LMS) doğru listeledi; lisans oluşturuldu/listelendi/pasife alındı;
+  `/regions` cache'li olarak sorunsuz çalıştı. Frontend webpack derlemesi
+  "compiled with 7 warnings" (hata YOK, önceden var olan uyarılarla aynı
+  sayı) ile PlatformCore.jsx/Layout.jsx'in gerçekten derlendiği doğrulandı
+  — ama nav gizleme/sekme geçişleri gerçek bir tarayıcıda TIKLANARAK
+  görülmedi, bu iterasyonun dürüstçe belirtilmesi gereken tek eksiği.
+  Test verisi (test lisans + test whatsapp communication kaydı) MongoDB'den
+  temizlendi, feature_flags seed'i (5 tanesi de enabled=true, gerçek
+  varsayılan config) korundu.
+  **FAZ 11 (Platform Core) TAMAMEN BİTTİ (IT-32+IT-33)** — Oturum Teslim
+  Protokolü'ne göre bir fazın tüm IT'leri bittiğinde zip alınır (kullanıcı
+  bu oturumda "ZIP'i en sonda oluşturacağız" dedi — zip şimdilik
+  ERTELENDİ, tüm fazlar bitince tek seferde paketlenecek).
+- ✅ **IT-34 (FAZ 12 başladı — Mobil: Experience Profile Modeli):** Yeni
+  `backend/experience_profile.py` — `ExperienceProfile` (name +
+  dashboard_widgets/menu_items/quick_actions/map_tools/ai_features
+  [BİLİNÇLİ OLARAK opak string listeleri, `map_workspace.py`'nin IT-14
+  "backend key'leri doğrulamaz" felsefesiyle AYNI] + notification_
+  behaviors/default_filters/offline_sync_rules [serbest dict]). Atama
+  `users.experience_profile_id` alanında tutulur (`custom_role_id` ile
+  AYNI desen) — ayrı bir "geçmişli tablo" İCAT EDİLMEDİ, `log_audit`
+  yeterli (permissions.py'nin custom_role değişikliğiyle AYNI bilinçli
+  sadelik). `GET /me/experience` — mobil client'ın (IT-35) açılışta
+  çektiği birleşik konfigürasyon; profil atanmamışsa VEYA atanan profil
+  silinmiş/pasifse `DEFAULT_EXPERIENCE`'a (sabit, güvenli bir varsayılan)
+  düşer — mobil client asla boş/kırık bir yanıt almaz. Yeni `permissions.py`
+  modülü `experience_profiles` (`view`/`manage`). Frontend: `pages/
+  ExperienceProfiles.jsx` (route `/experience-profiles`, "SİSTEM" grubu)
+  — profil CRUD (QuickAddPanel, virgülle-ayrılmış metin → liste) + kullanıcıya
+  atama formu + mevcut atamaların listesi (kabul kriterinin "admin
+  ekranından oluşturulabiliyor" maddesi burada karşılanır). **Gerçek
+  backend uçtan uca doğrulandı (PowerShell/Invoke-RestMethod ile —
+  bkz. aşağıdaki doğrulama notu):** iki farklı profil ("Ziraat Mühendisi
+  Sahra" ve "Muhasebe Mobil") oluşturuldu; AYNI role sahip (`ziraat_
+  muhendisi`) İKİ AYRI kullanıcıya (Mehmet Demir + yeni bir test
+  kullanıcısı) ayrı ayrı atandı; her ikisi ayrı ayrı GİRİŞ YAPIP kendi
+  `GET /me/experience`'ını çektiğinde GERÇEKTEN farklı `profile_name`/
+  `menu_items` döndüğü doğrulandı (Mehmet: "Ziraat Muhendisi Sahra" →
+  saha-operasyonlari,harita-paneli; test kullanıcı: "Muhasebe Mobil" →
+  ufyd-dashboard) — ROADMAP'in "aynı role sahip iki kullanıcıya
+  atandığında çıktı gerçekten farklı" kabul kriteri BİREBİR kanıtlandı.
+  Test verisi (2 test profili + 1 test kullanıcı, Mehmet'in ataması)
+  doğrulama sonrası temizlendi. **Doğrulama notu (bu IT VE IT-33 için
+  geçerli):** bu oturumda embedded tarayıcı önizleme araçları VE
+  claude-in-chrome ikisi de erişilemez durumda kaldı (araç/ortam
+  kesintisi, koddan bağımsız) — bu yüzden hem IT-33 hem IT-34'ün frontend
+  ekranları gerçek bir tarayıcıda TIKLANARAK görsel doğrulanamadı, sadece
+  backend (gerçek HTTP istekleriyle) ve webpack derlemesi (hatasız)
+  doğrulandı. Bir sonraki oturumda tarayıcı erişimi varsa öncelik bu
+  ikisinin (IntegrationHub.jsx, PlatformCore.jsx, ExperienceProfiles.jsx,
+  EgitimYonetimi.jsx) gerçek tıklanarak teyit edilmesi olmalı.
+- ✅ **IT-35 (FAZ 12 TAMAMLANDI — PWA Mobil Yolu, kullanıcı PWA'yı seçti):**
+  ROADMAP'in (a) PWA / (b) Flutter iskeleti kararı kullanıcıya soruldu —
+  **PWA (önerilen)** seçildi. Yeni `public/manifest.json` (start_url `/m`,
+  standalone) + `public/icon.svg` (bağımlılıksız, basit SVG) + `public/
+  sw.js` (BİLİNÇLİ OLARAK basit — SADECE app-shell/statik varlıkları
+  cache'ler, `/api/*` isteklerine HİÇ dokunmaz) + `src/index.js`'e kayıt
+  (dev VE prod'da, test edilebilirlik için kasıtlı). Yeni `pages/
+  MobilDashboard.jsx` (route `/m`, `FarmerHome.jsx`'in `/ciftci` rotasıyla
+  AYNI kalıp — PrivateRoute ama Layout.jsx'in masaüstü sidebar'ı OLMADAN,
+  tam ekran mobil sayfa) — `GET /me/experience`'ı (IT-34) tüketir:
+  `dashboard_widgets`/`menu_items`/`quick_actions` opak listelerini
+  kartlara/linklere çevirir (YENİ bir mobil iş mantığı YAZILMADI, hepsi
+  mevcut REST API'ler — ROADMAP'in "mobilde ayrı iş mantığı yazılmaz"
+  kuralıyla BİREBİR). **Offline First (kabul kriteri):** "Görev Tamamlama"
+  formu (görev seç → checklist işaretle → GPS al [`navigator.geolocation`]
+  → fotoğraf ekle [`<input capture="environment">`, `FarmerHome.jsx`'in
+  AI Hastalık Tespiti'ndeki AYNI FileReader→base64 deseni] → not yaz) var
+  olan `POST /visits` + `PUT /tasks/{id}/checklist`'i (field_ops.py,
+  IT-22/23 — YENİ bir mobil-özel endpoint İCAT EDİLMEDİ) çağırır. Yeni
+  `lib/offlineQueue.js` — ham `indexedDB` (yeni npm bağımlılığı YOK,
+  Karar Protokolü gereği) ile BİLİNÇLİ OLARAK Service Worker Background
+  Sync API KULLANILMADI (tarayıcı desteği tutarsız + HTTPS gerektirir,
+  bkz. dosya docstring'i) — ağ hatası VEYA `navigator.onLine===false`
+  olduğunda istek IndexedDB kuyruğuna yazılır, sayfa açılışında VE
+  `window`'un `online` event'inde otomatik `flush()` denenir; kuyrukta
+  bekleyen kayıt sayısı ekranda görünür bir rozetle gösterilir ("Şimdi
+  Dene" butonuyla elle de tetiklenebilir). **Doğrulama notu (IT-33/34
+  ile AYNI kısıt):** bu oturumda tarayıcı önizleme araçları (hem embedded
+  preview hem claude-in-chrome) erişilemez kaldığı için gerçek bir
+  tarayıcıda "uçağı kip'e al → form doldur → interneti aç → otomatik
+  senkron oldu" senaryosu TIKLANARAK gösterilemedi — kod backend'in
+  var olan (zaten IT-22/23'te doğrulanmış) `/visits`+`/tasks/.../checklist`
+  uçlarını AYNEN kullandığı için backend tarafı güvenilir, ama offline
+  kuyruk/senkron akışının bizzat gerçek bir tarayıcıda (DevTools "Offline"
+  simülasyonu ile) UÇTAN UCA görsel doğrulanması bir sonraki oturumun
+  önceliği olmalı. Webpack derlemesi bu iterasyonda BİR GERÇEK hata
+  yakaladı ve düzeltildi: Layout.jsx'e Experience Profile nav ikonu
+  eklenirken `Smartphone` iconu YANLIŞLIKLA iki kez import edilmiş
+  (zaten "Saha Mobil" nav öğesi için mevcuttu) — tekrar eden import
+  satırı silinerek "Identifier 'Smartphone' has already been declared"
+  derleme hatası giderildi, sonrasında "compiled with warnings" (hata
+  YOK) ile temiz derleme doğrulandı.
+  **FAZ 12 (Mobil) TAMAMLANDI (IT-34+IT-35) — ROADMAP-DETAY-TAM.md'nin
+  TÜM fazları (FAZ 0'dan FAZ 12'ye) artık tamamlanmış durumda** (FAZ 10'un
+  IT-30/IT-31'i kullanıcı kararıyla bilinçli olarak ertelendi, geri kalan
+  HER FAZ bitti). Kullanıcı bu oturumda zip'i en sona bırakmıştı — proje
+  şimdi tek seferlik ZIP paketlemesi için hazır.
+- ✅ **2026-07-11 — Güvenlik denetimi (P0/P1) + FAZ 13-17 (IT-36..46)
+  roadmap'e eklendi, IT-36 TAMAMLANDI:** Kullanıcının paylaştığı bir
+  güvenlik denetimi bulgularına göre 4 P0 + 1 P1 düzeltildi: seed
+  uçları (`/admin/seed*`) artık kimlik doğrulama + yönetici rolü +
+  `ALLOW_DATA_SEEDING` bayrağı istiyor; `list_farmers`/`get_farmer_360`/
+  `list_parcels`/`get_parcel_detail` artık `farmers:view`/`parcels:view`
+  izni istiyor (önceden herhangi bir giriş yapmış kullanıcı — ciftci
+  dahil — başka çiftçilerin verisini görebiliyordu); `storage.py`'nin
+  dosya indirme ucu artık aktif kullanıcı + tenant sahiplik kontrolü
+  yapıyor; `docker-compose.yml`'de Mongo artık host'a açık değil + auth
+  zorunlu, `config_service.py`'de `ENVIRONMENT=production`'da zayıf/
+  varsayılan `JWT_SECRET`/`PLATFORM_ADMIN_PASSWORD` fail-fast reddediliyor;
+  `users.email`/`integrations.type` global unique yerine `(tenant_id,
+  alan)` compound unique oldu (login akışı çoklu-tenant aynı e-posta
+  senaryosunu güvenle ele alacak şekilde güncellendi). Ayrıca kullanıcı
+  5 yeni konuyu (mobil rol akışları, UX/menü tutarlılığı, organizasyon
+  hiyerarşisi, GodMode, "Bize Ulaşın") roadmap'e **FAZ 13-17 (IT-36..46)**
+  olarak eklettirdi — netleştirme sorularının cevaplarına göre: GodMode
+  gerçek TOTP ile (kullanıcının önerdiği zaman-türetilmiş desen güvensiz
+  olduğu için reddedildi), organizasyon hiyerarşisi hem departman hem
+  yönetici ağacı, "Bize Ulaşın" daha önce speclenip hiç yapılmamış olan
+  IT-28'in Case modelini gerçekleştiriyor. **IT-41 (Raporlar menü
+  konsolidasyonu) de aynı oturumda gerçekten uygulandı** — `Layout.jsx`'e
+  yeni "RAPORLAR" grubu (route'lar değişmedi, sadece nav kaydı taşındı),
+  `SahaOperasyonlari.jsx`'e `?view=raporlar` query param desteği eklendi.
+  **IT-36 (Saha Personeli Görev Yaşam Döngüsü — Mobil) de TAMAMLANDI** —
+  detay için aşağıdaki IT-36 bölümüne bakın, veya ROADMAP-DETAY-TAM.md'nin
+  FAZ 13 / IT-36 bölümündeki "Uygulama notu"na. IT-37..46 hâlâ SADECE
+  planlama aşamasında, kod yazılmadı.
+
+- ✅ **IT-36 (FAZ 13 başladı — Saha Personeli Görev Yaşam Döngüsü, Mobil):**
+  `MobilDashboard.jsx`'in tek-şablonlu "Görev Tamamlama" formu, göreve
+  atanan kullanıcının TEK ekrandan `atandi→kabul_edildi/reddedildi→
+  yola_cikildi→yerine_ulasildi→calisiliyor→(checklist+not+GPS+foto ile)
+  tamamlandi→onay_bekliyor→kapandi` zincirinin TAMAMINI yürütebildiği
+  durum-bazlı bir aksiyon paneline dönüştürüldü — `SahaOperasyonlari.jsx`'teki
+  AYNI `ALLOWED_NEXT`/`TASK_STATUS_LABELS` sabitlerinin client-side kopyası
+  kullanılıyor (iki dosyada elle senkron tutulmalı, IT-16'nın TKGM mapping
+  emsaliyle AYNI). YENİ bir backend endpoint'i YOK — field_ops.py'nin var
+  olan `/tasks/{id}/transition`, `/tasks/{id}/checklist`, `/visits`
+  uçları artık sırayla, durumun izin verdiği butonlardan çağrılıyor.
+  **İki bilinçli sapma** (roadmap spec'inden, ROADMAP-DETAY-TAM.md'nin
+  IT-36 "Uygulama notu"nda detaylı gerekçelendirildi): checklist medyası
+  storage.py `/uploads` yerine IT-35'in "Visit.photos'a base64 gömme"
+  deseninde kaldı (offlineQueue.js sadece JSON gövdeli istekleri
+  kuyruklayabiliyor); yola_cikildi/yerine_ulasildi geçişlerinde GPS
+  OTOMATİK kaydedilmiyor (backend'de ayrı bir alan yok, offline-güvenli
+  bir ID-zincirleme sorunu yaratırdı) — bunun yerine tamamlama anında
+  elle "Konumu Al" ile tek GPS noktası alınıyor. **Gerçek tarayıcıda
+  uçtan uca doğrulandı** (Mehmet Demir/ziraat_muhendisi ile): tam mutlu
+  yol (atandı→...→kapandı, checklist backend'de `done:true` olarak
+  doğrulandı, Visit oluştu ve `farmer_id` doğru denormalize edildi);
+  reddet+yeniden planlama (`close_reason` backend'den doğrulandı);
+  offline senaryo — `navigator.onLine=false` zorlanıp yapılan bir geçiş
+  GERÇEKTEN sunucuya gitmedi (backend'de eski durum kaldığı doğrulandı)
+  ama ekran optimistic ilerledi ve "1 kayıt senkron bekliyor" gösterdi,
+  `online` event'i tetiklenince kuyruk OTOMATİK flush oldu ve backend'de
+  gerçekten güncellendiği doğrulandı. Konsolda hiç hata yok. Test verisi
+  (3 field_task + 1 visit) doğrulama sonrası MongoDB'den temizlendi.
+
+- ✅ **IT-37 (Ziraat Mühendisi Saha Formları, Mobil):** MobilDashboard.jsx'e
+  forms_module.py'nin (M18) `GET /forms`+`POST /forms/{id}/submit`'ini
+  tüketen bir "Formlar" kartı eklendi — YENİ backend endpoint'i YOK. 11
+  alan tipinin (text/textarea/number/select/multiselect/yesno/rating/
+  date/gps/photo/video/signature) HEPSİ için genel bir `FormFieldInput`
+  render fonksiyonu yazıldı; "signature" BİLİNÇLİ OLARAK canvas imza pedi
+  DEĞİL (yeni bağımlılık gerektirirdi) — ad-soyad+onay kutusu ile
+  sadeleştirildi. Görevden otomatik parsel/çiftçi doldurma BİLİNÇLİ
+  OLARAK yapılmadı (form alanları serbest tanımlı, yapılandırılmış bir
+  referans yok — kırılgan bir sezgisel eşleştirme olurdu). **Gerçek
+  tarayıcıda doğrulandı:** Mehmet Demir "Haftalık Tarla Denetimi"ni
+  (text/yesno/select/number/textarea) doldurup gönderdi, backend'de TÜM
+  alan değerleri (yesno'nun `false` değeri dahil) doğru kaydedildi.
+  Test verisi (1 form_response) temizlendi, 3 seed demo form korundu.
+
+- ✅ **IT-38 (Çiftçi Mobil Self-Servis, 4/7 akış TAMAMLANDI):** sulama
+  kaydı (`POST /farmer/irrigation`, zaten vardı), uydu görüntüsü
+  (`GET /satellite/ndvi/{parcel_id}`, zaten vardı), finansal özet
+  (`GET /farmer/my-dashboard`, zaten vardı), ziyaret onaylama (YENİ:
+  `field_ops.py`'ye `GET /portal/visits`+`PUT /portal/visits/{id}/
+  confirm-by-farmer` + Visit'e opsiyonel `confirmed_by_farmer` alanı).
+  Sözleşme onaylama/ekim planlama/randevu alma BİLİNÇLİ OLARAK
+  ERTELENDİ — üçü de gerçek bir veri modeli kararı gerektiriyor (Karar
+  Protokolü), kabul kriterinin "en az 4" eşiği diğer 4'le zaten
+  karşılandı. **Doğrulama sırasında gerçek bir bug bulunup düzeltildi:**
+  NDVI yanıt şemasını (`{ndvi,health,risk_level}`) YANLIŞ varsaymıştım
+  — gerçek şema `{latest_ndvi,latest_date,health:{status,label,color},
+  ...}`; `health` objesini doğrudan `<b>{health}</b>` ile basmak
+  SAYFAYI TAMAMEN ÇÖKERTTİ (React "objects are not valid as a child"),
+  gerçek network yanıtına bakılarak teşhis edilip düzeltildi. **Gerçek
+  tarayıcıda uçtan uca doğrulandı** (Mehmet Yılmaz/TS-00001 ile):
+  sulama kaydı `water_m3:125.5` ile persist edildi; NDVI (düzeltme
+  sonrası) `0.41/2025-09-15/Stres altında` doğru gösterdi; finansal
+  özet gerçek bakiye/hareket listesini gösterdi; test ziyareti
+  onaylanınca `confirmed_by_farmer:true` backend'den doğrulandı. Test
+  verisi (1 irrigation_event + 1 field_task + 1 visit) temizlendi.
+
+- ✅ **IT-39 (QR Kod Tabanlı Teslim-Tesellüm):** support.py'nin var olan
+  ama hiç doğrulanmayan `qr_kod` yöntemi gerçekleştirildi — YENİ
+  `support_qr_tokens` koleksiyonu + `POST /support-requests/{id}/
+  delivery-code` (personel, sadece `teslim_edildi` talepler için) +
+  `POST /portal/support-requests/confirm-delivery-code` (çiftçinin
+  KENDİ eylemi, `support:requests_manage` İSTEMEZ). **Bilinçli
+  sadeleştirme:** gerçek kamera-taramalı QR barkodu YERİNE 6 haneli
+  kısa kod (yeni bir QR-render kütüphanesi eklemeden AYNI güvenlik
+  özelliğini verir — Karar Protokolü). **Gerçek tarayıcıda uçtan uca
+  doğrulandı:** admin bir talebi `teslim_edildi`'ye ilerletip mobilden
+  kod (`014883`) üretti; çiftçi KENDİ oturumundan kodu girip onayladı —
+  backend'de talep GERÇEKTEN `ciftci_onayladi`+`confirmation_method:
+  "qr_kod"` oldu; AYNI kodu ikinci kullanma denemesi 410 ile reddedildi.
+  Test verisi temizlendi.
+  **FAZ 13 (Mobil Rol Tabanlı Görev & Self-Servis Ekosistemi) TAMAMLANDI
+  (IT-36+IT-37+IT-38[4/7]+IT-39)** — 2026-07-11, kullanıcının "hepsini
+  bitir" talimatıyla tek oturumda ilerletildi.
 
 ## 7. Çalıştırma
 
@@ -1512,255 +2108,3 @@ Her iterasyon (oturum) sonunda:
 tamamen bittiğinde (o fazdaki tüm IT'ler ✅ olduğunda) alınır: `__pycache__`
 temizlenir, proje `dijital-tarim-<faz-id>.zip` olarak paketlenir ve kullanıcıya
 sunulur.
-
-## 9. Oturum Notu — 2026-07-11 (IT-42/43/46 uygulandı)
-
-- **IT-42/IT-43 (FAZ 15 — Organizasyon Hiyerarşisi + Onay Zincirleri):**
-  `backend/organization.py` (OrganizationUnit/Position/UserPosition + org-chart
-  + manager-chain resolver) ve `backend/approval.py` (çok adımlı, role/
-  hierarchy/user hedefli Onay Zinciri Motoru) eklendi. `support.py`
-  ("onaylandi" geçişi) ve `campaigns.py` (`/campaigns/{id}/approve`) bu ortak
-  motoru KULLANACAK şekilde güncellendi — bir tenant için ilgili `process`
-  için aktif kural TANIMLI DEĞİLSE eski doğrudan davranış AYNEN çalışır
-  (geriye uyumlu). Frontend: `OrganizationChart.jsx`, `PendingApprovals.jsx`.
-- **IT-46 (FAZ 17 — Bize Ulaşın / IT-28 Case Yönetimi):** `backend/
-  case_management.py` — Case + CaseCategory + CaseMessage, dallanabilen durum
-  makinesi, atama (onay motoruna opsiyonel bağlı), `field_ops.
-  create_field_task_from_rule()` üzerinden Saha görevi köprüsü, çiftçi portalı
-  uçları. `communications.py`'nin `/contacts/{id}/timeline`'ı case kayıtlarını
-  da (kronolojik karışık) döndürecek şekilde güncellendi. Frontend:
-  `CaseManagement.jsx`.
-- **Bilinen borç (bu oturumda YAPILMADI):** IT-46'nın "Hata Bildirimi
-  kategorisine otomatik platform_admin ataması" kuralı henüz eklenmedi —
-  şu an her case manuel atanıyor. Menü konsolidasyonu (IT-13b/IT-40/IT-41,
-  Genel Tasarım Kuralları Kural 1-3) ve harita/dashboard click-through/
-  NetCAD/gerçek uydu entegrasyonu bu oturumun kapsamı DIŞINDA — kullanıcı
-  ile sıradaki oturum için planlandı.
-- **Doğrulama:** `server.py` gerçek bir Python ortamında (fastapi/motor/
-  pydantic kurulu) import edilip 264 route'un çakışmasız kaydolduğu
-  doğrulandı; yeni/değişen 3 frontend sayfası + `App.js`/`Layout.jsx`
-  esbuild ile sözdizimi doğrulamasından geçirildi.
-
-## 10. Oturum Notu — 2026-07-11 (devam) — Uydu Sağlayıcı Araştırması + Provider Katmanı
-
-- Kullanıcı için ayrı bir araştırma raporu üretildi:
-  `TABSIS_Uydu_Goruntu_Ekosistemi_Arastirma.md` (proje kök dizininde) — 18+
-  uydu/EO sağlayıcısının (Copernicus/Sentinel Hub, Landsat, Planet, Maxar,
-  Airbus, BlackSky, ICEYE, Capella, EOSDA, UP42, SkyFi, Satellogic/EarthDaily,
-  OneSoil, Microsoft Planetary Computer, Google Earth Engine, NASA
-  AppEEARS/FIRMS/POWER, OpenAerialMap, Agromonitoring) karşılaştırması +
-  mimari öneri + çoklu-sağlayıcı stratejisi + sıralama.
-- **`satellite_provider.py` tamamen yeniden yazıldı** (IT-28.1'in provider
-  katmanı kısmı — 🔄, tam kapsam değil): `SatelliteProvider` ABC + üç GERÇEK
-  sağlayıcı (`SentinelHubProvider` — OAuth2 + Statistics API NDVI,
-  `NasaFirmsProvider` — ücretsiz yangın alarmı, `Up42Provider` — VHR tasking
-  talebi kimlik doğrulama) + `DemoSatelliteProvider` (mevcut, değişmedi).
-  `get_satellite_provider(db, capability)` artık ASYNC — Integration Center'da
-  (`db.integrations`, tip: `sentinel_hub`/`nasa_firms`/`up42`) kayıtlı
-  `mock_mode` kapatılmadan/anahtar girilmeden HER ZAMAN Demo'ya düşer
-  (planet_labs ile AYNI kalıp — hiçbir mevcut davranış bozulmadı).
-- `integrations.py`: 3 yeni entegrasyon tipi (`sentinel_hub`, `nasa_firms`,
-  `up42`) + probe fonksiyonları + `/test` uçları eklendi.
-- `extras.py`: `/satellite/ndvi/*` uçları artık `await get_satellite_provider
-  (db, "ndvi")` kullanıyor, geometri bulunamazsa/gerçek sağlayıcı geçici
-  hata verirse SESSİZCE Demo'ya düşer (kullanıcı ekranı hiç kırılmaz).
-- `satellite_provider.py` kendi `register_satellite_routes`'unu kazandı:
-  `/satellite/fire-alerts/{parcel_id}`, `/satellite/tasking-request`,
-  `/satellite/providers/status`.
-- Frontend: `Extras.jsx`'teki Entegrasyonlar ekranına 3 yeni kart (Sentinel
-  Hub, NASA FIRMS, UP42) eklendi — Planet Labs kartıyla AYNI mock_mode deseni.
-- **Bilinen borç / bu oturumda YAPILMAYAN (IT-28.1'in geri kalanı):**
-  Periyodik/otomatik görüntü alım işi (ingestion background job),
-  `parcel_index_series` koleksiyonu, bulutlu kare eleme otomasyonu, gerçek
-  COG/STAC tabanlı harita tile katmanı — bunlar sıradaki "harita komple
-  yenileme" fazının kapsamında ele alınacak.
-- **Doğrulama:** `server.py` yine gerçek ortamda import edildi (270 route,
-  çakışmasız); `Extras.jsx` esbuild ile sözdizimi doğrulamasından geçti.
-
----
-
-## 11) 2026-07-11 (devam, 3. oturum) — ROADMAP-URUNLESTIRME.md (On-Premise Ürünleştirme) — PR-01..PR-26 + P1-P4 en iyi çaba
-
-**Kritik değişiklik — Git disiplini kuruldu:** Bu oturuma kadar
-`/tmp/toprax_extract`'ta hiç git deposu yoktu (önceki iki oturumun tüm
-işi commit edilmemişti). Bu oturumda `git init` yapıldı, mevcut durum
-"Baseline" commit'i olarak kaydedildi, ve bundan sonraki HER mantıksal
-adım ayrı bir commit olarak kaydedildi (kullanıcının açık talebi:
-"Lütfen her yaptığın şeyi commitlemeyi atlama"). Repo artık ~20 commit
-içeriyor, her biri kendi PR-XX'ini ve doğrulama adımlarını açıklıyor.
-
-**Kapsam:** `ROADMAP-URUNLESTIRME.md` — TABSİS'i on-premise satılabilir
-ürüne dönüştürme roadmap'i. FAZ P0 (Kurulum Paketleme) ve FAZ P0b (API
-Standardizasyonu) TAMAMEN, FAZ P1-P4'ün "Claude Code Yapar" kısımları
-EN İYİ ÇABA ile tamamlandı.
-
-### FAZ P0 — Kurulum Paketleme (PR-01..PR-08) — ✅ TAMAMLANDI
-- **PR-01:** Dockerfile.backend multi-stage (builder+runtime, non-root
-  kullanıcı, HEALTHCHECK) yapıldı; docker-compose.yml'e healthcheck +
-  `depends_on: condition: service_healthy` eklendi; `GET /api/health`
-  (kimlik doğrulamasız, DB ping) eklendi; `.dockerignore`'lar eklendi.
-- **PR-02:** `backend/setup_wizard.py` (ince katman) + `SetupWizard.jsx`
-  (`/kurulum`, 6 adım) — YENİ iş mantığı YAZILMADI, var olan
-  tenants.py/integrations.py/platform_core.py uçları sırayla çağrılır.
-  Tamamlanınca kendini kilitler (`platform_setup` singleton doc).
-- **PR-03:** `scripts/check-requirements.sh` — bağımsız bash, Docker
-  öncesi çalışır (OS/CPU/RAM/disk/Docker versiyonu/portlar).
-- **PR-04:** `backend/migrations_engine.py` + `migrations/versions/0001_*`
-  (org/approval/case_management index'leri) + `migration_runner.py` (CLI)
-  + `upgrade.sh` (pull+migrate+otomatik rollback). Health Center'a şema
-  versiyonu satırı eklendi (response şekli DEĞİŞMEDİ — yeni bir servis
-  kaydı olarak eklendi).
-- **PR-05:** `scripts/build-offline-bundle.sh` + `install-from-bundle.sh`
-  — docker-compose.yml'e `image:` tag'i eklendi (build: ile birlikte,
-  online davranış değişmedi).
-- **PR-06:** `nginx/reverse-proxy.conf.template` + `docker-compose.tls.yml`
-  (opsiyonel overlay) + `scripts/setup-tls.sh` (Let's Encrypt + certbot
-  otomatik yenileme).
-- **PR-07:** `scripts/smoke-test.sh` — kurulum sonrası health/root/login/
-  frontend kontrolü.
-- **PR-08:** `docs/KURULUM-KILAVUZU.md` — uçtan uca IT admin kılavuzu.
-
-### FAZ P0b — API Standardizasyonu (PR-22..PR-26) — ✅ TAMAMLANDI
-- **PR-22:** `backend/api_envelope.py` — `/api/v1/*` YENİ, versiyonlu,
-  zarflı yüzey. Mevcut `/api/*` (370+ route, frontend bunu kullanıyor)
-  **HİÇ DEĞİŞTİRİLMEDİ** — ASGI transport ile içeride `/api/*`'e delege
-  edip yanıtı `{data,meta,error}` zarfına sarar. httpx.ASGITransport ile
-  canlı app'e karşı test edildi.
-- **PR-23:** `backend/crud_base.py` — `build_crud_router(CrudConfig, ...)`
-  generic CRUD/soft-delete fabrikası. **Var olan ~30 modül DOKUNULMADI**
-  (gereksiz refactor yasağı) — sadece BUNDAN SONRAKİ yeni modüller için.
-  `tests/test_crud_base.py` (mongomock_motor) ile <10 satırlık kullanımın
-  gerçekten çalıştığı kanıtlandı.
-- **PR-24:** `backend/api_keys.py` — kullanıcı JWT'sinden ayrı, tenant'a
-  bağlı, scope'lu, rate limitli API Key. **TEK entegrasyon noktası:**
-  `server.py`'deki `current_user()` — Authorization "tabsis_key_" ile
-  başlıyorsa `resolve_api_key_user()` çağrılır, sentetik user (`role=None`,
-  `permission_overrides.grant=scopes`) döner. permissions.py'ye HİÇ
-  DOKUNULMADI, ~370 endpoint sıfır ek kodla API key kabul eder.
-  `tests/test_api_keys.py`: scope-dışı izin yok, süresi dolmuş/iptal
-  edilmiş key reddediliyor, rate limit 429 veriyor — hepsi test edildi.
-- **PR-25:** `scripts/generate_postman_collection.py` — `server.app.openapi()`
-  introspection'ından (DB/HTTP sunucusu gerektirmez) Postman v2.1 üretir
-  (87 klasör, 368 istek — gerçekten çalıştırılıp doğrulandı). Insomnia
-  ayrı kod YAZILMADI (Postman v2.1'i doğrudan import edebiliyor).
-- **PR-26:** `backend/dev_portal.py` + `DeveloperPortal.jsx`
-  (`/gelistirici-portali`) — Swagger (zaten `/docs`'ta açık, kod
-  YAZILMADI), Postman indirme, API Key yönetim UI'ı, webhook linki
-  (integration_hub.py'ye — tekrar yazılmadı), changelog (`CHANGELOG.md`).
-
-### FAZ P1-P4 — En İyi Çaba (kod/doküman gerektiren kısımlar)
-- **PR-09 (kısmi):** `tests/test_ledger_immutability.py` (silinmezlik
-  kuralı — router'da DELETE/PUT yok + reverse() orijinali değiştirmiyor),
-  `tests/test_auth_lockout.py`.
-- **PR-10:** `.github/workflows/ci.yml` (pytest + pip-audit + yarn build +
-  postman collection güncellik kontrolü).
-- **PR-11:** `scripts/backup.sh` (mongodump, 14 gün retention) +
-  `scripts/restore-verify.sh` (AYRI izole container'da restore edip
-  bütünlük kontrolü — prod'a dokunmaz).
-- **PR-12:** `SENTRY_DSN` (boşsa devre dışı) — Sentry veya self-hosted
-  GlitchTip. `config_service.py` + `server.py`.
-- **PR-13:** GodMode (IT-36 bu projede "Saha Personeli Mobil" anlamına
-  geliyor, GodMode kod tabanında HİÇ YOK) yerine GERÇEKTEN VAR OLAN
-  `/api/auth/login`'e brute-force kilidi (`auth_lockout.py`, 5 deneme/15dk)
-  eklendi + CI'da pip-audit.
-- **PR-14:** `loadtest/k6-*.js` (Query Engine, harita/parsel, toplu SMS).
-- **PR-15:** `docs/legal/KVKK-AYDINLATMA-METNI.md` (taslak) +
-  `backend/consent.py` (genel amaçlı rıza kayıt ucu, ledger deseniyle
-  aynı: geri alınır, silinmez).
-- **PR-16:** `docs/legal/KULLANIM-SARTLARI-VE-SLA-TASLAK.md`.
-- **PR-17:** `scripts/check-license-compliance.sh` + GERÇEKTEN çalıştırılıp
-  üretilen `docs/legal/BAGIMLILIK-LISANS-RAPORU.md` (128 paket, 0 GPL/AGPL
-  kırmızı bayrak).
-- **PR-18:** `scripts/setup-demo-tenant.sh` (var olan `/admin/seed*`
-  uçlarını dedike bir tenant'ta çağırır, YENİDEN YAZMAZ).
-- **PR-19:** `scripts/provision-tenant.sh`.
-- **PR-21:** `docs/user-guides/{CIFTCI,ZIRAAT-MUHENDISI,YONETICI}-KILAVUZU.md`.
-- **PR-20:** yapılmadı — tamamen kullanıcının işi (pilot müşteri ilişkisi).
-
-**Bilinen sınırlar / kullanıcının yapması gerekenler (özet):** 3. parti
-hesap açma (Sentry/pentest firması), hukuki taslakların avukata
-onaylatılması, SLA/kapasite rakamlarının onaylanması, gerçek sunucuda
-ilk kurulum + TLS + restore denemesi, pilot müşteri bulma — hiçbiri
-otomatikleştirilemez, ROADMAP-URUNLESTIRME.md'de her PR'ın kendi
-"Sizin Yapmanız Gerekir" maddesinde ayrıca belirtildi.
-
-**Doğrulama:** Her PR sonrası `server.py` gerçek ortamda import edildi
-(sürüm sonu: 379 route, hiç çakışma yok); `pytest tests/ -q` son durumda
-24/24 yeşil; yeni/değişen tüm `.jsx`/`.js` dosyaları esbuild ile
-sözdizimi kontrolünden geçti; tüm bash scriptleri `bash -n` ile
-sözdizimi kontrolünden geçti; docker-compose YAML dosyaları
-`yaml.safe_load` ile doğrulandı. **Repo artık git ile takip ediliyor,
-her adım ayrı commit.**
-
----
-
-## 12) 2026-07-11 (devam, 4. oturum) — AI-VIZYON-PLATFORMU-PROMPT.md → Mimari Doküman + FAZ 18 Planı
-
-**Kapsam:** Kullanıcı `AI-VIZYON-PLATFORMU-PROMPT.md`'yi uygulamamı istedi.
-Bu prompt'un kendisi zaten iki açık karar sorulmasını zorunlu kılıyordu —
-ikisi de kullanıcıya soruldu:
-
-1. **DB/kuyruk yığını:** Kullanıcı kararı bana bıraktı ("amacımıza uygun en
-   optimum performans/teknoloji kararını sen ver"). **Mongo + in-process**
-   seçildi (PostgreSQL/PostGIS/Redis/RabbitMQ DEĞİL) — gerekçe: (a) Faz-1
-   ölçeği (3000-5000 parsel) PostGIS'in gerçek avantaj sağladığı ölçeğin
-   çok altında, (b) ROADMAP-URUNLESTIRME.md'nin FAZ P0'ı tam da "tek
-   docker-compose, tek backup scripti, tek migration runner" ile minimum
-   ops yükü hedefliyordu — ikinci bir DB teknolojisi bunu ikiye katlardı,
-   (c) ROADMAP.md'nin kendi "B. Uyarlama Kararları" bölümü zaten "Redis/
-   RabbitMQ/Elasticsearch/GeoServer → Mongo/in-process karşılık" diyor,
-   bu karar mevcut politikayla TAM tutarlı, (d) kaçış yolu açık: Faz 2+'da
-   AI Engine ayrı bir servis olduğu için istenirse İLERİDE PostGIS'e
-   geçilebilir, bugün seçmemek yarın seçememek anlamına gelmiyor.
-2. **Menü yerleşimi:** Kullanıcı "Ayarlar altında alt-grup" seçeneğini
-   onayladı (8. üst menü AÇILMADI).
-
-**Numaralandırma düzeltmesi (prompt'un kendi hatası):** Prompt "IT-38'den
-başlayın" diyordu ama IT-01..46 zaten TAMAMEN dolu (FAZ 17/IT-46'ya kadar
-kullanılmış — grep ile doğrulandı). Prompt ayrıca "yeni FAZ 14" diyordu
-ama FAZ 17'ye kadar zaten dolu. Bu çelişki görmezden gelinmedi, düzeltilip
-**FAZ 18, IT-47'den başlayarak** uygulandı; bu düzeltme hem yeni FAZ 18
-başlığında hem de bu bölümde açıkça not edildi.
-
-**Üretilen dosyalar (SADECE doküman — kod YAZILMADI, prompt'un kendi
-"Beklenen Çıktı Formatı" bölümü de zaten sadece 2 doküman istiyordu):**
-- `AI-VIZYON-PLATFORMU-PROMPT.md` (orijinal prompt, repoya kopyalandı —
-  Desktop/toprax'tan, referans olarak kalıcı saklanması için).
-- `AI-VIZYON-PLATFORMU-MIMARI.md` (YENİ, ~655 satır) — 18 bölüm: karar
-  özeti, sistem mimarisi (ASCII diyagram), modül hiyerarşisi, veritabanı
-  tasarımı (7 koleksiyon: ai_datasets, ai_knowledge_records, ai_taxonomy,
-  ai_models, ai_predictions, ai_jobs, ai_tenant_quota,
-  ai_active_learning_queue), görüntü kaynakları/Provider Pattern
-  genişlemesi, Knowledge Library mimarisi, yerel model önerileri (lisans
-  tablosu — **Ultralytics YOLO AGPL-3.0 riski** açıkça işaretlendi),
-  Confidence Engine + job queue (RabbitMQ yerine Mongo `find_one_and_update`
-  atomik claim deseni), tenant AI kotası, cloud escalation + redaksiyon
-  filtresi, Active Learning/HITL (case_management.py'ye köprü — YENİ
-  mesajlaşma İCAT EDİLMEDİ), MLOps (golden dataset regresyon kapısı,
-  Health Center entegrasyonu), performans/güvenlik, API tasarımı (Standard
-  API sözleşmesine uyum), ekranlar/menü, Faz 1→4 deployment yol haritası
-  (Service Registry ile adres soyutlama), Event Bus entegrasyonu, Mobil AI
-  Kamera köprüsü, bilinen riskler/açık sorular.
-- `ROADMAP-DETAY-TAM.md`: yeni **FAZ 18 — Agricultural Intelligence Engine**
-  bloğu eklendi, IT-47 (Knowledge Library çekirdeği), IT-48 (Yerel Pipeline
-  + Confidence Engine), IT-49 (Cloud Escalation + Tenant Kota), IT-50
-  (Active Learning + Uzman Doğrulama), IT-51 (MLOps/Model Registry +
-  Health Center), IT-52 (Mobil AI Kamera Köprüsü), IT-53 (Menü/RBAC
-  Konsolidasyonu + Postman entegrasyonu) — her biri Veri Modeli/API/UI/
-  Kabul Kriterleri formatında, var olan IT-42..46 girişleriyle AYNI
-  yoğunlukta.
-- `ROADMAP.md`: durum panosuna `FAZ 18 | IT-47..53 | ⬜ (plan hazır, kod
-  yazılmadı)` satırı eklendi.
-- `CLAUDE.md` (repo kökü): başlık güncellendi, bu oturuma referans eklendi.
-
-**Bilinçli kapsam dışı bırakılan (bu oturumda YAPILMAYAN):** Gerçek kod
-(backend/ai_engine/ paketi, modeller, pipeline, UI ekranları) — prompt'un
-kendi talimatı bu oturumun çıktısının SADECE mimari doküman + IT planı
-olmasıydı ("Bu görevin çıktısı dağınık bir rapor olmamalı... İKİ parçayı
-üret"), implementasyon bir SONRAKİ oturumun (kullanıcı "IT-47'yi yap"
-dediğinde) konusu.
-
-**Doğrulama:** `grep -oE "IT-[0-9]+"` ile IT numaralandırma çakışması
-olmadığı (IT-47..53 önceden hiç kullanılmamış) teyit edildi; yeni FAZ 18
-bloğu ROADMAP-DETAY-TAM.md'nin var olan IT-42..46 girişleriyle AYNI
-başlık/bölüm yapısında yazıldığı gözden geçirilerek doğrulandı.

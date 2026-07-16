@@ -25,13 +25,16 @@ import { ArrowUp, ArrowDown, Pin, Eye, EyeOff, Download, Columns3, ChevronLeft, 
  * indirir (Query Engine'in page_size tavanı) — arka planda tam veri seti
  * dışa aktarımı (streaming export) v1 kapsamı dışıdır.
  */
-export default function SmartDataGrid({ module, columns, defaultSort = [], pageSizeOptions = [25, 50, 100], onRowClick }) {
+export default function SmartDataGrid({ module, columns, defaultSort = [], pageSizeOptions = [25, 50, 100], onRowClick, initialFilters = null }) {
   const [colOrder, setColOrder] = useState(columns.map((c) => c.key));
   const [hidden, setHidden] = useState(new Set());
   const [pinned, setPinned] = useState(new Set());
   const [showColMenu, setShowColMenu] = useState(false);
 
-  const [quickFilters, setQuickFilters] = useState({}); // key -> value
+  // KONU 3 (drill-down): dashboard kartından gelen ön-filtre (URL query param'ı
+  // sayfa tarafından initialFilters olarak geçirir). Grid'in mevcut kolon-filtre
+  // mekanizmasını (quickFilters) besler — yeni bir filtre yolu İCAT EDİLMEZ.
+  const [quickFilters, setQuickFilters] = useState(initialFilters || {}); // key -> value
   const [sortState, setSortState] = useState(defaultSort);
 
   const [page, setPage] = useState(1);

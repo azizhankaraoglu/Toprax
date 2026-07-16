@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Kanal Provider Soyutlaması (IT-25 / FAZ 9 Communication Hub)
+Toprax — Kanal Provider Soyutlaması (IT-25 / FAZ 9 Communication Hub)
 =====================================================================
 `satellite_provider.py`'deki ABC + factory kalıbının AYNISI: gerçek bir
 SMS/E-posta/WhatsApp/Push/Sesli Arama sağlayıcısı (Netgsm/Twilio/SMTP/

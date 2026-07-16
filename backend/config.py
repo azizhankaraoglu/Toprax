@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — config.py (DEPRECATED — geriye dönük uyumluluk shim'i)
+Toprax — config.py (DEPRECATED — geriye dönük uyumluluk shim'i)
 =====================================================================
 IT-01 ile tüm ayarlar `config_service.py`'ye taşındı. Bu dosya sadece
 eski `from config import X` importlarının kırılmaması için var.

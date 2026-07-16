@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Kampanya + Segment (saved_queries üzerinden) + Planlı Gönderim
+Toprax — Kampanya + Segment (saved_queries üzerinden) + Planlı Gönderim
 + Onay + Retry/Fallback Zinciri (IT-26 / FAZ 9 devam)
 =====================================================================
 Segment Yönetimi AYRI bir koleksiyon İCAT ETMEDİ — `saved_queries.py`'nin

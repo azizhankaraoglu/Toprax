@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Audit Log Modülü
+Toprax — Audit Log Modülü
 =====================================================================
 Kim / ne yaptı / eski değer / yeni değer / IP / tarayıcı / tarih
 kaydını tutar. server.py ve diğer modüller `log_audit()` çağırarak

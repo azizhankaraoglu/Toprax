@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Experience Profile Modeli (IT-34 / FAZ 12 — Mobil başlangıç)
+Toprax — Experience Profile Modeli (IT-34 / FAZ 12 — Mobil başlangıç)
 =====================================================================
 ROADMAP: "Mobil deneyim statik rol bazlı değil, Experience Profile
 (Persona) modeliyle yönetilir. RBAC sadece yetkilendirme içindir;
@@ -139,7 +139,7 @@ def register_experience_profile_routes(api_router, db, current_user, require_per
 
     @api_router.get("/users/{user_id}/experience-profile")
     async def get_user_experience_profile(user_id: str, user=Depends(require_permission("experience_profiles:view"))):
-        target = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+        target = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0, "totp_secret": 0})
         if not target:
             raise HTTPException(404, "Kullanıcı bulunamadı")
         return {"user_id": user_id, "experience_profile_id": target.get("experience_profile_id")}
@@ -147,7 +147,7 @@ def register_experience_profile_routes(api_router, db, current_user, require_per
     @api_router.put("/users/{user_id}/experience-profile")
     async def assign_experience_profile(user_id: str, body: ProfileAssignRequest, request: Request,
                                          user=Depends(require_permission("experience_profiles:manage"))):
-        target = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+        target = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0, "totp_secret": 0})
         if not target:
             raise HTTPException(404, "Kullanıcı bulunamadı")
         if body.experience_profile_id:

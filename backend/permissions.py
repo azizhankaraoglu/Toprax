@@ -1,6 +1,6 @@
 """
 =====================================================================
-TabSIS — Granüler Yetkilendirme (Permission) Sistemi (Sprint 4d)
+Toprax — Granüler Yetkilendirme (Permission) Sistemi (Sprint 4d)
 =====================================================================
 Önceki sistem (config.py'deki ROLE_HIERARCHY + require_min_role) kaba
 bir "seviye" mantığıydı: "en az X seviyesinde ol". Bu modül onun YERİNE
@@ -204,6 +204,23 @@ PERMISSION_CATALOG = {
             {"key": "automation:manage", "label": "Otomasyon Kuralı Ekle/Düzenle/Sil"},
         ],
     },
+    # IT-28.1 / Remote Sensing (REMOTE-SENSING-EOSDA-PROMPT.md "Yetkilendirme").
+    # ManualSync ayrı bir izin — her kullanıcı manuel analiz başlatamaz.
+    "remote_sensing": {
+        "label": "Uzaktan Algılama (Remote Sensing / EOSDA)",
+        "permissions": [
+            {"key": "remote_sensing:view", "label": "Uydu/İndeks/İstatistik Görüntüle"},
+            {"key": "remote_sensing:manual_sync", "label": "Manuel Uydu Analizi Başlat (Uydu Analizi Güncelle)"},
+            {"key": "remote_sensing:automatic_sync", "label": "Otomatik Tarama (Scheduler) Yönet"},
+            {"key": "remote_sensing:settings", "label": "Tarama Politikası Ayarları"},
+            {"key": "remote_sensing:provider_manage", "label": "Sağlayıcı Yönetimi (EOSDA/Planet/...)"},
+            {"key": "remote_sensing:images", "label": "Görüntü Arşivi Erişimi"},
+            {"key": "remote_sensing:statistics", "label": "İstatistik/Zaman Serisi Erişimi"},
+            {"key": "remote_sensing:download", "label": "Görüntü İndirme"},
+            {"key": "remote_sensing:delete", "label": "Görüntü/Kayıt Eskitme (soft delete)"},
+            {"key": "remote_sensing:task_manage", "label": "Task Kuyruğu Yönetimi"},
+        ],
+    },
     "communications": {
         "label": "İletişim Merkezi (Communication Hub)",
         "permissions": [
@@ -268,6 +285,12 @@ PERMISSION_CATALOG = {
             {"key": "cases:categories_manage", "label": "Kategori yönet"},
         ],
     },
+    "announcements": {
+        "label": "Duyurular",
+        "permissions": [
+            {"key": "announcements:manage", "label": "Duyuru oluştur/düzenle/pasifleştir (okuma herkese açık, izin gerektirmez)"},
+        ],
+    },
     "settings": {
         "label": "Ayarlar",
         "permissions": [
@@ -279,6 +302,23 @@ PERMISSION_CATALOG = {
             {"key": "settings:roles_manage", "label": "Özel rol oluştur/düzenle"},
             {"key": "settings:fields_manage", "label": "Dinamik alan tanımlarını yönet (Form Yönetimi)"},
             {"key": "settings:lookups_manage", "label": "Lookup gruplarını/değerlerini yönet"},
+        ],
+    },
+    # FAZ 18 / IT-47..53 — Agricultural Intelligence Engine (AI Vision).
+    # Mimari doküman Bölüm 12: yeni bir yetkilendirme sistemi YOK, mevcut
+    # PERMISSION_CATALOG'a yeni bir modül eklenir.
+    "ai_engine": {
+        "label": "AI Bilgi Kütüphanesi",
+        "permissions": [
+            {"key": "ai_knowledge:view", "label": "Bilgi kütüphanesi / tahmin / kota görüntüle"},
+            {"key": "ai_knowledge:create", "label": "Kayıt/dataset ekle, annotate, tahmin çalıştır"},
+            {"key": "ai_knowledge:approve", "label": "Bilgi kaydı onayla/reddet"},
+            {"key": "ai_knowledge:manage", "label": "Taksonomi/dataset/kota yönetimi"},
+            {"key": "ai_model:view", "label": "Modelleri görüntüle"},
+            {"key": "ai_model:deploy", "label": "Model oluştur/eğit/deploy"},
+            {"key": "ai_model:rollback", "label": "Model rollback"},
+            {"key": "ai_prediction:view", "label": "Tahminleri görüntüle"},
+            {"key": "ai_prediction:validate", "label": "Uzman doğrulama (Active Learning)"},
         ],
     },
 }
@@ -328,6 +368,15 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "organization:view", "organization:manage",
         "approvals:view_pending", "approvals:decide", "approvals:rules_manage",
         "cases:view", "cases:create", "cases:manage", "cases:categories_manage",
+        # IT-53 — İlçe/Sistem Yöneticisi AI modülünün tümüne erişir.
+        "ai_knowledge:view", "ai_knowledge:create", "ai_knowledge:approve", "ai_knowledge:manage",
+        "ai_model:view", "ai_model:deploy", "ai_model:rollback",
+        "ai_prediction:view", "ai_prediction:validate",
+        # Remote Sensing — yönetici tam erişim.
+        "remote_sensing:view", "remote_sensing:manual_sync", "remote_sensing:automatic_sync",
+        "remote_sensing:settings", "remote_sensing:provider_manage", "remote_sensing:images",
+        "remote_sensing:statistics", "remote_sensing:download", "remote_sensing:delete",
+        "remote_sensing:task_manage",
     ],
     "ziraat_muhendisi": [
         "farmers:view", "farmers:edit",
@@ -353,10 +402,17 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "communications:campaigns_view", "communications:campaigns_manage",
         "lms:catalog_view", "lms:catalog_manage", "lms:assign", "lms:groups_manage", "lms:status_view_all",
         "integration_hub:view", "platform_core:view",
+        # Remote Sensing — Ziraat Mühendisi manuel analiz başlatabilir + görüntü/
+        # istatistik/indirme, ama sağlayıcı/scheduler/silme YÖNETİMİ admin'de.
+        "remote_sensing:view", "remote_sensing:manual_sync",
+        "remote_sensing:images", "remote_sensing:statistics", "remote_sensing:download",
         "experience_profiles:view", "experience_profiles:manage",
         "organization:view",
         "approvals:view_pending", "approvals:decide",
         "cases:view", "cases:create", "cases:manage",
+        # IT-53 — Ziraat Mühendisi: AI bilgi kütüphanesini görür + tahminleri
+        # doğrular (uzman), ama Model Yönetimi (deploy/rollback) GÖRMEZ.
+        "ai_knowledge:view", "ai_knowledge:create", "ai_prediction:view", "ai_prediction:validate",
     ],
     "saha_personeli": [
         "farmers:view", "parcels:view", "production_cycles:view",

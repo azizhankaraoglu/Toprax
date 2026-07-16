@@ -1,4 +1,4 @@
-# TabSIS Kullanım Kılavuzu — Yönetici
+# Toprax Kullanım Kılavuzu — Yönetici
 
 > Hedef Kitle: İl/İlçe Yöneticisi, Fabrika Müdürü ve Muhasebe Personeli
 

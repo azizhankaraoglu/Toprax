@@ -3,7 +3,7 @@ version: "3.9"
 services:
   mongo:
     image: mongo:7
-    container_name: tabsis-mongo
+    container_name: toprax-mongo
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?MONGO_ROOT_USERNAME .env dosyasında tanımlanmalı}
@@ -13,7 +13,7 @@ services:
     # ÖNEMLİ: Mongo artık host'a AÇILMIYOR (P0 güvenlik düzeltmesi — önceden
     # 27017 host'a publish ediliyordu ve kimlik doğrulaması da yoktu, yani
     # herkes doğrudan veritabanına bağlanabiliyordu). backend zaten aynı
-    # tabsis-net üzerinden mongo:27017'ye erişir, host portu gerekmez.
+    # toprax-net üzerinden mongo:27017'ye erişir, host portu gerekmez.
     # Yerel geliştirmede Mongo Compass gibi bir araçla bağlanmak gerekirse
     # SADECE localhost'a bağlı bir port açın (docker-compose.override.yml
     # içinde "127.0.0.1:27017:27017" gibi), asla "27017:27017" (0.0.0.0) YAZMAYIN.
@@ -24,7 +24,7 @@ services:
       retries: 10
       start_period: 15s
     networks:
-      - tabsis-net
+      - toprax-net
 
   backend:
     build:
@@ -35,8 +35,8 @@ services:
     # 'docker compose up' bu adi otomatik kullanir/build eder; air-gapped
     # ortamda imaj zaten 'docker load' ile bu adla yuklendigi icin build
     # tekrar tetiklenmez.
-    image: tabsis-backend:latest
-    container_name: tabsis-backend
+    image: toprax-backend:latest
+    container_name: toprax-backend
     restart: unless-stopped
     environment:
       # Bu compose dosyası üretim/dağıtım amaçlıdır — ENVIRONMENT=production
@@ -63,17 +63,21 @@ services:
       retries: 5
       start_period: 20s
     networks:
-      - tabsis-net
+      - toprax-net
 
   frontend:
     build:
       context: ./frontend
       dockerfile: ../Dockerfile.frontend
       args:
-        REACT_APP_BACKEND_URL: http://localhost:8001
+        # Bos birakilir -- api.js bunu "/api" (ayni-origin, goreli) olarak
+        # yorumlar; frontend'in kendi nginx'i /api/'yi backend:8001'e
+        # proxy'ler (bkz. Dockerfile.frontend). Boylece localhost:3000 VE
+        # Cloudflare Tunnel arkasindaki tum hostname'ler AYNI imajla calisir.
+        REACT_APP_BACKEND_URL: ""
     # bkz. backend'deki 'image:' notu -- ayni PR-05 gerekcesi.
-    image: tabsis-frontend:latest
-    container_name: tabsis-frontend
+    image: toprax-frontend:latest
+    container_name: toprax-frontend
     restart: unless-stopped
     ports:
       - "3000:80"
@@ -81,17 +85,21 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      # "localhost" container icinde once IPv6 (::1) cozup nginx orada
+      # dinlemedigi icin "Connection refused" -- gercek istekler (IPv4)
+      # calisiyor olsa bile yanlis "unhealthy" gosteriyordu. 127.0.0.1
+      # ile IPv6 belirsizligi ortadan kalkar.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 10s
     networks:
-      - tabsis-net
+      - toprax-net
 
 volumes:
   mongo_data:
 
 networks:
-  tabsis-net:
+  toprax-net:
     driver: bridge

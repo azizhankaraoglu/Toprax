@@ -1,8 +1,8 @@
 """
 =====================================================================
-TabSIS — Integration Hub Formalizasyonu + Webhook Engine (IT-32 / FAZ 11)
+Toprax — Integration Hub Formalizasyonu + Webhook Engine (IT-32 / FAZ 11)
 =====================================================================
-ROADMAP: "TABSİS dışarıya doğrudan bağlanmaz; Google Maps, AI servisleri,
+ROADMAP: "TOPRAX dışarıya doğrudan bağlanmaz; Google Maps, AI servisleri,
 SMS/WhatsApp/E-posta, GeoServer, NASA/Sentinel/Planet, MERNİS/TAKBİS dahil
 tüm 3. parti çağrılar tek bir Integration Hub modülünden geçer."
 
