@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import "@/App.css";
 import Login from "@/pages/Login";
 import SetupWizard from "@/pages/SetupWizard";
@@ -51,7 +51,7 @@ function PrivateRoute({ children, adminOnly = false }) {
   if (!token) return <Navigate to="/login" />;
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   if (adminOnly && user.role === "ciftci") return <Navigate to="/ciftci" />;
-  return children;
+  return children || <Outlet />;
 }
 
 function PlatformRoute({ children }) {
