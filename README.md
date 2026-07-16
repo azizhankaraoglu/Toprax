@@ -52,6 +52,31 @@ Türk Şeker benzeri büyük tarım kooperatifleri için **kooperatifin kendi su
 
 ---
 
+## ⚙️ ORTAM DEĞİŞKENLERİ (.env)
+
+**UYARI:** Aşağıdaki değişkenler üretim ortamında zorunludur ve güvenlikle ilgilidir.
+
+### Docker Kurulumu İçin
+
+`.env` dosyasını kökünde (docker-compose.yml ile aynı klasörde) oluşturun (`.env.example`'ı kopyalayın):
+
+```bash
+cp .env.example .env
+```
+
+Dosyayı açıp DEGISTIR ile marked alanları güncelleyin:
+- `MONGO_ROOT_PASSWORD` — Güçlü, rastgele bir şifre (örn. `python -c "import secrets; print(secrets.token_hex(16))"`)
+- `JWT_SECRET` — Güçlü, rastgele bir token (örn. `python -c "import secrets; print(secrets.token_hex(32))"`)
+- `PLATFORM_ADMIN_PASSWORD` — Yönetici hesap şifresi
+
+**Güvenlik notu:** `.env` dosyası **asla repo'ya commit'lenmez** (`.gitignore`'a ekli). Sadece `.env.example` paylaşılır; üretime deploy etmeden önce gerçek değerler doldurulur.
+
+### Manuel Kurulumu İçin
+
+Backend ve frontend **ayrı** `.env` dosyasına ihtiyaç duymaz. Sadece backend'de basit bir local config oluşturursunuz (üretimde Docker ile tek bir root `.env` yeterlidir).
+
+---
+
 ## 🟢 YÖNTEM A — DOCKER İLE TEK KOMUTLA (ÖNERİLEN)
 
 ### Ön Koşullar
@@ -63,10 +88,14 @@ Sadece bunu kur, başka şeye gerek yok:
 
 ### Adımlar
 
-**1. Projeyi indir/aç**
+**1. Projeyi indir/aç ve .env hazırla**
 ```bash
 # Bu klasöre projeyi indir (Save to Github ile veya manuel ZIP indir)
 cd ~/Desktop/dijital-tarim
+
+# .env dosyasını oluştur (.env.example'ı kopyala ve değerleri doldur)
+cp .env.example .env
+# Editör ile .env aç ve DEGISTIR ile marked alanları güncelle
 ```
 
 **2. Tek komutla başlat**
