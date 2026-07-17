@@ -131,12 +131,22 @@ class EOSDAProvider(IRemoteSensingProvider):
                             headers=self._headers, timeout=self.timeout)
         resp.raise_for_status()
         data = resp.json()
+        # GERÇEK EOSDA yanıtı bir "status" alanı DÖNDÜRMEZ (canlı API ile
+        # doğrulandı); durum task_type/success/error_message/result üzerinden
+        # çıkarılır. "status" alanı beklemek görevleri POLLING'de kilitliyor ve
+        # boşuna 300sn timeout'a düşürüyordu.
         raw_state = (data.get("status") or "").lower()
-        state = {"created": TaskState.POLLING, "processing": TaskState.POLLING,
-                 "finished": TaskState.COMPLETED, "error": TaskState.FAILED}.get(
-                     raw_state, TaskState.POLLING)
-        return TaskStatus(task_id=task_id, state=state, result=data.get("result"),
-                          error=data.get("error"), raw=data)
+        if data.get("error_message") or data.get("task_type") == "error" or raw_state == "error":
+            err = data.get("error_message") or data.get("error")
+            return TaskStatus(task_id=task_id, state=TaskState.FAILED,
+                              error=str(err) if err else "EOSDA görev hatası", raw=data)
+        result = data.get("result")
+        result_url = data.get("result_url") or data.get("png")
+        if result is not None or result_url or raw_state == "finished":
+            return TaskStatus(task_id=task_id, state=TaskState.COMPLETED,
+                              result=result, result_url=result_url, raw=data)
+        # Aksi halde hâlâ işleniyor.
+        return TaskStatus(task_id=task_id, state=TaskState.POLLING, raw=data)
 
     def _mock_status(self, task_id: str) -> TaskStatus:
         """Mock modda task ANINDA tamamlanır; istatistik task'ları için

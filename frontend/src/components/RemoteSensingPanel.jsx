@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api, { BACKEND_URL } from "@/api";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Satellite, RefreshCw, Play, Pause, Image as ImageIcon, CloudSun } from "lucide-react";
+import { Satellite, RefreshCw, Play, Pause, Image as ImageIcon, CloudSun, Brain } from "lucide-react";
 
 const ndviColor = (v) => (v == null ? "#97a8a0" : v > 0.65 ? "#4ade80" : v > 0.45 ? "#fbbf24" : "#ef4444");
 const ndviLabel = (v) => (v == null ? "—" : v > 0.65 ? "Sağlıklı gelişim" : v > 0.45 ? "İzlemeye değer" : "Stres altında");
@@ -27,6 +27,8 @@ export default function RemoteSensingPanel({ parcelId }) {
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [interp, setInterp] = useState(null);
+  const [interpBusy, setInterpBusy] = useState(false);
 
   const load = () => {
     api.get("/remote-sensing/providers/status").then((r) => setStatus(r.data)).catch(() => {});
@@ -51,7 +53,20 @@ export default function RemoteSensingPanel({ parcelId }) {
   const cur = series[Math.min(idx, Math.max(0, series.length - 1))] || null;
   const curImg = cur ? imageByDate[cur.date] : null;
 
-  useEffect(() => { setIdx(0); setImgError(false); }, [stats]);
+  useEffect(() => { setIdx(0); setImgError(false); setInterp(null); }, [stats]);
+
+  async function runInterpret() {
+    setInterpBusy(true);
+    setInterp(null);
+    try {
+      const { data } = await api.post(`/remote-sensing/parcels/${parcelId}/interpret`);
+      setInterp(data);
+    } catch (err) {
+      setInterp({ error: err.response?.data?.detail || "Yorum üretilemedi." });
+    } finally {
+      setInterpBusy(false);
+    }
+  }
   useEffect(() => { setImgError(false); }, [idx]);
 
   useEffect(() => {
@@ -171,6 +186,37 @@ export default function RemoteSensingPanel({ parcelId }) {
                 {curImg?.satellite && <div className="text-xs text-[var(--text-dim)]">Uydu: {curImg.satellite}</div>}
               </div>
             </div>
+          </div>
+
+          {/* AI Yorumu — NDVI ne anlama geliyor + gerekçeli durum */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-[var(--text-dim)] flex items-center gap-1"><Brain size={13}/> AI Yorumu</div>
+              <button onClick={runInterpret} disabled={interpBusy} className="btn btn-primary text-xs" data-testid="rs-interpret">
+                <Brain size={13}/> {interpBusy ? "Yorumlanıyor…" : "AI ile Yorumla"}
+              </button>
+            </div>
+            {interp && !interp.error && (
+              <div className="bg-[var(--surface-2)] rounded-lg p-3 text-sm leading-relaxed">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`badge ${interp.ai_powered ? "badge-a" : "badge-neutral"}`}>
+                    {interp.ai_powered ? "AI" : "Kural-bazlı"}
+                  </span>
+                  {interp.metrics && (
+                    <span className="text-xs text-[var(--text-dim)]">
+                      ort NDVI {interp.metrics.avg} · son {interp.metrics.latest_ndvi} · {interp.metrics.points} tarih
+                    </span>
+                  )}
+                </div>
+                <p className="whitespace-pre-line">{interp.interpretation}</p>
+                {!interp.ai_powered && interp.ai_error && (
+                  <p className="text-[10px] text-amber-400 mt-2">
+                    AI yanıtı alınamadı ({interp.ai_error}) — kural-bazlı yorum gösteriliyor.
+                  </p>
+                )}
+              </div>
+            )}
+            {interp?.error && <div className="text-xs text-red-400">{interp.error}</div>}
           </div>
 
           {/* Geçmiş analizler — güncelleme tarihleriyle */}

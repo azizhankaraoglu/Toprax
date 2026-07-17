@@ -435,6 +435,37 @@ export function AyarlarEntegrasyon() {
           <TestBadge itype="up42"/>
         </div>
 
+        {/* ============ EOSDA (Uzaktan Algılama sağlayıcısı) ============ */}
+        <div className="card p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-400"><Satellite size={20}/></div>
+            <div>
+              <div className="flex items-center gap-2"><h3 className="font-display text-lg">EOSDA (Uzaktan Algılama)</h3><StatusBadge itype="eosda"/></div>
+              <p className="text-xs text-[var(--text-dim)]">NDVI/uydu görüntüsü — "Uzaktan Algılama" menüsünün sağlayıcısı</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <input className="input" type="password" placeholder="API Key (apk. ile başlar)"
+                   value={forms.eosda?.config?.api_key || ""}
+                   onChange={(e) => setField("eosda", "api_key", e.target.value)} data-testid="eosda-key-input"/>
+            <p className="text-[11px] text-[var(--text-dim)]">
+              API key girip <b>Kaydet</b>'e bastığınızda entegrasyon otomatik olarak demo modundan çıkıp gerçek moda geçer.
+              Anahtarı <b>eos.com</b> hesabınızdan alırsınız (Planet/Gemini anahtarları BURAYA GİRİLMEZ).
+            </p>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button onClick={() => save("eosda")} disabled={saving.eosda} className="btn btn-ghost">
+              <Save size={14}/> {saving.eosda ? "Kaydediliyor…" : "Kaydet"}
+            </button>
+            <button onClick={() => test("eosda")} disabled={testing.eosda} className="btn btn-primary">
+              {testing.eosda ? <Loader2 size={14} className="animate-spin"/> : <Wifi size={14}/>}
+              {testing.eosda ? "Test ediliyor…" : "Bağlantıyı Test Et"}
+            </button>
+          </div>
+          {saved.eosda && <div className="text-xs text-[var(--primary)] mt-2 flex items-center gap-2"><CheckCircle2 size={14}/> Kaydedildi</div>}
+          <TestBadge itype="eosda"/>
+        </div>
+
       </div>
     </div>
   );

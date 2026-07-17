@@ -19,6 +19,73 @@ from .scheduler import run_scheduler_tick, find_uncovered_parcels
 from .monitoring import get_monitoring_summary
 
 
+# =====================================================================
+# AI YORUMLAMA — EOSDA/NDVI verisini çiftçinin anlayacağı dile çevirir
+# =====================================================================
+_HEALTHY_NDVI = 0.65
+_AI_SYSTEM = ("Sen deneyimli bir tarımsal uzaktan algılama danışmanısın. NDVI/uydu "
+              "verilerini çiftçinin anlayacağı SADE, NET Türkçe ile yorumlarsın. Kısa "
+              "ve somut yaz, gereksiz teknik jargondan kaçın.")
+
+
+def _rs_metrics(series):
+    ndvis = [p.get("ndvi") for p in series if p.get("ndvi") is not None]
+    if not ndvis:
+        return None
+    latest = series[-1]
+    return {
+        "avg": round(sum(ndvis) / len(ndvis), 3),
+        "min": min(ndvis), "max": max(ndvis),
+        "latest_ndvi": latest.get("ndvi"), "latest_date": latest.get("date"),
+        "first_ndvi": series[0].get("ndvi"), "points": len(series),
+    }
+
+
+def _rs_rule_interpretation(parcel, m):
+    crop = parcel.get("current_crop") or "ürün"
+    latest, avg = m["latest_ndvi"], m["avg"]
+    lines = ["NDVI (Bitki Örtüsü İndeksi) bitki yoğunluğunu ve sağlığını gösterir: 0'a "
+             "yakın değer çıplak veya stresli toprağı, 1'e yakın değer gür ve sağlıklı "
+             "bitki örtüsünü ifade eder."]
+    if latest is None:
+        return " ".join(lines)
+    if latest >= _HEALTHY_NDVI:
+        lines.append(f"Durum: SAĞLIKLI. Son ölçüm NDVI {latest} — bitki örtüsü gür ve sağlıklı görünüyor.")
+    elif latest >= 0.45:
+        lines.append(f"Durum: İZLEMEYE DEĞER. Son ölçüm NDVI {latest} — orta düzey; hafif su/besin stresi başlıyor olabilir.")
+    else:
+        lines.append(f"Durum: STRES / OLASI SUSUZLUK. Son ölçüm NDVI {latest} — düşük; tarla büyük olasılıkla su veya besin stresi altında (susuz kalmış olabilir).")
+    beklenen = "beklenenin ALTINDA" if avg < _HEALTHY_NDVI else "beklenen aralıkta"
+    lines.append(f"Gerekçe: Sağlıklı bir {crop} tarlasında bu dönemde NDVI genelde ~{_HEALTHY_NDVI}–0.80 olmalı; "
+                 f"bu parselin ortalaması {avg} — yani {beklenen}.")
+    first = m.get("first_ndvi")
+    if first is not None and latest is not None:
+        if latest < first - 0.1:
+            lines.append(f"Eğilim: NDVI {first} → {latest} düşüşte; sulama/gübreleme gözden geçirilmeli.")
+        elif latest > first + 0.1:
+            lines.append(f"Eğilim: NDVI {first} → {latest} artışta; bitki gelişimi olumlu.")
+    if latest < 0.45:
+        lines.append("Öneri: En kısa sürede sulama ve toprak nemi kontrolü önerilir.")
+    return " ".join(lines)
+
+
+def _rs_ai_prompt(parcel, m, series):
+    crop = parcel.get("current_crop") or "ürün"
+    seri = ", ".join(f"{p.get('date')}={p.get('ndvi')}" for p in series if p.get("ndvi") is not None)
+    return (
+        f"Parsel: {parcel.get('name') or parcel.get('parcel_code')} "
+        f"({parcel.get('area_dekar')} dekar), ürün: {crop}.\n"
+        f"NDVI ortalaması: {m['avg']}, en düşük: {m['min']}, en yüksek: {m['max']}, "
+        f"son ölçüm: {m['latest_ndvi']} (tarih {m['latest_date']}), toplam {m['points']} tarih.\n"
+        f"NDVI zaman serisi: {seri}.\n"
+        f"Referans: sağlıklı bir {crop} tarlasında bu dönemde NDVI ~0.65-0.80 olmalı.\n"
+        "Şunları açıkla: (1) NDVI nedir, yüksek/düşük olması ne anlama gelir; "
+        "(2) bu tarlanın durumu (sağlıklı mı, su/besin stresi veya susuzluk var mı); "
+        "(3) GEREKÇE olarak beklenen NDVI ile bu tarlanın değerini KARŞILAŞTIR; "
+        "(4) 1-2 somut öneri (ör. sulama). En fazla 6-7 cümle, sade Türkçe."
+    )
+
+
 def register_remote_sensing_routes(api_router, db, current_user, require_permission, log_audit):
 
     async def _provider_factory(provider_override=None):
@@ -145,3 +212,37 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
         if not include_inactive:
             q["is_active"] = True
         return await db.remote_sensing_images.find(q, {"_id": 0}).sort("capture_date", -1).to_list(200)
+
+    # ---- AI Yorumlama (EOSDA/NDVI verisini anlamlandırır) --------------------
+    @api_router.post("/remote-sensing/parcels/{parcel_id}/interpret")
+    async def rs_interpret(parcel_id: str,
+                           user=Depends(require_permission("remote_sensing:statistics"))):
+        """En güncel NDVI istatistiğini alır, kural-bazlı bir yorum üretir ve AI
+        servisi (Ayarlar › Entegrasyonlar › AI) yapılandırılmışsa onunla
+        zenginleştirir — 'tarlanız susuz' gibi gerekçeli, çiftçi-dostu çıktı."""
+        parcel = await db.parcels.find_one({"id": parcel_id}, {"_id": 0}) or {}
+        stat = await db.remote_sensing_statistics.find_one(
+            {"parcel_id": parcel_id}, {"_id": 0}, sort=[("created_at", -1)])
+        series = (stat or {}).get("series") or []
+        m = _rs_metrics(series)
+        if not m:
+            raise HTTPException(400, "Önce 'Uydu Analizini Güncelle' ile NDVI verisi üretin.")
+        rule = _rs_rule_interpretation(parcel, m)
+        ai_text, ai_powered, ai_error = None, False, None
+        try:
+            from integrations import get_ai_service_config
+            from ai_provider import get_ai_provider
+            cfg = await get_ai_service_config(db)
+            if cfg and cfg.get("api_key") and cfg.get("provider"):
+                provider = get_ai_provider(cfg["provider"], cfg["api_key"], cfg.get("model"))
+                ai_text = provider.generate_text(_AI_SYSTEM, _rs_ai_prompt(parcel, m, series))
+                ai_powered = bool(ai_text)
+        except Exception as e:
+            ai_error = str(e)[:220]
+        return {
+            "parcel_id": parcel_id, "metrics": m,
+            "interpretation": (ai_text or rule).strip(),
+            "rule_based": rule, "ai_powered": ai_powered, "ai_error": ai_error,
+            "index": (stat or {}).get("index", "ndvi"),
+            "analysis_date": (stat or {}).get("created_at"),
+        }
