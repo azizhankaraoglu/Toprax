@@ -192,7 +192,7 @@ async def gather_and_compute_entitlement(
         net_tonnage_by_quality: Dict[str, float] = dict(tonnage_override)
     else:
         kantar_records = await db.kantar_records.find(
-            {"production_cycle_id": body.production_cycle_id}, {"_id": 0}
+            {"production_cycle_id": body.production_cycle_id, "is_active": {"$ne": False}}, {"_id": 0}
         ).to_list(500)
         net_tonnage_by_quality = {}
         for k in kantar_records:

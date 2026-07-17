@@ -94,12 +94,16 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
         if not parcel_ids:
             raise HTTPException(400, "parcel_ids veya parcel_id gerekli")
         indices = body.get("indices") or ["ndvi"]
-        task_type = body.get("task_type", "statistics")
+        # task_types listesi verilirse (ör. ["statistics","download"]) her parsel
+        # için hem NDVI istatistiği hem uydu görüntüsü tek çağrıda kuyruğa alınır;
+        # geriye dönük uyumlu: tekil task_type hâlâ desteklenir.
+        task_types = body.get("task_types") or [body.get("task_type", "statistics")]
         created = []
         for pid in parcel_ids:
-            created.append(await create_task(db, parcel_id=pid, task_type=task_type,
-                                             indices=indices, trigger="manual",
-                                             priority=100))  # manuel = yüksek öncelik
+            for tt in task_types:
+                created.append(await create_task(db, parcel_id=pid, task_type=tt,
+                                                 indices=indices, trigger="manual",
+                                                 priority=100))  # manuel = yüksek öncelik
         result = await process_pending_tasks(db, _provider_factory)
         await log_audit(db, user, action="manual_sync", entity="remote_sensing",
                         entity_id=",".join(parcel_ids)[:120],

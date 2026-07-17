@@ -6,8 +6,10 @@ import * as turf from "@turf/turf";
 import { MapDrawTools } from "@/components/MapDrawTools";
 import { QuickAddPanel } from "@/components/QuickAdd";
 import { mapTkgmProperties } from "@/lib/tkgmMapping";
+import FarmerSelect from "@/components/FarmerSelect";
+import BulkRemoteSensing from "@/components/BulkRemoteSensing";
 import {
-  PenLine, Scissors, Combine, Crosshair, Upload, X, Check, Layers, Plus
+  PenLine, Scissors, Combine, Crosshair, Upload, X, Check, Layers, Plus, Satellite
 } from "lucide-react";
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
@@ -44,6 +46,7 @@ export default function Parcels() {
   // Aktif araç: null | "draw" | "edit" | "split" | "merge" | "coords" | "import"
   const [tool, setTool] = useState(null);
   const [toolMsg, setToolMsg] = useState("");
+  const [showBulkRS, setShowBulkRS] = useState(false);   // Toplu Uzaktan Algılama paneli
 
   // ÇİZ
   const [drawnGeoJSON, setDrawnGeoJSON] = useState(null);
@@ -118,7 +121,7 @@ export default function Parcels() {
       split: "Bölmek istediğiniz parseli listeden seçin, ardından yeni parçaları tek tek çizin (en az 2).",
       merge: "Birleştirmek istediğiniz parselleri listeden işaretleyin (aynı çiftçiye ait ve bitişik olmalı).",
       coords: "Haritada bir noktaya tıklayın, koordinatı burada göreceksiniz.",
-      import: "Bir .geojson dosyası seçin — TKGM Parsel Sorgu'dan (parselsorgu.tkgm.gov.tr) dışa aktardığınız dosyalar da desteklenir, il/ilçe/mahalle/ada/parsel bilgileri otomatik tanınır.",
+      import: "Bir .geojson, .kml veya .kmz dosyası seçin — birden fazla parseli tek seferde içe aktarır. TKGM Parsel Sorgu'dan (parselsorgu.tkgm.gov.tr) dışa aktardığınız dosyalar ve KML/KMZ içindeki öznitelikler (il/ilçe/mahalle/ada/parsel) otomatik tanınıp parsel bilgilerine yazılır.",
     };
     setToolMsg(msgs[t] || "");
   }
@@ -243,11 +246,37 @@ export default function Parcels() {
     load();
   }
 
-  function onImportFile(e) {
+  async function onImportFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     setImportFile(file);
     setImportResult(null);
+    setImportPreview(null);
+    const name = (file.name || "").toLowerCase();
+
+    // KML/KMZ: tarayıcıda ayrıştıramayız (KMZ bir zip, KML XML) — backend'in
+    // /geo-import/parse ucuna yükleyip dönen feature'ları bir GeoJSON
+    // FeatureCollection'a çevirir, mevcut toplu import akışına besleriz.
+    if (name.endsWith(".kml") || name.endsWith(".kmz")) {
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const { data } = await api.post("/geo-import/parse", form, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        const features = (data.features || []).map((f) => ({
+          type: "Feature",
+          geometry: f.geometry,
+          properties: f.properties || {},
+        }));
+        setImportPreview({ geojson: { type: "FeatureCollection", features }, count: features.length });
+      } catch (err) {
+        setImportPreview({ error: err.response?.data?.detail || "KML/KMZ dosyası ayrıştırılamadı" });
+      }
+      return;
+    }
+
+    // GeoJSON/JSON: tarayıcıda doğrudan okunur.
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
@@ -294,7 +323,7 @@ export default function Parcels() {
     { key: "split", icon: Scissors, label: "Böl" },
     { key: "merge", icon: Combine, label: "Birleştir" },
     { key: "coords", icon: Crosshair, label: "Koordinat Al" },
-    { key: "import", icon: Upload, label: "GeoJSON / TKGM İçe Aktar" },
+    { key: "import", icon: Upload, label: "Toplu İçe Aktar (GeoJSON/KML/KMZ)" },
   ];
 
   return (
@@ -323,6 +352,19 @@ export default function Parcels() {
           ))}
         </div>
       </header>
+
+      {/* TOPLU UZAKTAN ALGILAMA — elastik filtre + parsel seçimi + manuel analiz */}
+      <div className="mb-3">
+        <button onClick={() => setShowBulkRS((s) => !s)}
+          className={`btn ${showBulkRS ? "btn-primary" : "btn-ghost"} text-xs`} data-testid="toggle-bulk-rs">
+          <Satellite size={14} /> Uzaktan Algılama (Toplu Sorgu & Analiz)
+        </button>
+        {showBulkRS && (
+          <div className="card p-5 mt-3">
+            <BulkRemoteSensing />
+          </div>
+        )}
+      </div>
 
       {/* HARİTA ARAÇLARI TOOLBAR */}
       <div className="flex flex-wrap gap-2 mb-3">
@@ -686,8 +728,12 @@ export default function Parcels() {
 
           {tool === "import" && (
             <div>
-              <h3 className="font-display text-lg mb-3">GeoJSON / TKGM İçe Aktar</h3>
-              <input type="file" accept=".geojson,.json" onChange={onImportFile} className="input mb-3 text-xs" />
+              <h3 className="font-display text-lg mb-3">Toplu Parsel İçe Aktar</h3>
+              <p className="text-[11px] text-[var(--text-dim)] mb-2">
+                GeoJSON (.geojson/.json), KML (.kml) veya KMZ (.kmz) — birden fazla parsel tek seferde eklenir.
+                Dosya içindeki il/ilçe/mahalle/ada/parsel bilgileri otomatik olarak parsel alanlarına yazılır.
+              </p>
+              <input type="file" accept=".geojson,.json,.kml,.kmz" onChange={onImportFile} className="input mb-3 text-xs" />
               {importPreview?.error && <div className="text-xs text-red-400 mb-2">{importPreview.error}</div>}
               {importPreview?.count != null && (
                 <div className="space-y-3">
@@ -704,12 +750,17 @@ export default function Parcels() {
                   })()}
                   <div>
                     <label className="text-xs text-[var(--text-dim)] mb-1 block">
-                      Varsayılan Çiftçi (feature.properties.farmer_id yoksa kullanılır)
+                      Varsayılan Çiftçi <span className="text-[var(--text-dim)]">(opsiyonel)</span>
                     </label>
-                    <select className="input" value={importFarmerId} onChange={(e) => setImportFarmerId(e.target.value)}>
-                      <option value="">Seç...</option>
-                      {farmers.map((f) => <option key={f.id} value={f.id}>{f.full_name} ({f.member_no})</option>)}
-                    </select>
+                    <FarmerSelect
+                      farmers={farmers}
+                      value={importFarmerId || null}
+                      onChange={(fid) => setImportFarmerId(fid || "")}
+                      placeholder="Çiftçi ara… (boş bırakabilirsiniz)"
+                    />
+                    <p className="text-[10px] text-[var(--text-dim)] mt-1">
+                      Boş bırakırsanız parseller "atanmamış" olarak eklenir — sonra parsele tıklayıp çiftçi atayabilirsiniz.
+                    </p>
                   </div>
                   <button onClick={submitImport} className="btn btn-primary w-full justify-center">
                     <Upload size={14}/> İçe Aktar
@@ -723,9 +774,27 @@ export default function Parcels() {
                   ) : (
                     <>
                       <div className="text-[var(--primary)]">{importResult.created_count} parsel içe aktarıldı.</div>
-                      {importResult.errors?.length > 0 && (
-                        <div className="text-amber-400 mt-1">{importResult.errors.length} kayıt atlandı.</div>
-                      )}
+                      {importResult.errors?.length > 0 && (() => {
+                        // Atlama nedenlerini grupla (ör. "1275 × Parsel değil (Point)…")
+                        const groups = {};
+                        importResult.errors.forEach((e) => {
+                          const key = (e.error || "Bilinmeyen").replace(/:.*$/, "").trim();
+                          groups[key] = (groups[key] || 0) + 1;
+                        });
+                        return (
+                          <div className="text-amber-400 mt-1">
+                            <div>{importResult.errors.length} kayıt atlandı:</div>
+                            <ul className="list-disc list-inside mt-0.5">
+                              {Object.entries(groups).map(([msg, n]) => (
+                                <li key={msg}>{n} × {msg}</li>
+                              ))}
+                            </ul>
+                            <div className="text-[10px] text-[var(--text-dim)] mt-1">
+                              Not: Nokta/çizgi geometrileri parsel olamaz (alanı yok); yalnızca Polygon'lar parsele dönüşür.
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </>
                   )}
                 </div>

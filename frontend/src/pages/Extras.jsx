@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { QuickAddPanel } from "@/components/QuickAdd";
+import RowActions from "@/components/RowActions";
+import { APP_VERSION, APP_BUILD } from "@/version";
 
 const fmt = (n) => new Intl.NumberFormat("tr-TR").format(n);
 
@@ -60,7 +62,11 @@ export function AyarlarEntegrasyon() {
     setSaving((s) => ({ ...s, [itype]: true }));
     try {
       const f = forms[itype];
-      await api.put(`/integrations/${itype}`, { provider: f.provider, config: f.config, enabled: true });
+      // mock_mode'u GÖNDERME — backend, kimlik bilgisi girildiyse otomatik
+      // olarak gerçek moda geçirir ("API key girildiği anda demodan çık").
+      const config = { ...f.config };
+      delete config.mock_mode;
+      await api.put(`/integrations/${itype}`, { provider: f.provider, config, enabled: true });
       setSaved((s) => ({ ...s, [itype]: true }));
       setTimeout(() => setSaved((s) => ({ ...s, [itype]: false })), 2500);
       load();
@@ -84,6 +90,23 @@ export function AyarlarEntegrasyon() {
 
   if (!integrations) return <div className="p-10 text-[var(--text-dim)]">Yükleniyor…</div>;
 
+  // Canlı durum rozeti — anahtar girilip kaydedilince "DEMO" otomatik "AKTİF"e döner.
+  const StatusBadge = ({ itype }) => {
+    const it = integrations[itype];
+    if (!it) return null;
+    if (it.active) {
+      return (
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--primary)]/15 text-[var(--primary)] flex items-center gap-1 whitespace-nowrap">
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)]" /> AKTİF
+        </span>
+      );
+    }
+    if (it.has_credentials && !it.enabled) {
+      return <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-[var(--text-dim)] whitespace-nowrap">PASİF</span>;
+    }
+    return <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 whitespace-nowrap">DEMO</span>;
+  };
+
   const TestBadge = ({ itype }) => {
     const r = testResult[itype];
     if (!r) return null;
@@ -104,6 +127,11 @@ export function AyarlarEntegrasyon() {
           Kullanıcı adı/şifre veya API key gerektiren tüm dış servisler burada yönetilir.
           Sadece yönetici katmanı erişebilir.
         </p>
+        <div className="mt-3 inline-flex items-center gap-3 text-[11px] text-[var(--text-dim)] border border-[var(--border)] rounded-lg px-3 py-1.5" data-testid="app-version-settings">
+          <span>Sürüm: <b className="text-[var(--text)]">{APP_VERSION}</b></span>
+          <span className="opacity-40">|</span>
+          <span>Build: <b className="text-[var(--text)] font-mono">{APP_BUILD}</b></span>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -113,7 +141,7 @@ export function AyarlarEntegrasyon() {
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400"><MessageSquare size={20}/></div>
             <div>
-              <h3 className="font-display text-lg">SMS Servisi</h3>
+              <div className="flex items-center gap-2"><h3 className="font-display text-lg">SMS Servisi</h3><StatusBadge itype="sms"/></div>
               <p className="text-xs text-[var(--text-dim)]">Netgsm / Twilio / Özel Webhook</p>
             </div>
           </div>
@@ -191,7 +219,7 @@ export function AyarlarEntegrasyon() {
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400"><Mail size={20}/></div>
             <div>
-              <h3 className="font-display text-lg">E-Posta Servisi (SMTP)</h3>
+              <div className="flex items-center gap-2"><h3 className="font-display text-lg">E-Posta Servisi (SMTP)</h3><StatusBadge itype="email"/></div>
               <p className="text-xs text-[var(--text-dim)]">Herhangi bir SMTP sağlayıcı (Gmail, Outlook, kurumsal sunucu vb.)</p>
             </div>
           </div>
@@ -242,7 +270,7 @@ export function AyarlarEntegrasyon() {
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400"><Brain size={20}/></div>
             <div>
-              <h3 className="font-display text-lg">AI Servisi</h3>
+              <div className="flex items-center gap-2"><h3 className="font-display text-lg">AI Servisi</h3><StatusBadge itype="ai_service"/></div>
               <p className="text-xs text-[var(--text-dim)]">Hastalık tespiti ve öneriler için vision-AI sağlayıcısı</p>
             </div>
           </div>
@@ -282,7 +310,7 @@ export function AyarlarEntegrasyon() {
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-400"><Satellite size={20}/></div>
             <div>
-              <h3 className="font-display text-lg">Planet Labs (Uydu Görüntüsü)</h3>
+              <div className="flex items-center gap-2"><h3 className="font-display text-lg">Planet Labs (Uydu Görüntüsü)</h3><StatusBadge itype="planet_labs"/></div>
               <p className="text-xs text-[var(--text-dim)]">Gerçek key girilene kadar mock modda çalışır</p>
             </div>
           </div>
@@ -290,12 +318,10 @@ export function AyarlarEntegrasyon() {
             <input className="input" type="password" placeholder="API Key"
                    value={forms.planet_labs?.config?.api_key || ""}
                    onChange={(e) => setField("planet_labs", "api_key", e.target.value)} />
-            <label className="flex items-center gap-2 text-xs text-[var(--text-dim)]">
-              <input type="checkbox"
-                     checked={forms.planet_labs?.config?.mock_mode ?? true}
-                     onChange={(e) => setField("planet_labs", "mock_mode", e.target.checked)} />
-              Mock mod (gerçek hesap gelene kadar açık bırakın)
-            </label>
+            <p className="text-[11px] text-[var(--text-dim)]">
+              API key girip <b>Kaydet</b>'e bastığınızda entegrasyon otomatik olarak
+              demo modundan çıkıp gerçek moda geçer.
+            </p>
           </div>
           <div className="flex gap-2 mt-3">
             <button onClick={() => save("planet_labs")} disabled={saving.planet_labs} className="btn btn-ghost">
@@ -315,7 +341,7 @@ export function AyarlarEntegrasyon() {
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-sky-500/10 flex items-center justify-center text-sky-400"><Satellite size={20}/></div>
             <div>
-              <h3 className="font-display text-lg">Sentinel Hub (Copernicus)</h3>
+              <div className="flex items-center gap-2"><h3 className="font-display text-lg">Sentinel Hub (Copernicus)</h3><StatusBadge itype="sentinel_hub"/></div>
               <p className="text-xs text-[var(--text-dim)]">Varsayılan NDVI sağlayıcısı — gerçek key girilene kadar mock modda çalışır</p>
             </div>
           </div>
@@ -326,12 +352,10 @@ export function AyarlarEntegrasyon() {
             <input className="input" type="password" placeholder="Client Secret"
                    value={forms.sentinel_hub?.config?.client_secret || ""}
                    onChange={(e) => setField("sentinel_hub", "client_secret", e.target.value)} data-testid="sentinel-hub-key-input"/>
-            <label className="flex items-center gap-2 text-xs text-[var(--text-dim)]">
-              <input type="checkbox"
-                     checked={forms.sentinel_hub?.config?.mock_mode ?? true}
-                     onChange={(e) => setField("sentinel_hub", "mock_mode", e.target.checked)} />
-              Mock mod (gerçek hesap gelene kadar açık bırakın)
-            </label>
+            <p className="text-[11px] text-[var(--text-dim)]">
+              Client ID + Client Secret girip <b>Kaydet</b>'e bastığınızda entegrasyon
+              otomatik olarak demo modundan çıkıp gerçek moda geçer.
+            </p>
           </div>
           <div className="flex gap-2 mt-3">
             <button onClick={() => save("sentinel_hub")} disabled={saving.sentinel_hub} className="btn btn-ghost">
@@ -351,7 +375,7 @@ export function AyarlarEntegrasyon() {
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-400"><Radio size={20}/></div>
             <div>
-              <h3 className="font-display text-lg">NASA FIRMS (Yangın İzleme)</h3>
+              <div className="flex items-center gap-2"><h3 className="font-display text-lg">NASA FIRMS (Yangın İzleme)</h3><StatusBadge itype="nasa_firms"/></div>
               <p className="text-xs text-[var(--text-dim)]">Ücretsiz, gerçek-zamanlı yangın/sıcak nokta tespiti</p>
             </div>
           </div>
@@ -359,12 +383,10 @@ export function AyarlarEntegrasyon() {
             <input className="input" type="password" placeholder="MAP_KEY"
                    value={forms.nasa_firms?.config?.map_key || ""}
                    onChange={(e) => setField("nasa_firms", "map_key", e.target.value)} data-testid="nasa-firms-key-input"/>
-            <label className="flex items-center gap-2 text-xs text-[var(--text-dim)]">
-              <input type="checkbox"
-                     checked={forms.nasa_firms?.config?.mock_mode ?? true}
-                     onChange={(e) => setField("nasa_firms", "mock_mode", e.target.checked)} />
-              Mock mod (gerçek MAP_KEY gelene kadar açık bırakın)
-            </label>
+            <p className="text-[11px] text-[var(--text-dim)]">
+              MAP_KEY girip <b>Kaydet</b>'e bastığınızda entegrasyon otomatik olarak
+              demo modundan çıkıp gerçek moda geçer.
+            </p>
           </div>
           <div className="flex gap-2 mt-3">
             <button onClick={() => save("nasa_firms")} disabled={saving.nasa_firms} className="btn btn-ghost">
@@ -384,7 +406,7 @@ export function AyarlarEntegrasyon() {
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-400"><Plane size={20}/></div>
             <div>
-              <h3 className="font-display text-lg">UP42 (Yüksek Çözünürlük Tasking)</h3>
+              <div className="flex items-center gap-2"><h3 className="font-display text-lg">UP42 (Yüksek Çözünürlük Tasking)</h3><StatusBadge itype="up42"/></div>
               <p className="text-xs text-[var(--text-dim)]">Airbus/SkySat/ICEYE/Capella'ya tek noktadan erişim — nokta doğrulama görüntüsü talebi</p>
             </div>
           </div>
@@ -395,12 +417,10 @@ export function AyarlarEntegrasyon() {
             <input className="input" type="password" placeholder="Client Secret"
                    value={forms.up42?.config?.client_secret || ""}
                    onChange={(e) => setField("up42", "client_secret", e.target.value)} data-testid="up42-key-input"/>
-            <label className="flex items-center gap-2 text-xs text-[var(--text-dim)]">
-              <input type="checkbox"
-                     checked={forms.up42?.config?.mock_mode ?? true}
-                     onChange={(e) => setField("up42", "mock_mode", e.target.checked)} />
-              Mock mod (gerçek sipariş oluşturmadan önce açık bırakın)
-            </label>
+            <p className="text-[11px] text-[var(--text-dim)]">
+              Client ID + Client Secret girip <b>Kaydet</b>'e bastığınızda entegrasyon
+              otomatik olarak demo modundan çıkıp gerçek moda geçer.
+            </p>
           </div>
           <div className="flex gap-2 mt-3">
             <button onClick={() => save("up42")} disabled={saving.up42} className="btn btn-ghost">
@@ -722,7 +742,7 @@ export function KantarKayitlari() {
             <th className="p-4">Çiftçi</th><th className="p-4">Plaka</th>
             <th className="p-4 text-right">Brüt</th><th className="p-4 text-right">Dara</th>
             <th className="p-4 text-right">Net</th><th className="p-4 text-right">Polar</th>
-            <th className="p-4">Kalite</th>
+            <th className="p-4">Kalite</th><th className="p-4 text-right">İşlem</th>
           </tr></thead>
           <tbody>
             {docs.slice(0, 50).map((d) => (
@@ -736,6 +756,35 @@ export function KantarKayitlari() {
                 <td className="p-4 text-right font-medium text-[var(--primary)]">{d.net_ton} t</td>
                 <td className="p-4 text-right">%{d.polar_oran}</td>
                 <td className="p-4"><span className={`badge ${d.kalite === "A" ? "badge-a" : d.kalite === "B" ? "badge-b" : "badge-c"}`}>{d.kalite}</span></td>
+                <td className="p-4">
+                  <div className="flex justify-end">
+                    <RowActions
+                      entityLabel="kantar kaydı"
+                      values={d}
+                      fields={[
+                        { name: "truck_plate", label: "Plaka" },
+                        { name: "brut_ton", label: "Brüt (ton)", type: "number", step: "0.01" },
+                        { name: "dara_ton", label: "Dara (ton)", type: "number", step: "0.01" },
+                        { name: "polar_oran", label: "Polar (%)", type: "number", step: "0.01" },
+                        { name: "fire_pct", label: "Fire (%)", type: "number", step: "0.01" },
+                        { name: "kalite", label: "Kalite", type: "select", options: [
+                          { value: "A", label: "A" }, { value: "B", label: "B" }, { value: "C", label: "C" }] },
+                      ]}
+                      onSave={async (v) => {
+                        await api.put(`/kantar/records/${d.id}`, {
+                          truck_plate: v.truck_plate || null,
+                          brut_ton: v.brut_ton === "" ? null : Number(v.brut_ton),
+                          dara_ton: v.dara_ton === "" ? null : Number(v.dara_ton),
+                          polar_oran: v.polar_oran === "" ? null : Number(v.polar_oran),
+                          fire_pct: v.fire_pct === "" ? null : Number(v.fire_pct),
+                          kalite: v.kalite || null,
+                        });
+                        load();
+                      }}
+                      onDelete={async () => { await api.delete(`/kantar/records/${d.id}`); load(); }}
+                    />
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

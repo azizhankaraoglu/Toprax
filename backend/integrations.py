@@ -71,6 +71,69 @@ SECRET_FIELDS = {
 
 VALID_TYPES = set(SECRET_FIELDS.keys())
 
+# Hangi tipler "mock_mode" (demo) destekler — kimlik bilgisi girildiğinde
+# OTOMATİK olarak gerçek (aktif) moda geçenler. Uydu / uzaktan-algılama
+# ailesinin tamamı bu deseni paylaşır (bkz. satellite_provider.py,
+# remote_sensing/providers/__init__.py). SMS/Email/AI'da ayrı bir "mock"
+# kavramı yoktur — onlar kimlik bilgisi + enabled olunca zaten aktiftir.
+MOCK_CAPABLE_TYPES = {"planet_labs", "sentinel_hub", "nasa_firms", "up42", "eosda"}
+
+
+def _is_filled(config: dict, key: str) -> bool:
+    """Bir config alanı gerçekten dolu mu (boş değil VE tamamen maskeli
+    yıldızlardan ibaret değil) — maskeli değer 'değişmedi' demektir, dolu
+    kabul edilmez."""
+    v = (config or {}).get(key)
+    if not v:
+        return False
+    if isinstance(v, str) and v.strip("*") == "":
+        return False
+    return True
+
+
+def _has_credentials(itype: str, config: dict, provider: Optional[str]) -> bool:
+    """Entegrasyonun 'aktif' sayılması için gereken minimum kimlik bilgisi
+    girilmiş mi? (SMS için sağlayıcıya göre değişir.) Bu tek fonksiyon hem
+    'demodan otomatik çıkış' hem de durum rozeti (active/is_demo) için
+    tek gerçek kaynaktır."""
+    if itype == "sms":
+        if provider == "netgsm":
+            return _is_filled(config, "netgsm_usercode") and _is_filled(config, "netgsm_password")
+        if provider == "twilio":
+            return _is_filled(config, "twilio_account_sid") and _is_filled(config, "twilio_auth_token")
+        if provider == "custom_webhook":
+            return _is_filled(config, "webhook_url")
+        return False
+    if itype == "email":
+        return _is_filled(config, "host") and _is_filled(config, "username") and _is_filled(config, "password")
+    if itype == "ai_service":
+        return bool(provider) and _is_filled(config, "api_key")
+    if itype in ("planet_labs", "eosda"):
+        return _is_filled(config, "api_key")
+    if itype == "nasa_firms":
+        return _is_filled(config, "map_key")
+    if itype in ("sentinel_hub", "up42"):
+        return _is_filled(config, "client_id") and _is_filled(config, "client_secret")
+    return False
+
+
+def _compute_status(itype: str, doc: Optional[dict]) -> dict:
+    """Bir entegrasyonun demo mu gerçek mi çalıştığını hesaplar.
+    - active   : gerçekten canlı (kimlik bilgisi var + enabled + mock kapalı)
+    - is_demo  : aktif değil → hâlâ demo/simüle davranıyor
+    - has_credentials : gerekli anahtar(lar) girilmiş mi
+    """
+    doc = doc or {}
+    cfg = doc.get("config", {}) or {}
+    provider = doc.get("provider")
+    enabled = bool(doc.get("enabled"))
+    has_creds = _has_credentials(itype, cfg, provider)
+    if itype in MOCK_CAPABLE_TYPES:
+        active = enabled and has_creds and not cfg.get("mock_mode", True)
+    else:
+        active = enabled and has_creds
+    return {"has_credentials": has_creds, "active": active, "is_demo": not active}
+
 
 def _mask(value: str) -> str:
     if not value:
@@ -336,12 +399,26 @@ def _probe_ai_service(provider: str, cfg: dict, timeout: int) -> Tuple[bool, str
             ok = resp.status_code == 200
             return ok, f"OpenAI yanıtı: HTTP {resp.status_code}"
         elif provider == "gemini":
-            resp = requests.get(
-                f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}",
+            # NOT: sadece "model listele" (GET /models) çağrısı, kota SIFIR olsa
+            # bile 200 döner — bu yüzden gerçek kullanılabilirliği YANSITMAZ.
+            # Bunun yerine minimal bir generateContent denenir: kota/model
+            # sorunu (ör. free-tier limit:0 → 429) burada gerçekten yakalanır.
+            model = cfg.get("model") or "gemini-flash-latest"
+            resp = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
+                json={"contents": [{"parts": [{"text": "ping"}]}],
+                      "generationConfig": {"maxOutputTokens": 1}},
                 timeout=timeout,
             )
-            ok = resp.status_code == 200
-            return ok, f"Gemini yanıtı: HTTP {resp.status_code}"
+            if resp.status_code == 200:
+                return True, f"Gemini ({model}) yanıt verdi: HTTP 200"
+            # Gerçek hatayı (429 kota / 404 model adı / 400) yüzeye çıkar.
+            detail = ""
+            try:
+                detail = (resp.json().get("error", {}).get("message") or "")[:220]
+            except Exception:
+                detail = (resp.text or "")[:220]
+            return False, f"Gemini ({model}) HTTP {resp.status_code}: {detail}"
         elif provider == "anthropic":
             resp = requests.get(
                 "https://api.anthropic.com/v1/models",
@@ -434,11 +511,17 @@ def register_integration_routes(api_router, db, current_user, is_admin, log_audi
 
     def _integration_view(itype: str, doc: dict) -> dict:
         doc = doc or {"type": itype, "provider": None, "config": {}, "enabled": False}
+        status = _compute_status(itype, doc)
         return {
             "type": itype,
             "provider": doc.get("provider"),
             "config": _mask_config(itype, doc.get("config", {})),
             "enabled": doc.get("enabled", False),
+            # Demo/gerçek durumu — frontend AKTİF/DEMO rozetini bundan çizer.
+            "mock_capable": itype in MOCK_CAPABLE_TYPES,
+            "has_credentials": status["has_credentials"],
+            "active": status["active"],
+            "is_demo": status["is_demo"],
             "timeout_seconds": _resolve_timeout(doc),
             "retry_count": _resolve_retry(doc),
             "updated_at": doc.get("updated_at"),
@@ -508,14 +591,34 @@ def register_integration_routes(api_router, db, current_user, is_admin, log_audi
         existing = await db.integrations.find_one({"type": itype}, {"_id": 0})
         old_config = dict(existing.get("config", {})) if existing else {}
 
-        # Maskelenmiş bir değer (*** ile biten) geri gönderilirse eski gerçek
-        # değeri koru — yoksa admin panelinde "kaydet" her tıklandığında
-        # secret üstüne yıldızlar yazılır ve entegrasyon bozulur.
+        # Maskelenmiş bir değer geri gönderilirse eski gerçek değeri koru —
+        # yoksa admin panelinde "kaydet" her tıklandığında secret üstüne
+        # yıldızlar yazılır ve entegrasyon bozulur. GET yanıtındaki secret'lar
+        # `_mask()` ile kısmen maskelenir (ör. "****aaa3"), frontend bu maskeli
+        # değeri form'a yükleyip DEĞİŞTİRİLMEZSE aynen geri gönderir. İki durum
+        # da "değişmedi" sayılıp atlanır:
+        #   (a) tamamen yıldız  ("****"), veya
+        #   (b) o alanın eski değerinin `_mask()`'lenmiş hali ile birebir aynı.
+        secret_fields = SECRET_FIELDS.get(itype, set())
         merged_config = dict(old_config)
         for k, v in body.config.items():
-            if isinstance(v, str) and v.strip("*") == "" and v != "":
-                continue  # tamamen yıldızlardan oluşan değeri yok say (değişmemiş demektir)
+            if isinstance(v, str) and v != "":
+                all_stars = v.strip("*") == ""
+                old_v = old_config.get(k)
+                unchanged_mask = bool(old_v) and k in secret_fields and v == _mask(old_v)
+                if all_stars or unchanged_mask:
+                    continue  # değişmemiş maskeli secret — eski gerçek değeri koru
             merged_config[k] = v
+
+        # "API key girildiği anda demodan çık, entegrasyon aktif olsun":
+        # mock destekli tiplerde, kullanıcı mock_mode'u AÇIKÇA göndermediyse
+        # kimlik bilgisi VARSA otomatik gerçek moda geç (mock_mode=False),
+        # YOKSA demoda kal (mock_mode=True). Böylece anahtar girip "Kaydet"e
+        # basmak tek başına entegrasyonu canlıya alır — ayrı bir "mock mod"
+        # kutucuğu işaretlemeye gerek kalmaz. (Açıkça mock_mode gönderen
+        # gelişmiş API çağrıları bu otomatikten muaftır.)
+        if itype in MOCK_CAPABLE_TYPES and "mock_mode" not in body.config:
+            merged_config["mock_mode"] = not _has_credentials(itype, merged_config, body.provider)
 
         # timeout_seconds/retry_count: body'de gönderilmediyse (None) mevcut
         # override korunur (böylece "kaydet" her tıklandığında sessizce

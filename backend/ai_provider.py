@@ -72,7 +72,7 @@ class GeminiProvider(AIProvider):
 
     def generate_text(self, system_prompt: str, user_text: str) -> str:
         resp = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{self.model or 'gemini-2.0-flash'}:generateContent?key={self.api_key}",
+            f"https://generativelanguage.googleapis.com/v1beta/models/{self.model or 'gemini-flash-latest'}:generateContent?key={self.api_key}",
             json={"contents": [{"parts": [{"text": system_prompt + "\n\n" + user_text}]}]},
             timeout=20,
         )
@@ -81,7 +81,7 @@ class GeminiProvider(AIProvider):
 
     def generate_vision(self, system_prompt: str, user_text: str, image_b64: str) -> str:
         resp = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{self.model or 'gemini-2.0-flash'}:generateContent?key={self.api_key}",
+            f"https://generativelanguage.googleapis.com/v1beta/models/{self.model or 'gemini-flash-latest'}:generateContent?key={self.api_key}",
             json={"contents": [{"parts": [
                 {"text": system_prompt + "\n\n" + user_text},
                 {"inline_data": {"mime_type": "image/jpeg", "data": image_b64}},

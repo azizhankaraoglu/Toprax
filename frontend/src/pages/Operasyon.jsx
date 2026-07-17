@@ -2,7 +2,16 @@ import api from "@/api";
 import { Tractor, Users2, ListChecks, Wrench } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { QuickAddPanel } from "@/components/QuickAdd";
+import RowActions from "@/components/RowActions";
 import { useFetch } from "@/hooks/use-fetch";
+
+const TASK_STATUS_OPTS = [
+  { value: "planlı", label: "Planlı" }, { value: "devam ediyor", label: "Devam Ediyor" },
+  { value: "tamamlandı", label: "Tamamlandı" }, { value: "iptal", label: "İptal" },
+];
+const MACHINE_STATUS_OPTS = [
+  { value: "aktif", label: "Aktif" }, { value: "bakım", label: "Bakım" }, { value: "boşta", label: "Boşta" },
+];
 
 // Refactoring notu (2026-07-11): 6 bagimsiz useState+useEffect+api.get
 // kalibi useFetch hook'una tasindi (bkz. hooks/use-fetch.js) -- DAVRANIS
@@ -143,6 +152,7 @@ export default function Operasyon() {
                   <th className="p-3">Tip</th>
                   <th className="p-3">Tarih</th>
                   <th className="p-3">Durum</th>
+                  <th className="p-3 text-right">İşlem</th>
                 </tr>
               </thead>
               <tbody>
@@ -151,6 +161,28 @@ export default function Operasyon() {
                     <td className="p-3 capitalize">{t.task_type}</td>
                     <td className="p-3 text-[var(--text-dim)]">{new Date(t.scheduled_date).toLocaleDateString("tr-TR")}</td>
                     <td className="p-3"><span className={`badge ${statusBadge[t.status]}`}>{t.status}</span></td>
+                    <td className="p-3">
+                      <div className="flex justify-end">
+                        <RowActions
+                          entityLabel="görev"
+                          values={{ ...t, scheduled_date: (t.scheduled_date || "").slice(0, 10) }}
+                          fields={[
+                            { name: "status", label: "Durum", type: "select", options: TASK_STATUS_OPTS },
+                            { name: "scheduled_date", label: "Planlanan Tarih", type: "date" },
+                            { name: "notes", label: "Notlar", type: "textarea", span2: true },
+                          ]}
+                          onSave={async (v) => {
+                            await api.put(`/operations/tasks/${t.id}`, {
+                              status: v.status || null,
+                              scheduled_date: v.scheduled_date ? new Date(v.scheduled_date).toISOString() : null,
+                              notes: v.notes ?? null,
+                            });
+                            loadAll();
+                          }}
+                          onDelete={async () => { await api.delete(`/operations/tasks/${t.id}`); loadAll(); }}
+                        />
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -170,6 +202,7 @@ export default function Operasyon() {
                   <th className="p-3">Model</th>
                   <th className="p-3">Saat</th>
                   <th className="p-3">Durum</th>
+                  <th className="p-3 text-right">İşlem</th>
                 </tr>
               </thead>
               <tbody>
@@ -179,6 +212,28 @@ export default function Operasyon() {
                     <td className="p-3 text-[var(--text-dim)] text-xs">{m.model}</td>
                     <td className="p-3 font-mono text-xs">{m.total_hours}h</td>
                     <td className="p-3"><span className={`badge ${machineStatusBadge[m.status]}`}>{m.status}</span></td>
+                    <td className="p-3">
+                      <div className="flex justify-end">
+                        <RowActions
+                          entityLabel="makine"
+                          values={m}
+                          fields={[
+                            { name: "status", label: "Durum", type: "select", options: MACHINE_STATUS_OPTS },
+                            { name: "total_hours", label: "Toplam Saat", type: "number" },
+                            { name: "last_maintenance", label: "Son Bakım", type: "date" },
+                          ]}
+                          onSave={async (v) => {
+                            await api.put(`/operations/machines/${m.id}`, {
+                              status: v.status || null,
+                              total_hours: v.total_hours === "" ? null : Number(v.total_hours),
+                              last_maintenance: v.last_maintenance || null,
+                            });
+                            loadAll();
+                          }}
+                          onDelete={async () => { await api.delete(`/operations/machines/${m.id}`); loadAll(); }}
+                        />
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -229,7 +284,7 @@ export default function Operasyon() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[11px] text-[var(--text-dim)] uppercase tracking-wider sticky top-0 bg-[var(--surface)]">
-                <th className="p-3">Ad Soyad</th><th className="p-3">Telefon</th><th className="p-3">Uzmanlık</th><th className="p-3">Günlük Ücret</th><th className="p-3">Durum</th>
+                <th className="p-3">Ad Soyad</th><th className="p-3">Telefon</th><th className="p-3">Uzmanlık</th><th className="p-3">Günlük Ücret</th><th className="p-3">Durum</th><th className="p-3 text-right">İşlem</th>
               </tr>
             </thead>
             <tbody>
@@ -240,6 +295,30 @@ export default function Operasyon() {
                   <td className="p-3 capitalize">{w.skill}</td>
                   <td className="p-3">₺{w.daily_wage}</td>
                   <td className="p-3"><span className="badge badge-a">{w.status}</span></td>
+                  <td className="p-3">
+                    <div className="flex justify-end">
+                      <RowActions
+                        entityLabel="işçi"
+                        values={w}
+                        fields={[
+                          { name: "skill", label: "Uzmanlık", type: "select", options:
+                            ["traktör sürücüsü", "saha işçisi", "biçerdöver operatörü", "ekipman uzmanı"].map((s) => ({ value: s, label: s })) },
+                          { name: "daily_wage", label: "Günlük Ücret (₺)", type: "number" },
+                          { name: "status", label: "Durum", type: "select", options:
+                            [{ value: "aktif", label: "Aktif" }, { value: "pasif", label: "Pasif" }] },
+                        ]}
+                        onSave={async (v) => {
+                          await api.put(`/operations/workers/${w.id}`, {
+                            skill: v.skill || null,
+                            daily_wage: v.daily_wage === "" ? null : Number(v.daily_wage),
+                            status: v.status || null,
+                          });
+                          loadAll();
+                        }}
+                        onDelete={async () => { await api.delete(`/operations/workers/${w.id}`); loadAll(); }}
+                      />
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

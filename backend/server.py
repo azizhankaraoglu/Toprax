@@ -852,7 +852,7 @@ async def list_farmers(
     - region_id: belirli bölge
     - karne: A/B/C/D
     """
-    filt: Dict[str, Any] = {}
+    filt: Dict[str, Any] = {"is_active": {"$ne": False}}   # soft-delete edilenleri gizle
     if region_id:
         filt["region_id"] = region_id
     if karne:
@@ -1013,6 +1013,49 @@ async def update_farmer(farmer_id: str, body: FarmerUpdate, request: Request,
     return updated
 
 
+@api_router.delete("/farmers/{farmer_id}")
+async def delete_farmer(farmer_id: str, request: Request,
+                        user=Depends(require_permission("farmers:delete"))):
+    """
+    Çiftçiyi siler (soft delete, konvansiyon #3). Bağlı aktif parsel/sözleşme
+    varsa engellenir — parseldeki 409 deseniyle aynı; önce o kayıtların
+    kapatılması/taşınması gerekir (veri bütünlüğü).
+    """
+    old = await db.farmers.find_one({"id": farmer_id}, {"_id": 0})
+    if not old:
+        raise HTTPException(404, "Çiftçi bulunamadı")
+
+    linked_parcels = await db.parcels.count_documents(
+        {"farmer_id": farmer_id, "is_active": {"$ne": False}}
+    )
+    if linked_parcels > 0:
+        raise HTTPException(
+            409,
+            f"Bu çiftçiye bağlı {linked_parcels} parsel var. Önce parselleri "
+            "başka çiftçiye atayın veya silin, sonra çiftçiyi silin."
+        )
+    linked_contracts = await db.contracts.count_documents(
+        {"farmer_id": farmer_id, "is_active": {"$ne": False}}
+    )
+    if linked_contracts > 0:
+        raise HTTPException(
+            409,
+            f"Bu çiftçiye bağlı {linked_contracts} sözleşme var. Önce sözleşmeleri "
+            "kapatın/taşıyın, sonra çiftçiyi silin."
+        )
+
+    await db.farmers.update_one(
+        {"id": farmer_id},
+        {"$set": {
+            "is_active": False,
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
+            "deleted_by": user.get("full_name") or user.get("email"),
+        }},
+    )
+    await log_audit(db, user, action="soft_delete", entity="farmer", entity_id=farmer_id, old_value=old, request=request)
+    return {"status": "deactivated"}
+
+
 # =====================================================================
 #                       PARSEL YÖNETİMİ
 # =====================================================================
@@ -1119,6 +1162,7 @@ async def create_parcel(body: ParcelCreate, request: Request, user=Depends(curre
 
 class ParcelUpdate(BaseModel):
     """Parsel bilgi güncelleme — harita çizim aracı da bu endpoint'i kullanacak"""
+    farmer_id: Optional[str] = None                          # sonradan çiftçi atama (atanmamış import edilen parseller için)
     name: Optional[str] = None
     village: Optional[str] = None
     area_dekar: Optional[float] = None
@@ -1213,6 +1257,16 @@ async def update_parcel(parcel_id: str, body: ParcelUpdate, request: Request,
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(400, "Güncellenecek alan yok")
+
+    # Çiftçi atanıyor/değiştiriliyorsa region_id'yi o çiftçiden türet (bölge
+    # bazlı sorgular tutarlı kalsın) + parselin köyü boşsa çiftçinin köyünü ata.
+    if updates.get("farmer_id"):
+        farmer = await db.farmers.find_one({"id": updates["farmer_id"]}, {"_id": 0})
+        if not farmer:
+            raise HTTPException(400, "Seçilen çiftçi bulunamadı")
+        updates["region_id"] = farmer.get("region_id")
+        if not old.get("village") and not updates.get("village"):
+            updates["village"] = farmer.get("village", "")
 
     # risk_level manuel değiştirildiyse etiketini de eşitle (tutarlılık için)
     if "risk_level" in updates:
@@ -1435,14 +1489,24 @@ async def import_parcels_geojson(body: GeoJSONImportRequest, request: Request,
         ring = coords[0]
         area_deg2 = 0.0
         for i in range(len(ring) - 1):
-            x1, y1 = ring[i]
-            x2, y2 = ring[i + 1]
+            # Koordinat 3B olabilir ([lng,lat,alt]) — sadece ilk iki bileşeni al.
+            x1, y1 = ring[i][0], ring[i][1]
+            x2, y2 = ring[i + 1][0], ring[i + 1][1]
             area_deg2 += x1 * y2 - x2 * y1
         area_deg2 = abs(area_deg2) / 2.0
         # 1° ≈ 111 km → 1 derece² ≈ 111² km² = 12321 km²
         # 1 km² = 1000 dekar (1 dekar = 1000 m²)
         km2 = area_deg2 * (111 ** 2)
         return round(km2 * 1000, 1)
+
+    def _to_2d_coords(coords):
+        """GeoJSON koordinatlarındaki 3. boyutu (yükseklik) atar:
+        [lng,lat,alt] -> [lng,lat]. Google Earth/KML kaynaklı dosyalar
+        genelde 3B gelir; 3B koordinat hem alan hesabını hem MongoDB
+        2dsphere index'ini bozabildiği için içe aktarmada 2B'ye indirilir."""
+        if coords and isinstance(coords[0], (int, float)):
+            return [coords[0], coords[1]]
+        return [_to_2d_coords(c) for c in coords]
 
     def _extract_tkgm_fields(props: dict) -> dict:
         """
@@ -1491,18 +1555,27 @@ async def import_parcels_geojson(body: GeoJSONImportRequest, request: Request,
             geom = feat.get("geometry")
             props = feat.get("properties", {}) or {}
             if not geom or geom.get("type") != "Polygon":
-                errors.append({"index": i, "error": "Sadece Polygon geometrisi destekleniyor"})
+                gtype = (geom or {}).get("type") or "geometri yok"
+                # Nokta/çizgi bir parsel OLAMAZ (alanı yok) — kullanıcı KML/GeoJSON
+                # export'unda parsellerin yanında etiket (Point) / sınır çizgisi
+                # (LineString) da olabilir; bunlar sessizce değil, AÇIK nedenle atlanır.
+                errors.append({"index": i, "error": f"Parsel değil ({gtype}) — sadece Polygon içe aktarılır"})
                 continue
 
+            # 3B koordinatları (yükseklik) 2B'ye indir — hem alan hesabı hem
+            # 2dsphere index için gerekli (Google Earth/KML dosyaları 3B gelir).
+            geom = {"type": "Polygon", "coordinates": _to_2d_coords(geom["coordinates"])}
+
+            # Çiftçi ARTIK OPSİYONEL — dosyada veya istekte farmer_id yoksa parsel
+            # "atanmamış" olarak oluşturulur; kullanıcı sonra parselden çiftçi atar.
             farmer_id = props.get("farmer_id") or body.farmer_id
-            if not farmer_id:
-                errors.append({"index": i, "error": "farmer_id bulunamadı (ne feature.properties'te ne de istekte)"})
-                continue
-
-            farmer = await db.farmers.find_one({"id": farmer_id}, {"_id": 0})
-            if not farmer:
-                errors.append({"index": i, "error": f"Çiftçi bulunamadı: {farmer_id}"})
-                continue
+            farmer = None
+            if farmer_id:
+                farmer = await db.farmers.find_one({"id": farmer_id}, {"_id": 0})
+                if not farmer:
+                    # Anahtar verilmiş ama geçersiz -> bu bir hatadır (sessizce atanmamış yapma).
+                    errors.append({"index": i, "error": f"Çiftçi bulunamadı: {farmer_id}"})
+                    continue
 
             # IT-16 — TKGM export'u alanı genelde "alan"/"yuzolcum" adıyla
             # ve m² cinsinden verir (area_dekar YOK) — bu durumda dekara çevrilir.
@@ -1531,9 +1604,9 @@ async def import_parcels_geojson(body: GeoJSONImportRequest, request: Request,
                 "id": str(uuid.uuid4()),
                 "parcel_code": f"PRS-{(count + len(created) + 1):05d}",
                 "name": props.get("name", default_name),
-                "farmer_id": farmer_id,
-                "village": props.get("village", farmer.get("village", "")),
-                "region_id": farmer["region_id"],
+                "farmer_id": farmer_id,                       # None ise "atanmamış"
+                "village": props.get("village", (farmer.get("village", "") if farmer else "")),
+                "region_id": (farmer["region_id"] if farmer else None),
                 "area_dekar": area,
                 "soil_type": props.get("soil_type", body.default_soil_type),
                 "irrigation": props.get("irrigation", body.default_irrigation),
@@ -1570,7 +1643,7 @@ async def import_parcels_geojson(body: GeoJSONImportRequest, request: Request,
 @api_router.get("/soil-samples")
 async def list_soil_samples(user=Depends(current_user)):
     """Tüm toprak analizleri (admin)"""
-    docs = await db.soil_samples.find({}, {"_id": 0}).sort([("date", -1)]).to_list(500)
+    docs = await db.soil_samples.find({"is_active": {"$ne": False}}, {"_id": 0}).sort([("date", -1)]).to_list(500)
     return docs
 
 
@@ -1583,8 +1656,8 @@ async def soil_summary(user=Depends(current_user)):
     pH dağılımı (asitli/nötr/alkalin),
     önerilen gübre tipleri.
     """
-    samples = await db.soil_samples.find({}, {"_id": 0}).to_list(5000)
-    
+    samples = await db.soil_samples.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(5000)
+
     if not samples:
         return {"total": 0, "avg_ph": 0, "ph_distribution": [], "recent": []}
     
@@ -1635,7 +1708,7 @@ async def list_contracts(season: Optional[int] = None, status: Optional[str] = N
 
 @api_router.get("/plantings")
 async def list_plantings(season: Optional[int] = None, user=Depends(current_user)):
-    filt: Dict[str, Any] = {}
+    filt: Dict[str, Any] = {"is_active": {"$ne": False}}   # soft-delete edilenleri gizle
     if season: filt["season"] = season
     docs = await db.plantings.find(filt, {"_id": 0}).to_list(5000)
     return docs
@@ -1651,7 +1724,7 @@ async def irrigation_summary(user=Depends(current_user)):
     Sulama modülü özet verileri.
     Bu endpoint çiftçiler veri eklediğinde otomatik güncellenir.
     """
-    events = await db.irrigation_events.find({}, {"_id": 0}).to_list(20000)
+    events = await db.irrigation_events.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(20000)
     sources = await db.water_sources.find({}, {"_id": 0}).to_list(100)
     regions = await db.regions.find({}, {"_id": 0}).to_list(100)
     
@@ -1694,7 +1767,7 @@ async def irrigation_summary(user=Depends(current_user)):
 @api_router.get("/irrigation/events")
 async def list_irrigation_events(farmer_id: Optional[str] = None, limit: int = 200, user=Depends(current_user)):
     """Sulama olayları listesi (filtreli)"""
-    filt: Dict[str, Any] = {}
+    filt: Dict[str, Any] = {"is_active": {"$ne": False}}   # soft-delete edilenleri gizle
     if farmer_id: filt["farmer_id"] = farmer_id
     docs = await db.irrigation_events.find(filt, {"_id": 0}).sort([("date", -1)]).limit(limit).to_list(limit)
     return docs
@@ -1840,7 +1913,7 @@ async def list_regions(user=Depends(current_user)):
 
 @api_router.get("/logistics/appointments")
 async def list_appointments(farmer_id: Optional[str] = None, user=Depends(current_user)):
-    filt: Dict[str, Any] = {}
+    filt: Dict[str, Any] = {"is_active": {"$ne": False}}   # soft-delete edilenleri gizle
     if farmer_id: filt["farmer_id"] = farmer_id
     return await db.appointments.find(filt, {"_id": 0}).sort([("scheduled_at", 1)]).to_list(500)
 

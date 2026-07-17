@@ -2,8 +2,8 @@
 =====================================================================
 Toprax — Geo Dosya İçe Aktarma (IT-13.5)
 =====================================================================
-SHP (pyshp) + GeoJSON + KML + DXF (ezdxf) dosyalarını ayrıştırıp WGS84
-(EPSG:4326) GeoJSON geometrisine çevirir. NCZ (NetCAD) dosyaları
+SHP (pyshp) + GeoJSON + KML + KMZ + DXF (ezdxf) dosyalarını ayrıştırıp
+WGS84 (EPSG:4326) GeoJSON geometrisine çevirir. NCZ (NetCAD) dosyaları
 PARSE EDİLMEZ — tescilli bir format; kullanıcıya NetCAD'den SHP/DXF
 export yolu gösterilir (istenirse dosya olduğu gibi genel "Belgeler"
 sekmesinden — storage.py — saklanabilir, ayrı bir konudur).
@@ -80,9 +80,10 @@ def _parse_kml(content: bytes) -> List[Dict[str, Any]]:
 
     def parse_coord_text(text):
         pts = []
-        for chunk in text.strip().split():
+        for chunk in (text or "").strip().replace("\n", " ").replace("\t", " ").split():
             parts = chunk.split(",")
-            pts.append([float(parts[0]), float(parts[1])])
+            if len(parts) >= 2:
+                pts.append([float(parts[0]), float(parts[1])])
         return pts
 
     features = []
@@ -90,11 +91,35 @@ def _parse_kml(content: bytes) -> List[Dict[str, Any]]:
         if local(placemark.tag) != "Placemark":
             continue
         name = None
+        description = None
         geometry = None
+        # Placemark'ın öznitelikleri (il/ilçe/mahalle/ada/parsel vb.) — bunlar
+        # "parselin içindeki bilgiler"dir; KML'de <ExtendedData> altında ya
+        # <Data name="..."><value>..</value></Data> ya da <SchemaData>
+        # içinde <SimpleData name="..">..</SimpleData> olarak durur. Buradan
+        # okunup properties'e konur; toplu import (server.py import-geojson +
+        # _extract_tkgm_fields) bunları doğrudan parsel alanlarına eşler.
+        props: Dict[str, Any] = {}
         for child in placemark.iter():
             tag = local(child.tag)
             if tag == "name" and name is None:
-                name = child.text
+                name = (child.text or "").strip() or None
+            elif tag == "description" and description is None:
+                description = (child.text or "").strip() or None
+            elif tag == "Data":
+                key = child.get("name")
+                if key:
+                    val = None
+                    for sub in child:
+                        if local(sub.tag) == "value":
+                            val = (sub.text or "").strip()
+                            break
+                    if val:
+                        props[key] = val
+            elif tag == "SimpleData":
+                key = child.get("name")
+                if key and child.text and child.text.strip():
+                    props[key] = child.text.strip()
             elif tag == "Polygon" and geometry is None:
                 rings = []
                 for boundary in child:
@@ -112,10 +137,29 @@ def _parse_kml(content: bytes) -> List[Dict[str, Any]]:
                 for c in child.iter():
                     if local(c.tag) == "coordinates":
                         pts = parse_coord_text(c.text)
-                        geometry = {"type": "Point", "coordinates": pts[0]}
+                        if pts:
+                            geometry = {"type": "Point", "coordinates": pts[0]}
         if geometry:
-            features.append({"geometry": geometry, "properties": {"name": name} if name else {}})
+            if name and "name" not in props:
+                props["name"] = name
+            if description and "description" not in props:
+                props["description"] = description
+            features.append({"geometry": geometry, "properties": props})
     return features
+
+
+def _parse_kmz(content: bytes) -> List[Dict[str, Any]]:
+    """KMZ = içinde bir .kml (genelde doc.kml) barındıran ZIP arşivi.
+    Açıp ilk .kml'i bulur ve _parse_kml ile ayrıştırır. KML her zaman WGS84
+    (EPSG:4326) olduğundan koordinat dönüşümü GEREKMEZ."""
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(content))
+    except zipfile.BadZipFile:
+        raise HTTPException(400, "Geçersiz KMZ dosyası (ZIP olarak açılamadı)")
+    kml_name = next((n for n in zf.namelist() if n.lower().endswith(".kml")), None)
+    if not kml_name:
+        raise HTTPException(400, "KMZ içinde .kml dosyası bulunamadı")
+    return _parse_kml(zf.read(kml_name))
 
 
 def _parse_shp_zip(content: bytes, source_epsg: Optional[int]) -> List[Dict[str, Any]]:
@@ -227,6 +271,8 @@ def register_geo_import_routes(api_router, db, current_user, require_permission,
             features = _parse_geojson(content)
         elif filename.endswith(".kml"):
             features = _parse_kml(content)
+        elif filename.endswith(".kmz"):
+            features = _parse_kmz(content)
         elif filename.endswith(".zip"):
             features = _parse_shp_zip(content, source_epsg)
         elif filename.endswith(".dxf"):
@@ -235,8 +281,8 @@ def register_geo_import_routes(api_router, db, current_user, require_permission,
             raise HTTPException(
                 400,
                 f"Desteklenmeyen dosya türü: {filename or '(adsız)'}. "
-                "Desteklenenler: GeoJSON (.geojson/.json), KML (.kml), DXF (.dxf), "
-                "SHP (.shp+.shx+.dbf+.prj içeren .zip)",
+                "Desteklenenler: GeoJSON (.geojson/.json), KML (.kml), KMZ (.kmz), "
+                "DXF (.dxf), SHP (.shp+.shx+.dbf+.prj içeren .zip)",
             )
 
         if not features:

@@ -13,6 +13,7 @@ import { FlaskConical, Beaker, Sprout, AlertCircle } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { QuickAddPanel } from "@/components/QuickAdd";
 import SmartDataGrid from "@/components/SmartDataGrid";
+import RowActions from "@/components/RowActions";
 
 const SOIL_GRID_COLUMNS = [
   { key: "date", label: "Tarih", type: "date" },
@@ -154,6 +155,37 @@ export default function ToprakBilgisi() {
           module="soil"
           columns={SOIL_GRID_COLUMNS}
           defaultSort={[{ field: "date", dir: "desc" }]}
+          rowActions={(row, reload) => (
+            <RowActions
+              entityLabel="toprak analizi"
+              values={row}
+              fields={[
+                { name: "date", label: "Tarih", type: "date" },
+                { name: "lab_name", label: "Laboratuvar" },
+                { name: "ph", label: "pH", type: "number", step: "0.01" },
+                { name: "ec", label: "EC (dS/m)", type: "number", step: "0.01" },
+                { name: "organic_matter_pct", label: "Organik Madde (%)", type: "number", step: "0.01" },
+                { name: "n_ppm", label: "N (ppm)", type: "number" },
+                { name: "p_ppm", label: "P (ppm)", type: "number" },
+                { name: "k_ppm", label: "K (ppm)", type: "number" },
+                { name: "recommendation", label: "Öneri", type: "textarea", span2: true },
+              ]}
+              onSave={async (v) => {
+                await api.put(`/soil-samples/${row.id}`, {
+                  date: v.date || null, lab_name: v.lab_name || null,
+                  ph: v.ph === "" ? null : Number(v.ph),
+                  ec: v.ec === "" ? null : Number(v.ec),
+                  organic_matter_pct: v.organic_matter_pct === "" ? null : Number(v.organic_matter_pct),
+                  n_ppm: v.n_ppm === "" ? null : Number(v.n_ppm),
+                  p_ppm: v.p_ppm === "" ? null : Number(v.p_ppm),
+                  k_ppm: v.k_ppm === "" ? null : Number(v.k_ppm),
+                  recommendation: v.recommendation || null,
+                });
+                reload();
+              }}
+              onDelete={async () => { await api.delete(`/soil-samples/${row.id}`); reload(); }}
+            />
+          )}
         />
       </div>
     </div>

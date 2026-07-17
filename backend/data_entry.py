@@ -255,7 +255,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/plantings/{planting_id}")
     async def update_planting(planting_id: str, body: PlantingUpdate, request: Request,
-                               user=Depends(require_permission("plantings:create"))):
+                               user=Depends(require_permission("plantings:edit"))):
         old = await db.plantings.find_one({"id": planting_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Ekim kaydı bulunamadı")
@@ -265,6 +265,21 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         new = await db.plantings.find_one({"id": planting_id}, {"_id": 0})
         await log_audit(db, user, action="update", entity="planting", entity_id=planting_id, old_value=old, new_value=new, request=request)
         return new
+
+    @api_router.delete("/plantings/{planting_id}")
+    async def delete_planting(planting_id: str, request: Request,
+                               user=Depends(require_permission("plantings:delete"))):
+        # Konvansiyon #3 — soft delete (is_active=False); kayıt + audit izi DB'de kalır.
+        old = await db.plantings.find_one({"id": planting_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Ekim kaydı bulunamadı")
+        await db.plantings.update_one(
+            {"id": planting_id},
+            {"$set": {"is_active": False, "deleted_at": datetime.now(timezone.utc).isoformat(),
+                      "deleted_by": user.get("full_name") or user.get("email")}},
+        )
+        await log_audit(db, user, action="soft_delete", entity="planting", entity_id=planting_id, old_value=old, request=request)
+        return {"status": "deactivated"}
 
     # =====================================================================
     # TOPRAK ANALİZİ (admin/mühendis girişi — çiftçi self-servisten ayrı)
@@ -349,6 +364,55 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         })
         return doc
 
+    class SoilSampleAdminUpdate(BaseModel):
+        date: Optional[str] = None
+        lab_name: Optional[str] = None
+        ph: Optional[float] = None
+        ec: Optional[float] = None
+        organic_matter_pct: Optional[float] = None
+        n_ppm: Optional[int] = None
+        p_ppm: Optional[int] = None
+        k_ppm: Optional[int] = None
+        recommendation: Optional[str] = None
+        toprak_teksturu: Optional[str] = None
+        toprak_derinligi_cm: Optional[float] = None
+        taslilik_orani_yuzde: Optional[float] = None
+        tuzluluk_sinifi: Optional[str] = None
+        kirec_orani_yuzde: Optional[float] = None
+        zn_ppm: Optional[float] = None
+        fe_ppm: Optional[float] = None
+        bor_ppm: Optional[float] = None
+        analiz_rapor_no: Optional[str] = None
+        ai_yorum: Optional[str] = None
+        ai_risk_skoru: Optional[int] = None
+
+    @api_router.put("/soil-samples/{sample_id}")
+    async def update_soil_sample(sample_id: str, body: SoilSampleAdminUpdate, request: Request,
+                                 user=Depends(require_permission("soil:edit"))):
+        old = await db.soil_samples.find_one({"id": sample_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Toprak analizi bulunamadı")
+        updates = {k: v for k, v in body.model_dump().items() if v is not None}
+        if updates:
+            await db.soil_samples.update_one({"id": sample_id}, {"$set": updates})
+        new = await db.soil_samples.find_one({"id": sample_id}, {"_id": 0})
+        await log_audit(db, user, action="update", entity="soil_sample", entity_id=sample_id, old_value=old, new_value=new, request=request)
+        return new
+
+    @api_router.delete("/soil-samples/{sample_id}")
+    async def delete_soil_sample(sample_id: str, request: Request,
+                                 user=Depends(require_permission("soil:delete"))):
+        old = await db.soil_samples.find_one({"id": sample_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Toprak analizi bulunamadı")
+        await db.soil_samples.update_one(
+            {"id": sample_id},
+            {"$set": {"is_active": False, "deleted_at": datetime.now(timezone.utc).isoformat(),
+                      "deleted_by": user.get("full_name") or user.get("email")}},
+        )
+        await log_audit(db, user, action="soft_delete", entity="soil_sample", entity_id=sample_id, old_value=old, request=request)
+        return {"status": "deactivated"}
+
     # =====================================================================
     # SULAMA OLAYI (admin/mühendis girişi)
     # =====================================================================
@@ -375,6 +439,40 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         doc.pop("_id", None)
         await log_audit(db, user, action="create", entity="irrigation_event", entity_id=doc["id"], new_value=doc, request=request)
         return doc
+
+    class IrrigationEventAdminUpdate(BaseModel):
+        date: Optional[str] = None
+        method: Optional[str] = None
+        water_m3: Optional[float] = None
+        moisture_before: Optional[int] = None
+        moisture_after: Optional[int] = None
+
+    @api_router.put("/irrigation/events/{event_id}")
+    async def update_irrigation_event(event_id: str, body: IrrigationEventAdminUpdate, request: Request,
+                                      user=Depends(require_permission("irrigation:edit"))):
+        old = await db.irrigation_events.find_one({"id": event_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Sulama kaydı bulunamadı")
+        updates = {k: v for k, v in body.model_dump().items() if v is not None}
+        if updates:
+            await db.irrigation_events.update_one({"id": event_id}, {"$set": updates})
+        new = await db.irrigation_events.find_one({"id": event_id}, {"_id": 0})
+        await log_audit(db, user, action="update", entity="irrigation_event", entity_id=event_id, old_value=old, new_value=new, request=request)
+        return new
+
+    @api_router.delete("/irrigation/events/{event_id}")
+    async def delete_irrigation_event(event_id: str, request: Request,
+                                      user=Depends(require_permission("irrigation:delete"))):
+        old = await db.irrigation_events.find_one({"id": event_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Sulama kaydı bulunamadı")
+        await db.irrigation_events.update_one(
+            {"id": event_id},
+            {"$set": {"is_active": False, "deleted_at": datetime.now(timezone.utc).isoformat(),
+                      "deleted_by": user.get("full_name") or user.get("email")}},
+        )
+        await log_audit(db, user, action="soft_delete", entity="irrigation_event", entity_id=event_id, old_value=old, request=request)
+        return {"status": "deactivated"}
 
     # =====================================================================
     # OPERASYON — MAKİNE
@@ -603,6 +701,20 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         await log_audit(db, user, action="update", entity="appointment", entity_id=appt_id, old_value=old, new_value=new, request=request)
         return new
 
+    @api_router.delete("/logistics/appointments/{appt_id}")
+    async def delete_appointment(appt_id: str, request: Request,
+                                 user=Depends(require_permission("logistics:delete"))):
+        old = await db.appointments.find_one({"id": appt_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Randevu bulunamadı")
+        await db.appointments.update_one(
+            {"id": appt_id},
+            {"$set": {"is_active": False, "deleted_at": datetime.now(timezone.utc).isoformat(),
+                      "deleted_by": user.get("full_name") or user.get("email")}},
+        )
+        await log_audit(db, user, action="soft_delete", entity="appointment", entity_id=appt_id, old_value=old, request=request)
+        return {"status": "deactivated"}
+
     # =====================================================================
     # KANTAR KAYDI
     # =====================================================================
@@ -646,6 +758,52 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         doc.pop("_id", None)
         await log_audit(db, user, action="create", entity="kantar_record", entity_id=doc["id"], new_value=doc, request=request)
         return doc
+
+    class KantarRecordUpdate(BaseModel):
+        truck_plate: Optional[str] = None
+        brut_ton: Optional[float] = None
+        dara_ton: Optional[float] = None
+        polar_oran: Optional[float] = None
+        fire_pct: Optional[float] = None
+        kalite: Optional[str] = None
+        kantar_no: Optional[str] = None
+        weighing_at: Optional[str] = None
+
+    @api_router.put("/kantar/records/{record_id}")
+    async def update_kantar_record(record_id: str, body: KantarRecordUpdate, request: Request,
+                                   user=Depends(require_permission("kantar:edit"))):
+        old = await db.kantar_records.find_one({"id": record_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Kantar kaydı bulunamadı")
+        updates = {k: v for k, v in body.model_dump().items() if v is not None}
+        # brut/dara değiştiyse net_ton yeniden hesaplanır (tutarlılık).
+        brut = updates.get("brut_ton", old.get("brut_ton"))
+        dara = updates.get("dara_ton", old.get("dara_ton"))
+        if brut is not None and dara is not None:
+            if dara >= brut:
+                raise HTTPException(400, "Dara, brüt ağırlıktan küçük olmalı")
+            updates["net_ton"] = round(brut - dara, 2)
+        if updates:
+            await db.kantar_records.update_one({"id": record_id}, {"$set": updates})
+        new = await db.kantar_records.find_one({"id": record_id}, {"_id": 0})
+        await log_audit(db, user, action="update", entity="kantar_record", entity_id=record_id, old_value=old, new_value=new, request=request)
+        return new
+
+    @api_router.delete("/kantar/records/{record_id}")
+    async def delete_kantar_record(record_id: str, request: Request,
+                                   user=Depends(require_permission("kantar:delete"))):
+        # Kantar kaydı hakedişe (entitlement) girdi olur — konvansiyon #3 gereği
+        # soft delete; silinen kayıt entitlement hesabından da düşer (is_active filtresi).
+        old = await db.kantar_records.find_one({"id": record_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Kantar kaydı bulunamadı")
+        await db.kantar_records.update_one(
+            {"id": record_id},
+            {"$set": {"is_active": False, "deleted_at": datetime.now(timezone.utc).isoformat(),
+                      "deleted_by": user.get("full_name") or user.get("email")}},
+        )
+        await log_audit(db, user, action="soft_delete", entity="kantar_record", entity_id=record_id, old_value=old, request=request)
+        return {"status": "deactivated"}
 
     # =====================================================================
     # E-FATURA

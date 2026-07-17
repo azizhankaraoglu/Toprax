@@ -43,6 +43,7 @@ PERMISSION_CATALOG = {
             {"key": "farmers:view", "label": "Görüntüle"},
             {"key": "farmers:create", "label": "Yeni çiftçi ekle"},
             {"key": "farmers:edit", "label": "Düzenle"},
+            {"key": "farmers:delete", "label": "Sil"},
         ],
     },
     "parcels": {
@@ -85,7 +86,9 @@ PERMISSION_CATALOG = {
         "label": "Ekim Planlama",
         "permissions": [
             {"key": "plantings:view", "label": "Görüntüle"},
-            {"key": "plantings:create", "label": "Kayıt ekle/düzenle"},
+            {"key": "plantings:create", "label": "Kayıt ekle"},
+            {"key": "plantings:edit", "label": "Düzenle"},
+            {"key": "plantings:delete", "label": "Sil"},
         ],
     },
     "soil_irrigation": {
@@ -93,8 +96,12 @@ PERMISSION_CATALOG = {
         "permissions": [
             {"key": "soil:view", "label": "Toprak analizlerini görüntüle"},
             {"key": "soil:create", "label": "Toprak analizi ekle"},
+            {"key": "soil:edit", "label": "Toprak analizi düzenle"},
+            {"key": "soil:delete", "label": "Toprak analizi sil"},
             {"key": "irrigation:view", "label": "Sulama kayıtlarını görüntüle"},
             {"key": "irrigation:create", "label": "Sulama kaydı ekle"},
+            {"key": "irrigation:edit", "label": "Sulama kaydı düzenle"},
+            {"key": "irrigation:delete", "label": "Sulama kaydı sil"},
         ],
     },
     "operations": {
@@ -111,8 +118,11 @@ PERMISSION_CATALOG = {
         "permissions": [
             {"key": "logistics:view", "label": "Randevuları görüntüle"},
             {"key": "logistics:create", "label": "Randevu oluştur/düzenle"},
+            {"key": "logistics:delete", "label": "Randevu sil"},
             {"key": "kantar:view", "label": "Kantar kayıtlarını görüntüle"},
             {"key": "kantar:create", "label": "Kantar kaydı gir"},
+            {"key": "kantar:edit", "label": "Kantar kaydı düzenle"},
+            {"key": "kantar:delete", "label": "Kantar kaydı sil"},
         ],
     },
     "e_belge": {
@@ -340,15 +350,16 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
     "il_yoneticisi": ALL_PERMISSIONS,
     "fabrika_muduru": ALL_PERMISSIONS,
     "ilce_yoneticisi": [
-        "farmers:view", "farmers:create", "farmers:edit",
-        "parcels:view", "parcels:create", "parcels:edit", "parcels:draw_tools", "parcels:split_merge", "parcels:import_geojson",
+        "farmers:view", "farmers:create", "farmers:edit", "farmers:delete",
+        "parcels:view", "parcels:create", "parcels:edit", "parcels:delete", "parcels:draw_tools", "parcels:split_merge", "parcels:import_geojson",
         "admin_areas:view", "admin_areas:manage",
         "production_cycles:view", "production_cycles:create", "production_cycles:edit",
-        "contracts:view", "contracts:create", "contracts:edit",
-        "plantings:view", "plantings:create",
-        "soil:view", "soil:create", "irrigation:view", "irrigation:create",
+        "contracts:view", "contracts:create", "contracts:edit", "contracts:delete",
+        "plantings:view", "plantings:create", "plantings:edit", "plantings:delete",
+        "soil:view", "soil:create", "soil:edit", "soil:delete",
+        "irrigation:view", "irrigation:create", "irrigation:edit", "irrigation:delete",
         "operations:view", "operations:machines_manage", "operations:workers_manage", "operations:tasks_manage",
-        "logistics:view", "logistics:create", "kantar:view", "kantar:create",
+        "logistics:view", "logistics:create", "logistics:delete", "kantar:view", "kantar:create", "kantar:edit", "kantar:delete",
         "ebelge:view", "ebelge:create",
         "iot:view", "iot:manage", "drone:view", "drone:manage",
         "ai:copilot_use", "ai:disease_detect_use",
@@ -384,8 +395,9 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "admin_areas:view", "admin_areas:manage",
         "production_cycles:view", "production_cycles:create", "production_cycles:edit",
         "contracts:view",
-        "plantings:view", "plantings:create",
-        "soil:view", "soil:create", "irrigation:view", "irrigation:create",
+        "plantings:view", "plantings:create", "plantings:edit", "plantings:delete",
+        "soil:view", "soil:create", "soil:edit", "soil:delete",
+        "irrigation:view", "irrigation:create", "irrigation:edit", "irrigation:delete",
         "operations:view", "operations:tasks_manage",
         "logistics:view", "kantar:view",
         "ebelge:view",
@@ -434,8 +446,8 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         # Kantar/tartı operatörü — sadece tartı ve ilgili randevu/lojistik
         # işlemlerine odaklı, diğer modüllere erişimi yok.
         "farmers:view",
-        "logistics:view", "logistics:create",
-        "kantar:view", "kantar:create",
+        "logistics:view", "logistics:create", "logistics:delete",
+        "kantar:view", "kantar:create", "kantar:edit", "kantar:delete",
         "ebelge:view", "ebelge:create",
     ],
     "toprak_personeli": [
@@ -443,8 +455,8 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         # parsel/çiftçi bilgisine sadece görüntüleme erişimi.
         "farmers:view", "parcels:view", "production_cycles:view",
         "admin_areas:view",
-        "soil:view", "soil:create",
-        "irrigation:view", "irrigation:create",
+        "soil:view", "soil:create", "soil:edit", "soil:delete",
+        "irrigation:view", "irrigation:create", "irrigation:edit", "irrigation:delete",
         "saha:submit", "forms:view",
         "field_ops:view",
         "automation:view",

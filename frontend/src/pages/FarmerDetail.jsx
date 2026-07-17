@@ -19,7 +19,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import api from "@/api";
 import { MapContainer, TileLayer, Polygon } from "react-leaflet";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
-import { ArrowLeft, Phone, Mail, MapPin, Award, Wallet, Droplets, FileText, Map as MapIcon, Calendar, Info, Pencil, Check, X, Paperclip } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MapPin, Award, Wallet, Droplets, FileText, Map as MapIcon, Calendar, Info, Pencil, Check, X, Paperclip, Trash2 } from "lucide-react";
 import DynamicFieldsSection from "@/components/DynamicFieldsSection";
 import DocumentsTab from "@/components/DocumentsTab";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -89,6 +89,16 @@ export default function FarmerDetail() {
       setSaveError(err.response?.data?.detail || "Kaydedilemedi, alanları kontrol edin.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteFarmer() {
+    if (!window.confirm("Bu çiftçi silinsin mi?\n(Kayıt arşivlenir — geri alınabilir. Bağlı parsel/sözleşme varsa engellenir.)")) return;
+    try {
+      await api.delete(`/farmers/${id}`);
+      nav("/ciftciler");
+    } catch (err) {
+      alert(err.response?.data?.detail || "Silinemedi.");
     }
   }
 
@@ -297,9 +307,14 @@ export default function FarmerDetail() {
           <div className="card p-5">
             <div className="flex items-center justify-end mb-3">
               {!editing ? (
-                <button onClick={startEdit} className="btn btn-ghost text-xs" data-testid="farmer-edit-start">
-                  <Pencil size={13}/> Düzenle
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={startEdit} className="btn btn-ghost text-xs" data-testid="farmer-edit-start">
+                    <Pencil size={13}/> Düzenle
+                  </button>
+                  <button onClick={deleteFarmer} className="btn btn-ghost text-xs text-red-400" data-testid="farmer-delete">
+                    <Trash2 size={13}/> Sil
+                  </button>
+                </div>
               ) : (
                 <div className="flex items-center gap-2">
                   <button onClick={cancelEdit} disabled={saving} className="btn btn-ghost text-xs text-red-400" data-testid="farmer-edit-cancel">

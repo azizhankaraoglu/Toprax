@@ -185,6 +185,18 @@ function AreaDrawer({ area, onClose, onChanged }) {
               onChanged();
             }} />
           </div>
+
+          <div className="pt-3 border-t border-[var(--border)]">
+            <button
+              onClick={async () => {
+                if (!window.confirm("Bu idari alan silinsin mi?\n(Kayıt arşivlenir — geri alınabilir.)")) return;
+                try { await api.delete(`/admin-areas/${area.id}`); onChanged(); onClose(); }
+                catch (err) { alert(err.response?.data?.detail || "Silinemedi."); }
+              }}
+              className="btn btn-ghost text-xs text-red-400" data-testid="admin-area-delete">
+              Bölgeyi Sil
+            </button>
+          </div>
         </div>
       )}
     </Drawer>

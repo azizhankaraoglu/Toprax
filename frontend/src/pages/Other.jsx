@@ -1,6 +1,15 @@
 import api from "@/api";
 import { QuickAddPanel } from "@/components/QuickAdd";
+import RowActions from "@/components/RowActions";
 import { useFetch } from "@/hooks/use-fetch";
+
+const STATUS_OPTS = [
+  { value: "taslak", label: "Taslak" }, { value: "imzalı", label: "İmzalı" }, { value: "iptal", label: "İptal" },
+];
+const STAGE_OPTS = [
+  { value: "ekim", label: "Ekim" }, { value: "gelişim", label: "Gelişim" },
+  { value: "olgunlaşma", label: "Olgunlaşma" }, { value: "hasat", label: "Hasat" },
+];
 
 // Refactoring notu (2026-07-11): bu dosyadaki 6 bileşenin her biri ayrı
 // ayrı useState+useEffect+api.get tekrarlıyordu — useFetch hook'una
@@ -50,7 +59,7 @@ export function Sozlesmeler() {
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead><tr className="text-left text-[11px] text-[var(--text-dim)] uppercase tracking-wider border-b border-[var(--border)]">
-            <th className="p-4">Sözleşme No</th><th className="p-4">Çeşit</th><th className="p-4">Kota (da)</th><th className="p-4">Kota (ton)</th><th className="p-4">Tohum Avans</th><th className="p-4">Durum</th>
+            <th className="p-4">Sözleşme No</th><th className="p-4">Çeşit</th><th className="p-4">Kota (da)</th><th className="p-4">Kota (ton)</th><th className="p-4">Tohum Avans</th><th className="p-4">Durum</th><th className="p-4 text-right">İşlem</th>
           </tr></thead>
           <tbody>
             {contracts.slice(0,50).map((c) => (
@@ -61,6 +70,32 @@ export function Sozlesmeler() {
                 <td className="p-4">{c.kota_ton}</td>
                 <td className="p-4">{c.advance_seed_kg} kg</td>
                 <td className="p-4"><span className={`badge ${c.status==="imzalı"?"badge-a":"badge-c"}`}>{c.status}</span></td>
+                <td className="p-4">
+                  <div className="flex justify-end">
+                    <RowActions
+                      entityLabel="sözleşme"
+                      values={c}
+                      fields={[
+                        { name: "variety", label: "Çeşit" },
+                        { name: "kota_ton", label: "Kota (ton)", type: "number", step: "0.1" },
+                        { name: "advance_seed_kg", label: "Tohum Avansı (kg)", type: "number", step: "0.1" },
+                        { name: "advance_fertilizer_kg", label: "Gübre Avansı (kg)", type: "number", step: "0.1" },
+                        { name: "status", label: "Durum", type: "select", options: STATUS_OPTS },
+                      ]}
+                      onSave={async (v) => {
+                        await api.put(`/contracts/${c.id}`, {
+                          variety: v.variety,
+                          kota_ton: v.kota_ton === "" ? null : Number(v.kota_ton),
+                          advance_seed_kg: v.advance_seed_kg === "" ? null : Number(v.advance_seed_kg),
+                          advance_fertilizer_kg: v.advance_fertilizer_kg === "" ? null : Number(v.advance_fertilizer_kg),
+                          status: v.status,
+                        });
+                        contractsQ.reload();
+                      }}
+                      onDelete={async () => { await api.delete(`/contracts/${c.id}`); contractsQ.reload(); }}
+                    />
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -104,7 +139,7 @@ export function Ekim() {
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead><tr className="text-left text-[11px] text-[var(--text-dim)] uppercase tracking-wider border-b border-[var(--border)]">
-            <th className="p-4">Çeşit</th><th className="p-4">Ekim Tarihi</th><th className="p-4">Beklenen Hasat</th><th className="p-4">Aşama</th>
+            <th className="p-4">Çeşit</th><th className="p-4">Ekim Tarihi</th><th className="p-4">Beklenen Hasat</th><th className="p-4">Aşama</th><th className="p-4 text-right">İşlem</th>
           </tr></thead>
           <tbody>
             {plantings.slice(0,80).map((p) => (
@@ -113,6 +148,28 @@ export function Ekim() {
                 <td className="p-4 text-[var(--text-dim)]">{p.planting_date}</td>
                 <td className="p-4 text-[var(--text-dim)]">{p.expected_harvest_date}</td>
                 <td className="p-4"><span className={`badge ${stageBadge[p.stage]||"badge-neutral"}`}>{p.stage}</span></td>
+                <td className="p-4">
+                  <div className="flex justify-end">
+                    <RowActions
+                      entityLabel="ekim kaydı"
+                      values={p}
+                      fields={[
+                        { name: "stage", label: "Aşama", type: "select", options: STAGE_OPTS },
+                        { name: "expected_harvest_date", label: "Beklenen Hasat", type: "date" },
+                        { name: "actual_harvest_date", label: "Gerçek Hasat", type: "date" },
+                      ]}
+                      onSave={async (v) => {
+                        await api.put(`/plantings/${p.id}`, {
+                          stage: v.stage || null,
+                          expected_harvest_date: v.expected_harvest_date || null,
+                          actual_harvest_date: v.actual_harvest_date || null,
+                        });
+                        plantingsQ.reload();
+                      }}
+                      onDelete={async () => { await api.delete(`/plantings/${p.id}`); plantingsQ.reload(); }}
+                    />
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -155,7 +212,7 @@ export function Lojistik() {
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead><tr className="text-left text-[11px] text-[var(--text-dim)] uppercase tracking-wider border-b border-[var(--border)]">
-            <th className="p-4">Tarih</th><th className="p-4">Plaka</th><th className="p-4">Tahmini Ton</th><th className="p-4">Gerçek Ton</th><th className="p-4">Polar</th><th className="p-4">Durum</th>
+            <th className="p-4">Tarih</th><th className="p-4">Plaka</th><th className="p-4">Tahmini Ton</th><th className="p-4">Gerçek Ton</th><th className="p-4">Polar</th><th className="p-4">Durum</th><th className="p-4 text-right">İşlem</th>
           </tr></thead>
           <tbody>
             {appts.map((a) => (
@@ -166,6 +223,30 @@ export function Lojistik() {
                 <td className="p-4">{a.actual_ton ? `${a.actual_ton} t` : "-"}</td>
                 <td className="p-4">{a.polar_oran ? `%${a.polar_oran}` : "-"}</td>
                 <td className="p-4"><span className="badge badge-b">{a.status}</span></td>
+                <td className="p-4">
+                  <div className="flex justify-end">
+                    <RowActions
+                      entityLabel="randevu"
+                      values={a}
+                      fields={[
+                        { name: "status", label: "Durum", type: "select", options: [
+                          { value: "planlı", label: "Planlı" }, { value: "geldi", label: "Geldi" },
+                          { value: "tartıldı", label: "Tartıldı" }, { value: "tamamlandı", label: "Tamamlandı" } ] },
+                        { name: "actual_ton", label: "Gerçek Ton", type: "number", step: "0.1" },
+                        { name: "polar_oran", label: "Polar Oranı (%)", type: "number", step: "0.1" },
+                      ]}
+                      onSave={async (v) => {
+                        await api.put(`/logistics/appointments/${a.id}`, {
+                          status: v.status || null,
+                          actual_ton: v.actual_ton === "" ? null : Number(v.actual_ton),
+                          polar_oran: v.polar_oran === "" ? null : Number(v.polar_oran),
+                        });
+                        apptsQ.reload();
+                      }}
+                      onDelete={async () => { await api.delete(`/logistics/appointments/${a.id}`); apptsQ.reload(); }}
+                    />
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

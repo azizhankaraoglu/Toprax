@@ -25,7 +25,7 @@ import { ArrowUp, ArrowDown, Pin, Eye, EyeOff, Download, Columns3, ChevronLeft, 
  * indirir (Query Engine'in page_size tavanı) — arka planda tam veri seti
  * dışa aktarımı (streaming export) v1 kapsamı dışıdır.
  */
-export default function SmartDataGrid({ module, columns, defaultSort = [], pageSizeOptions = [25, 50, 100], onRowClick, initialFilters = null }) {
+export default function SmartDataGrid({ module, columns, defaultSort = [], pageSizeOptions = [25, 50, 100], onRowClick, initialFilters = null, rowActions = null }) {
   const [colOrder, setColOrder] = useState(columns.map((c) => c.key));
   const [hidden, setHidden] = useState(new Set());
   const [pinned, setPinned] = useState(new Set());
@@ -211,6 +211,7 @@ export default function SmartDataGrid({ module, columns, defaultSort = [], pageS
                   <span className="inline-flex items-center gap-1">{colByKey[key]?.label} {sortBadge(key)}</span>
                 </th>
               ))}
+              {rowActions && <th className="p-3 text-right whitespace-nowrap">İşlem</th>}
             </tr>
             <tr className="border-b border-[var(--border)]">
               <th className="p-1"></th>
@@ -225,13 +226,14 @@ export default function SmartDataGrid({ module, columns, defaultSort = [], pageS
                   />
                 </th>
               ))}
+              {rowActions && <th className="p-1"></th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={visibleOrderedKeys.length + 1} className="p-6 text-center text-[var(--text-dim)] text-sm">Yükleniyor…</td></tr>
+              <tr><td colSpan={visibleOrderedKeys.length + 1 + (rowActions ? 1 : 0)} className="p-6 text-center text-[var(--text-dim)] text-sm">Yükleniyor…</td></tr>
             ) : items.length === 0 ? (
-              <tr><td colSpan={visibleOrderedKeys.length + 1} className="p-6 text-center text-[var(--text-dim)] text-sm">Kayıt bulunamadı.</td></tr>
+              <tr><td colSpan={visibleOrderedKeys.length + 1 + (rowActions ? 1 : 0)} className="p-6 text-center text-[var(--text-dim)] text-sm">Kayıt bulunamadı.</td></tr>
             ) : (
               items.map((row) => (
                 <tr key={row.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)]"
@@ -242,6 +244,11 @@ export default function SmartDataGrid({ module, columns, defaultSort = [], pageS
                   {visibleOrderedKeys.map((key) => (
                     <td key={key} className="p-3 text-xs whitespace-nowrap">{String(row[key] ?? "")}</td>
                   ))}
+                  {rowActions && (
+                    <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-end">{rowActions(row, load)}</div>
+                    </td>
+                  )}
                 </tr>
               ))
             )}

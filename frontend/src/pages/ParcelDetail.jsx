@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "@/api";
 import { MapContainer, TileLayer, Polygon } from "react-leaflet";
-import { ArrowLeft, MapPin, Droplets, FlaskConical, Sprout, Award, Satellite, Radio, Plane, Pencil, Check, X, Plus, Calendar } from "lucide-react";
+import { ArrowLeft, MapPin, Droplets, FlaskConical, Sprout, Award, Satellite, Radio, Plane, Pencil, Check, X, Plus, Calendar, Trash2 } from "lucide-react";
 import DynamicFieldsSection from "@/components/DynamicFieldsSection";
 import DocumentsTab from "@/components/DocumentsTab";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -25,6 +25,8 @@ import { QuickAddPanel } from "@/components/QuickAdd";
 import { Zap } from "lucide-react";
 import GeoFileImport from "@/components/GeoFileImport";
 import VisitHistory from "@/components/VisitHistory";
+import FarmerSelect from "@/components/FarmerSelect";
+import RemoteSensingPanel from "@/components/RemoteSensingPanel";
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
 const SOIL_TYPES = ["Killi", "Kumlu", "Tınlı", "Kireçli", "Killi-Tınlı"];
@@ -37,6 +39,7 @@ export default function ParcelDetail() {
   const nav = useNavigate();
   const [data, setData] = useState(null);
   const [fieldDefs, setFieldDefs] = useState([]);          // IT-02 — Form Yönetimi alan tanımları (parcels)
+  const [farmers, setFarmers] = useState([]);              // çiftçi atama seçici için
 
   // IT-04 — Düzenleme modu
   const [editing, setEditing] = useState(false);
@@ -62,6 +65,11 @@ export default function ParcelDetail() {
       setFieldDefs(r.data.filter((f) => f.is_active !== false && f.visible).sort((a, b) => a.order - b.order))
     );
   }, []);
+  useEffect(() => {
+    api.get("/farmers", { params: { limit: 2000 } })
+      .then((r) => setFarmers(Array.isArray(r.data) ? r.data : (r.data?.farmers || [])))
+      .catch(() => setFarmers([]));
+  }, []);
   const loadCycles = () => api.get("/production-cycles", { params: { parcel_id: id } }).then((r) => setCycles(r.data));
   useEffect(() => { loadCycles(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -85,6 +93,7 @@ export default function ParcelDetail() {
 
   function startEdit() {
     setEditForm({
+      farmer_id: data.parcel.farmer_id || null,
       name: data.parcel.name, village: data.parcel.village, area_dekar: data.parcel.area_dekar,
       soil_type: data.parcel.soil_type, irrigation: data.parcel.irrigation,
       ...Object.fromEntries(fieldDefs.map((f) => [f.field_key, data.parcel[f.field_key] ?? ""])),
@@ -110,6 +119,16 @@ export default function ParcelDetail() {
       setSaveError(err.response?.data?.detail || "Kaydedilemedi, alanları kontrol edin.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteParcel() {
+    if (!window.confirm("Bu parsel silinsin mi?\n(Kayıt arşivlenir — geri alınabilir. Bağlı sözleşme varsa engellenir.)")) return;
+    try {
+      await api.delete(`/parcels/${id}`);
+      nav("/parseller");
+    } catch (err) {
+      alert(err.response?.data?.detail || "Silinemedi.");
     }
   }
 
@@ -168,15 +187,19 @@ export default function ParcelDetail() {
             <div><div className="text-[10px] text-[var(--text-dim)] uppercase">Sulama</div><div className="font-medium">{parcel.irrigation}</div></div>
           </div>
 
-          {farmer && (
-            <div className="pt-3 border-t border-[var(--border)]">
-              <div className="text-[10px] text-[var(--text-dim)] uppercase mb-1">SAHİBİ</div>
+          <div className="pt-3 border-t border-[var(--border)]">
+            <div className="text-[10px] text-[var(--text-dim)] uppercase mb-1">SAHİBİ</div>
+            {farmer ? (
               <button onClick={() => nav(`/ciftciler/${farmer.id}`)} className="text-left w-full hover:bg-[var(--surface-2)] p-2 rounded transition-colors">
                 <div className="text-sm">{farmer.full_name}</div>
                 <div className="text-xs text-[var(--text-dim)]">{farmer.member_no} · {farmer.phone}</div>
               </button>
-            </div>
-          )}
+            ) : (
+              <div className="text-sm text-amber-400 p-2 flex items-center gap-2">
+                Atanmamış — yukarıdaki <span className="font-medium">"Düzenle"</span> ile çiftçi atayın
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -300,6 +323,9 @@ export default function ParcelDetail() {
         )}
       </div>
 
+      {/* UZAKTAN ALGILAMA (EOSDA) — tekil parsel: analiz güncelle + NDVI zaman serisi + gün-gün slider */}
+      <RemoteSensingPanel parcelId={id} />
+
       {/* GENEL BİLGİLER — IT-02 dinamik alanlar (Form Yönetimi'nden) + IT-04 düzenleme modu.
           NOT: fieldDefs boş olsa bile kart her zaman render edilir — aksi halde
           "Düzenle" butonuna hiç ulaşılamaz (temel alan düzenleme dinamik alanlardan
@@ -308,9 +334,14 @@ export default function ParcelDetail() {
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-display text-lg">Genel Bilgiler</h3>
             {!editing ? (
-              <button onClick={startEdit} className="btn btn-ghost text-xs" data-testid="parcel-edit-start">
-                <Pencil size={13}/> Düzenle
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={startEdit} className="btn btn-ghost text-xs" data-testid="parcel-edit-start">
+                  <Pencil size={13}/> Düzenle
+                </button>
+                <button onClick={deleteParcel} className="btn btn-ghost text-xs text-red-400" data-testid="parcel-delete">
+                  <Trash2 size={13}/> Sil
+                </button>
+              </div>
             ) : (
               <div className="flex items-center gap-2">
                 <button onClick={cancelEdit} disabled={saving} className="btn btn-ghost text-xs text-red-400" data-testid="parcel-edit-cancel">
@@ -327,6 +358,25 @@ export default function ParcelDetail() {
 
           {editing ? (
             <div className="space-y-5">
+              <div>
+                <div className="text-xs font-medium text-[var(--primary)] mb-2">Sahibi (Çiftçi)</div>
+                <div className="max-w-md">
+                  <FarmerSelect
+                    farmers={farmers}
+                    value={editForm.farmer_id || null}
+                    onChange={(fid) => setEditForm((f) => {
+                      const far = farmers.find((x) => x.id === fid);
+                      // Köy boşsa (atanmamış import edilen parsel) çiftçinin köyünü otomatik doldur.
+                      return { ...f, farmer_id: fid, village: f.village || far?.village || "" };
+                    })}
+                    placeholder="Çiftçi ara ve ata…"
+                    testId="parcel-farmer-select"
+                  />
+                  <p className="text-[10px] text-[var(--text-dim)] mt-1">
+                    Atanmamış parseller için çiftçi seçin; bölge otomatik güncellenir.
+                  </p>
+                </div>
+              </div>
               <div>
                 <div className="text-xs font-medium text-[var(--primary)] mb-2">Temel Bilgiler</div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

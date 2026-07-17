@@ -9,7 +9,8 @@
  */
 import { useEffect, useState } from "react";
 import api from "@/api";
-import { Satellite, Activity, ListChecks, AlertTriangle, RefreshCw, Plus } from "lucide-react";
+import { Satellite, Activity, ListChecks, AlertTriangle, RefreshCw, Plus, Trash2 } from "lucide-react";
+import BulkRemoteSensing from "@/components/BulkRemoteSensing";
 
 const fmt = (n) => new Intl.NumberFormat("tr-TR").format(n ?? 0);
 
@@ -77,6 +78,12 @@ export default function RemoteSensing() {
     finally { setBusy(false); }
   };
 
+  const deletePolicy = async (p) => {
+    if (!window.confirm(`"${p.name}" politikası silinsin mi?`)) return;
+    try { await api.delete(`/remote-sensing/policies/${p.id}`); load(); }
+    catch (err) { alert("Hata: " + (err.response?.data?.detail || err.message)); }
+  };
+
   return (
     <div className="p-8 max-w-[1600px]" data-testid="remote-sensing-page">
       <header className="mb-6 flex items-end justify-between">
@@ -126,6 +133,11 @@ export default function RemoteSensing() {
         </div>
       )}
 
+      {/* Toplu sorgu + parsel seçimi + manuel analiz (Parcels sayfasıyla AYNI bileşen) */}
+      <div className="card p-5 mb-6">
+        <BulkRemoteSensing title="Toplu Tarama & Manuel Analiz" />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         {/* Tarama Politikaları */}
         <div className="card p-5">
@@ -151,7 +163,10 @@ export default function RemoteSensing() {
                   <div className="font-medium">{p.name}</div>
                   <div className="text-xs text-[var(--text-dim)]">{p.frequency} · {(p.indices || []).join(", ")} · öncelik {p.priority}</div>
                 </div>
-                <span className={`badge ${p.is_active ? "badge-a" : "badge-neutral"}`}>{p.is_active ? "aktif" : "pasif"}</span>
+                <div className="flex items-center gap-2">
+                  <span className={`badge ${p.is_active ? "badge-a" : "badge-neutral"}`}>{p.is_active ? "aktif" : "pasif"}</span>
+                  <button onClick={() => deletePolicy(p)} className="text-[var(--text-dim)] hover:text-red-400" title="Sil"><Trash2 size={13} /></button>
+                </div>
               </div>
             ))}
             {policies.length === 0 && <div className="text-sm text-[var(--text-dim)] py-4 text-center">Henüz politika yok</div>}

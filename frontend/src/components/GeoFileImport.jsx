@@ -104,7 +104,7 @@ export default function GeoFileImport({ onConfirm }) {
           <label className="text-xs text-[var(--text-dim)] mb-1 block">Dosya</label>
           <input
             type="file"
-            accept=".geojson,.json,.kml,.dxf,.zip"
+            accept=".geojson,.json,.kml,.kmz,.dxf,.zip"
             data-testid="geo-import-file-input"
             onChange={(e) => { setFile(e.target.files[0] || null); setResult(null); setError(""); }}
             className="text-xs"

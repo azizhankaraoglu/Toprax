@@ -120,6 +120,25 @@ CORE_FILTERABLE_FIELDS = {
         {"key": "ndvi_latest", "label": "NDVI (son ölçüm)", "type": "number"},
         {"key": "risk_level", "label": "Risk Seviyesi", "type": "text"},
         {"key": "expected_yield_ton", "label": "Beklenen Verim (ton)", "type": "number"},
+        # "Her bilgisiyle sorgulanabilsin" — IT-02'nin gerçek parsel kolonları
+        # (kadastro/coğrafi/sahiplik/altyapı) + uzaktan algılama son NDVI'si.
+        # Bunlar doğrudan doküman alanı olduğundan filtre/sıralamada güvenli.
+        {"key": "parcel_code", "label": "Parsel Kodu", "type": "text"},
+        {"key": "current_crop", "label": "Mevcut Ürün", "type": "text"},
+        {"key": "active_season", "label": "Aktif Sezon (Yıl)", "type": "number"},
+        {"key": "ada_no", "label": "Ada No", "type": "text"},
+        {"key": "parsel_no_tapu", "label": "Parsel No (Tapu)", "type": "text"},
+        {"key": "il", "label": "İl", "type": "text"},
+        {"key": "ilce", "label": "İlçe", "type": "text"},
+        {"key": "mahalle", "label": "Mahalle/Köy", "type": "text"},
+        {"key": "rakim_m", "label": "Rakım (m)", "type": "number"},
+        {"key": "egim_yuzde", "label": "Eğim (%)", "type": "number"},
+        {"key": "sahiplik_durumu", "label": "Sahiplik Durumu", "type": "text"},
+        {"key": "tapu_no", "label": "Tapu No", "type": "text"},
+        {"key": "yol_durumu", "label": "Yol Durumu", "type": "text"},
+        {"key": "su_kaynagi", "label": "Su Kaynağı", "type": "text"},
+        {"key": "remote_sensing.last_ndvi", "label": "Uzaktan Algılama NDVI", "type": "number"},
+        {"key": "remote_sensing.last_image_date", "label": "Son Uydu Görüntü Tarihi", "type": "text"},
     ],
     "contracts": [
         {"key": "farmer_id", "label": "Çiftçi", "type": "text"},
@@ -330,12 +349,16 @@ async def execute_query(
             raise HTTPException(400, f"Bilinmeyen operatör: {operator}")
         conditions.append(_build_condition(field_key, operator, value))
 
+    # Soft-delete edilen (is_active=False) kayıtlar HİÇBİR modülde sorguya
+    # girmez — is_active alanı olmayan (eski) kayıtlar {"$ne": False} ile
+    # kapsanır, bu yüzden tüm modüller için güvenli.
+    soft_delete_guard = {"is_active": {"$ne": False}}
     if not conditions:
-        mongo_query: dict = {}
+        mongo_query: dict = soft_delete_guard
     elif logic.upper() == "OR":
-        mongo_query = {"$or": conditions}
+        mongo_query = {"$and": [soft_delete_guard, {"$or": conditions}]}
     else:
-        mongo_query = {"$and": conditions} if len(conditions) > 1 else conditions[0]
+        mongo_query = {"$and": [soft_delete_guard, *conditions]}
 
     projection = {"_id": 0, **{f: 0 for f in DEFAULT_EXCLUDED_FIELDS.get(module, set())}}
     if fields:

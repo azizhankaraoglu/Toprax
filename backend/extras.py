@@ -558,7 +558,7 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
     @api_router.get("/kantar/records")
     async def list_kantar_records(user=Depends(current_user)):
         """Kantar tartı kayıtları"""
-        docs = await db.kantar_records.find({}, {"_id": 0}).sort([("weighing_at", -1)]).to_list(300)
+        docs = await db.kantar_records.find({"is_active": {"$ne": False}}, {"_id": 0}).sort([("weighing_at", -1)]).to_list(300)
         return docs
 
     # =====================================================================

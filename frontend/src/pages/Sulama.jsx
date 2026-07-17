@@ -3,15 +3,22 @@ import api from "@/api";
 import { Droplets, AlertTriangle, Waves } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import { QuickAddPanel } from "@/components/QuickAdd";
+import RowActions from "@/components/RowActions";
 
 const METHOD_COLORS = { damla: "#4ade80", yağmurlama: "#60a5fa", karık: "#fbbf24", diğer: "#97a8a0" };
 const RISK_COLORS = { düşük: "text-[var(--primary)]", orta: "text-amber-400", yüksek: "text-red-400" };
+const METHOD_OPTS = [{ value: "damla", label: "Damla" }, { value: "yağmurlama", label: "Yağmurlama" }, { value: "karık", label: "Karık" }];
 
 export default function Sulama() {
   const [data, setData] = useState(null);
   const [parcels, setParcels] = useState([]);
+  const [events, setEvents] = useState([]);
 
-  const load = () => api.get("/irrigation/summary").then((r) => setData(r.data));
+  const load = () => {
+    api.get("/irrigation/summary").then((r) => setData(r.data));
+    api.get("/irrigation/events", { params: { limit: 100 } }).then((r) => setEvents(r.data)).catch(() => setEvents([]));
+  };
+  const parcelName = (pid) => { const p = parcels.find((x) => x.id === pid); return p ? `${p.parcel_code} — ${p.name}` : pid; };
   useEffect(() => {
     load();
     api.get("/parcels", { params: { limit: 500 } }).then((r) => setParcels(r.data));
@@ -136,6 +143,53 @@ export default function Sulama() {
           load();
         }}
       />
+
+      <div className="card overflow-hidden mt-4">
+        <div className="p-4 border-b border-[var(--border)]"><h3 className="font-display text-lg">Son Sulama Kayıtları</h3></div>
+        <table className="w-full text-sm">
+          <thead><tr className="text-left text-[11px] text-[var(--text-dim)] uppercase tracking-wider border-b border-[var(--border)]">
+            <th className="p-4">Tarih</th><th className="p-4">Parsel</th><th className="p-4">Yöntem</th><th className="p-4">Su (m³)</th><th className="p-4">Nem Ö/S</th><th className="p-4 text-right">İşlem</th>
+          </tr></thead>
+          <tbody>
+            {events.length === 0 && <tr><td colSpan={6} className="p-4 text-[var(--text-dim)] text-xs">Kayıt yok.</td></tr>}
+            {events.map((e) => (
+              <tr key={e.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)]">
+                <td className="p-4 text-[var(--text-dim)]">{e.date}</td>
+                <td className="p-4">{parcelName(e.parcel_id)}</td>
+                <td className="p-4">{e.method}</td>
+                <td className="p-4">{e.water_m3} m³</td>
+                <td className="p-4 text-[var(--text-dim)]">{e.moisture_before ?? "-"} / {e.moisture_after ?? "-"}</td>
+                <td className="p-4">
+                  <div className="flex justify-end">
+                    <RowActions
+                      entityLabel="sulama kaydı"
+                      values={e}
+                      fields={[
+                        { name: "date", label: "Tarih", type: "date" },
+                        { name: "method", label: "Yöntem", type: "select", options: METHOD_OPTS },
+                        { name: "water_m3", label: "Su (m³)", type: "number", step: "0.1" },
+                        { name: "moisture_before", label: "Nem öncesi (%)", type: "number" },
+                        { name: "moisture_after", label: "Nem sonrası (%)", type: "number" },
+                      ]}
+                      onSave={async (v) => {
+                        await api.put(`/irrigation/events/${e.id}`, {
+                          date: v.date || null,
+                          method: v.method || null,
+                          water_m3: v.water_m3 === "" ? null : Number(v.water_m3),
+                          moisture_before: v.moisture_before === "" ? null : Number(v.moisture_before),
+                          moisture_after: v.moisture_after === "" ? null : Number(v.moisture_after),
+                        });
+                        load();
+                      }}
+                      onDelete={async () => { await api.delete(`/irrigation/events/${e.id}`); load(); }}
+                    />
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

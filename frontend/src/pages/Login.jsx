@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "@/api";
 import { Wheat, Lock, Mail, Loader2, MessageCircleQuestion, Send, CheckCircle2, X, KeyRound } from "lucide-react";
+import { APP_VERSION_LABEL } from "@/version";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -296,6 +297,10 @@ export default function Login() {
               )}
             </div>
           )}
+
+          <div className="mt-10 text-center text-[10px] text-[var(--text-dim)] tracking-wider" data-testid="app-version">
+            {APP_VERSION_LABEL}
+          </div>
         </div>
       </div>
     </div>
