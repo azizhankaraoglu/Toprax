@@ -117,12 +117,35 @@ function AreaDrawer({ area, onClose, onChanged }) {
   const [summary, setSummary] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [saving, setSaving] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [areas, setAreas] = useState([]);
 
   useEffect(() => {
     if (!area) return;
     api.get(`/admin-areas/${area.id}`).then((r) => { setDetail(r.data); setEditValues(r.data); });
     api.get(`/admin-areas/${area.id}/summary`).then((r) => setSummary(r.data));
+    api.get("/users").then((r) => setUsers(r.data || [])).catch(() => {});
+    api.get("/admin-areas").then((r) => setAreas(r.data || [])).catch(() => {});
   }, [area]);
+
+  async function saveBasic() {
+    setSaving(true);
+    try {
+      await api.put(`/admin-areas/${area.id}`, {
+        name: editValues.name,
+        area_type: editValues.area_type,
+        parent_id: editValues.parent_id || null,          // null → değişmez (üst alan temizleme ender)
+        responsible_user_id: editValues.responsible_user_id ?? "",   // "" → sorumluyu kaldır
+      });
+      const r = await api.get(`/admin-areas/${area.id}`);
+      setDetail(r.data); setEditValues(r.data);
+      onChanged();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Kaydedilemedi.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function saveDemografi() {
     setSaving(true);
@@ -167,6 +190,52 @@ function AreaDrawer({ area, onClose, onChanged }) {
               </div>
             </div>
           )}
+
+          <div>
+            <div className="text-xs font-medium text-[var(--primary)] mb-2">Temel Bilgiler</div>
+            <div className="space-y-2">
+              <div>
+                <label className="text-[11px] text-[var(--text-dim)]">Ad</label>
+                <input className="input" value={editValues.name || ""}
+                       onChange={(e) => setEditValues((f) => ({ ...f, name: e.target.value }))}
+                       data-testid="admin-area-edit-name" />
+              </div>
+              <div>
+                <label className="text-[11px] text-[var(--text-dim)]">Tip</label>
+                <select className="input" value={editValues.area_type || ""}
+                        onChange={(e) => setEditValues((f) => ({ ...f, area_type: e.target.value }))}>
+                  <option value="il">İl</option>
+                  <option value="ilce">İlçe</option>
+                  <option value="mahalle">Mahalle</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] text-[var(--text-dim)]">Üst Alan</label>
+                <select className="input" value={editValues.parent_id || ""}
+                        onChange={(e) => setEditValues((f) => ({ ...f, parent_id: e.target.value }))}>
+                  <option value="">— yok —</option>
+                  {areas.filter((a) => a.id !== area?.id).map((a) => (
+                    <option key={a.id} value={a.id}>{a.name} ({a.area_type})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] text-[var(--text-dim)]">Sorumlu Personel (köy sorumlusu)</label>
+                <select className="input" value={editValues.responsible_user_id || ""}
+                        onChange={(e) => setEditValues((f) => ({ ...f, responsible_user_id: e.target.value }))}
+                        data-testid="admin-area-responsible">
+                  <option value="">— atanmadı —</option>
+                  {users.filter((u) => u.role !== "ciftci").map((u) => (
+                    <option key={u.id} value={u.id}>{u.full_name || u.email} ({u.role})</option>
+                  ))}
+                </select>
+                <div className="text-[10px] text-[var(--text-dim)] mt-1">Bu köydeki çiftçi ve parseller bu sorumluyu devralır (portföy).</div>
+              </div>
+              <button onClick={saveBasic} disabled={saving} className="btn btn-primary text-xs" data-testid="admin-area-save-basic">
+                {saving ? "Kaydediliyor…" : "Temel Bilgileri Kaydet"}
+              </button>
+            </div>
+          </div>
 
           <div>
             <div className="text-xs font-medium text-[var(--primary)] mb-2">Demografi</div>

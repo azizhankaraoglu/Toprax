@@ -68,6 +68,10 @@ class AdminAreaCreate(BaseModel):
     parent_id: Optional[str] = None                  # üst idari alan (admin_areas.id)
     lookup_value_id: Optional[str] = None             # IT-01.5 tek kaynak ilkesi — il/ilçe lookup_value referansı
     geometry: Optional[Dict[str, Any]] = None          # GeoJSON Polygon/MultiPolygon
+    # ============ B1 (portföy) — köy/mahalle SORUMLUSU ============
+    # Bir köye/mahalleye atanan sorumlu personel (users.id). O alandaki çiftçi
+    # ve parseller bu sorumluyu DEVRALIR (köy bazlı miras — bkz. #6). Boş olabilir.
+    responsible_user_id: Optional[str] = None
 
     # ============ IT-13.6 — Demografi (field_definitions module="admin_areas") ============
     population: Optional[int] = None
@@ -77,8 +81,10 @@ class AdminAreaCreate(BaseModel):
 
 class AdminAreaUpdate(BaseModel):
     name: Optional[str] = None
+    area_type: Optional[str] = None
     parent_id: Optional[str] = None
     lookup_value_id: Optional[str] = None
+    responsible_user_id: Optional[str] = None
     geometry: Optional[Dict[str, Any]] = None
     population: Optional[int] = None
     agricultural_area_dekar: Optional[float] = None
@@ -144,7 +150,14 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
         old = await db.admin_areas.find_one({"id": area_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "İdari alan bulunamadı")
+        if body.area_type is not None and body.area_type not in AREA_TYPES:
+            raise HTTPException(400, f"Geçersiz alan tipi: {body.area_type}. Geçerli değerler: {AREA_TYPES}")
+        if body.parent_id and not await db.admin_areas.find_one({"id": body.parent_id}, {"_id": 0}):
+            raise HTTPException(404, "Üst idari alan bulunamadı")
+        # responsible_user_id="" → sorumluyu KALDIR (None'a çevir; boş string saklanmaz).
         updates = {k: v for k, v in body.model_dump().items() if v is not None}
+        if "responsible_user_id" in updates and updates["responsible_user_id"] == "":
+            updates["responsible_user_id"] = None
         if not updates:
             raise HTTPException(400, "Güncellenecek alan yok")
         await db.admin_areas.update_one({"id": area_id}, {"$set": updates})
