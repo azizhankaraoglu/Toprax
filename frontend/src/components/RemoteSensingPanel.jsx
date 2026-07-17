@@ -81,7 +81,7 @@ export default function RemoteSensingPanel({ parcelId }) {
     try {
       const { data } = await api.post("/remote-sensing/manual-sync", {
         parcel_id: parcelId,
-        task_types: ["statistics"],   // NDVI istatistiği (gerçek EOSDA). Görüntü rasterı ayrı bir akış.
+        task_types: ["statistics", "download"],   // NDVI istatistiği + true-color uydu görüntüsü (gerçek EOSDA)
         indices: ["ndvi"],
       });
       setMsg(`Analiz çalıştırıldı: ${data.queued ?? 0} görev kuyruğa alındı, ${data.processed ?? 0} işlendi.`);
@@ -93,8 +93,11 @@ export default function RemoteSensingPanel({ parcelId }) {
     }
   }
 
-  const imgSrc = curImg?.result_url
-    ? `${BACKEND_URL || ""}${curImg.result_url}${curImg.result_url.includes("?") ? "&" : "?"}token=${localStorage.getItem("token") || ""}`
+  // Yerel diske kaydedilmiş PNG'yi (stored_name) kendi güvenli ucumuzdan sun.
+  // (EOSDA'nın imzalı result_url'i geçici/çapraz-köken olduğundan doğrudan
+  // kullanılmaz.)
+  const imgSrc = curImg?.stored_name
+    ? `${BACKEND_URL || ""}/api/remote-sensing/images/file/${curImg.stored_name}?token=${localStorage.getItem("token") || ""}`
     : null;
 
   return (
@@ -166,7 +169,11 @@ export default function RemoteSensingPanel({ parcelId }) {
                   <div className="text-center p-4">
                     <ImageIcon size={28} className="mx-auto mb-1" style={{ color: ndviColor(cur?.ndvi) }} />
                     <div className="text-xs text-[var(--text-dim)]">
-                      {curImg ? "Görüntü hazır (MOCK — gerçek raster EOSDA anahtarıyla gelir)" : "Bu tarihte kayıtlı uydu görüntüsü yok"}
+                      {curImg
+                        ? (status && !status.is_real
+                            ? "MOCK modda gerçek raster gelmez — EOSDA gerçek moda alınmalı"
+                            : "Bu tarih için görüntü indirilemedi")
+                        : "Bu tarihte kayıtlı uydu görüntüsü yok"}
                     </div>
                   </div>
                 )}

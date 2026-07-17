@@ -10,7 +10,8 @@ permissions/audit/Communication Policy/storage'dan kullanır.
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, Query
+from fastapi.responses import FileResponse
 
 from .dto import (TaramaPolicy, RemoteSensingTaskCreate, ScanFrequency)
 from .providers import get_remote_sensing_provider
@@ -212,6 +213,36 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
         if not include_inactive:
             q["is_active"] = True
         return await db.remote_sensing_images.find(q, {"_id": 0}).sort("capture_date", -1).to_list(200)
+
+    @api_router.get("/remote-sensing/images/file/{stored_name}")
+    async def rs_image_file(stored_name: str, request: Request, token: str = Query(None)):
+        """Yerel diske kaydedilmiş uydu görüntüsünü (PNG) sunar. <img src>
+        özel header gönderemediği için ?token= de kabul edilir (storage.py'nin
+        dosya-indirme deseniyle AYNI: JWT imza/aktiflik + tenant kontrolü)."""
+        from security import decode_token
+        from storage import UPLOAD_DIR
+        if "/" in stored_name or ".." in stored_name or "\\" in stored_name:
+            raise HTTPException(400, "Geçersiz dosya adı")
+        auth = request.headers.get("authorization", "")
+        raw = auth[7:] if auth.startswith("Bearer ") else token
+        if not raw:
+            raise HTTPException(401, "Token gerekli")
+        try:
+            payload = decode_token(raw)
+        except Exception:
+            raise HTTPException(401, "Geçersiz veya süresi dolmuş token")
+        u = await db.users.find_one({"id": payload.get("user_id")}, {"_id": 0, "password": 0})
+        if not u or u.get("active") is False:
+            raise HTTPException(403, "Yetkisiz")
+        img = await db.remote_sensing_images.find_one({"stored_name": stored_name}, {"_id": 0})
+        if not img:
+            raise HTTPException(404, "Görüntü bulunamadı")
+        if u.get("role") != "platform_admin" and img.get("tenant_id") not in (None, payload.get("tenant_id")):
+            raise HTTPException(404, "Görüntü bulunamadı")
+        path = UPLOAD_DIR / "remote_sensing" / stored_name
+        if not path.is_file():
+            raise HTTPException(404, "Dosya bulunamadı")
+        return FileResponse(path, media_type="image/png")
 
     # ---- AI Yorumlama (EOSDA/NDVI verisini anlamlandırır) --------------------
     @api_router.post("/remote-sensing/parcels/{parcel_id}/interpret")

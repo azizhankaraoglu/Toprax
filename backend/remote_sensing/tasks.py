@@ -17,6 +17,11 @@ from .dto import TaskState, TaskType, EOSDA_REQUESTS_PER_INDEX
 from .monitoring import record_task_metric
 from .notifications import publish_anomaly
 
+# Kota + süre koruması: bir "download" turunda EN FAZLA bu kadar sahne render
+# edilir (her render 1 EOSDA task'ı ≈ 1-2 dk sürer, senkron işlenir). En yeni +
+# düşük bulutlu sahne seçilir. Daha fazla geçmiş görüntü istenirse artırılır.
+IMAGE_SCENES_LIMIT = 1
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -91,20 +96,23 @@ async def run_task(db, task: dict, provider) -> dict:
             await _apply_statistics(db, parcel, provider, series)
             success = status.state == TaskState.COMPLETED and len(series) > 0
         elif ttype in (TaskType.DOWNLOAD.value, "download"):
-            if not field_id:
-                field_id = provider.create_field(geometry or {})
-                api_calls += 1
-            scenes = provider.search_scenes(field_id, (start, end))
-            api_calls += 1
+            # Görüntü akışı da geometry ile DOĞRUDAN çalışır (field zorunlu değil).
+            scenes = provider.search_scenes(field_id or task["parcel_id"], (start, end), geometry=geometry)
+            api_calls += EOSDA_REQUESTS_PER_INDEX      # search = 1 mt_stats çağrısı
             if not scenes:
                 raise RuntimeError("Tarih aralığında görüntü bulunamadı")
-            newest = sorted(scenes, key=lambda s: s.get("date", ""))[-1]
-            img_task = provider.request_image_download(newest["view_id"])
-            api_calls += 1
-            status = _poll(provider, img_task)
-            await _store_image(db, parcel, provider, newest, status)
-            summary = {"view_id": newest["view_id"], "date": newest.get("date")}
-            success = status.state == TaskState.COMPLETED
+            # Kota koruması: en yeni + düşük bulutlu (≤%20) EN FAZLA N sahne render.
+            clear = [s for s in scenes if (s.get("cloud_pct") or 0) <= 20]
+            picks = sorted(clear or scenes, key=lambda s: s.get("date", ""))[-IMAGE_SCENES_LIMIT:]
+            stored = 0
+            for sc in picks:
+                img_task = provider.request_image_download(sc["view_id"], geometry=geometry)
+                api_calls += 1
+                st = _poll(provider, img_task)
+                if await _store_image(db, parcel, provider, sc, st):
+                    stored += 1
+            summary = {"scenes": len(picks), "stored": stored}
+            success = stored > 0
         elif ttype in (TaskType.WEATHER.value, "weather"):
             wd = provider.get_weather(field_id, (start, end))
             api_calls += 1
@@ -189,15 +197,33 @@ async def _apply_statistics(db, parcel: dict, provider, series: List[Dict]) -> N
     await publish_anomaly(db, parcel, anomaly, provider.name)
 
 
-async def _store_image(db, parcel: dict, provider, scene: dict, status) -> None:
-    """Görüntü metadata'sını arşive yazar (storage.py deseni). Hiçbir görüntü
-    fiziksel SİLİNMEZ (is_active=false ile eskitilir — ledger-tarzı)."""
+async def _store_image(db, parcel: dict, provider, scene: dict, status) -> bool:
+    """Render sonucundaki imzalı URL'den PNG'yi indirip yerel diske kaydeder
+    (storage.py `backend/uploads/` deseni), metadata'yı remote_sensing_images'a
+    yazar. Görüntü indirilemezse metadata yine yazılır (stored_name=None) —
+    panel o durumda 'görüntü yok' gösterir. Görüntü SİLİNMEZ (is_active ile
+    eskitilir). Döner: PNG gerçekten kaydedildi mi?"""
+    from storage import UPLOAD_DIR
+    url = getattr(status, "result_url", None)
+    stored_name = None
+    if getattr(status, "state", None) == TaskState.COMPLETED and url:
+        try:
+            data = provider.download_image_bytes(url)
+            if data and len(data) > 100:
+                d = UPLOAD_DIR / "remote_sensing"
+                d.mkdir(parents=True, exist_ok=True)
+                stored_name = f"{uuid.uuid4()}.png"
+                with open(d / stored_name, "wb") as f:
+                    f.write(data)
+        except Exception:
+            stored_name = None
     doc = {
         "id": str(uuid.uuid4()), "parcel_id": parcel.get("id"),
         "provider": provider.name, "capture_date": scene.get("date"),
         "cloud_pct": scene.get("cloud_pct"), "satellite": scene.get("satellite"),
-        "image_type": "rgb", "format": "png",
-        "result_url": getattr(status, "result_url", None),
+        "image_type": "rgb", "format": "png", "view_id": scene.get("view_id"),
+        "stored_name": stored_name,
+        "result_url": url,
         "is_active": True, "created_at": _now(),
     }
     await db.remote_sensing_images.insert_one(dict(doc))
@@ -205,6 +231,7 @@ async def _store_image(db, parcel: dict, provider, scene: dict, status) -> None:
         {"id": parcel.get("id")},
         {"$set": {"remote_sensing.last_image_date": scene.get("date"),
                   "remote_sensing.last_updated": _now()}})
+    return stored_name is not None
 
 
 async def process_pending_tasks(db, provider_factory, max_tasks: int = 25) -> Dict:

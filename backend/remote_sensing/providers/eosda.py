@@ -22,6 +22,7 @@ anahtar Integration Center'dan girilip mock_mode kapatılınca çağıran kod
 DEĞİŞMEDEN gerçek EOSDA'ya geçer.
 """
 import random
+import time
 import uuid
 import zlib
 from datetime import datetime, timedelta, timezone
@@ -69,7 +70,7 @@ class EOSDAProvider(IRemoteSensingProvider):
         return str(resp.json().get("id"))
 
     # --- Görüntü: (1) search --------------------------------------------------
-    def search_scenes(self, field_id: str, date_range: tuple) -> List[Dict]:
+    def search_scenes(self, field_id: str, date_range: tuple, geometry: Optional[dict] = None) -> List[Dict]:
         start, end = date_range
         if self.mock_mode:
             rnd = self._rnd(field_id)
@@ -84,22 +85,54 @@ class EOSDAProvider(IRemoteSensingProvider):
                 })
                 d += timedelta(days=rnd.randint(4, 9))
             return scenes
-        body = {"field_id": field_id,
-                "date": {"from": start.strftime("%Y-%m-%d"), "to": end.strftime("%Y-%m-%d")}}
-        resp = requests.post(self.RENDER_URL + "/search", json=body,
-                             headers=self._headers, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json().get("results", [])
+        # GERÇEK EOSDA: ayrı bir "search" ucu yerine mt_stats sonucunu kullanırız —
+        # her sahne zaten view_id + date + cloud taşır (canlı API ile doğrulandı).
+        task_id = self.request_statistics(field_id, ["ndvi"], (start, end), geometry=geometry)
+        deadline = time.monotonic() + 120
+        status = self.get_task_status(task_id)
+        while status.state in (TaskState.POLLING, TaskState.RUNNING, TaskState.QUEUED) and time.monotonic() < deadline:
+            time.sleep(2)
+            status = self.get_task_status(task_id)
+        scenes: List[Dict] = []
+        for sc in (status.result or []):
+            if isinstance(sc, dict) and sc.get("view_id"):
+                scenes.append({
+                    "view_id": sc.get("view_id"),
+                    "date": sc.get("date"),
+                    "cloud_pct": round(float(sc.get("cloud", 0) or 0)),
+                    "satellite": "Sentinel-2",
+                })
+        return scenes
 
-    # --- Görüntü: (2) download ------------------------------------------------
-    def request_image_download(self, view_id: str, fmt: str = "png") -> str:
+    # --- Görüntü: (2) download (true-color PNG) -------------------------------
+    def request_image_download(self, view_id: str, geometry: Optional[dict] = None, fmt: str = "png") -> str:
         if self.mock_mode:
             return "mock-imgtask-" + uuid.uuid4().hex[:12]
-        body = {"view_id": view_id, "format": fmt}
-        resp = requests.post(self.RENDER_URL + "/download", json=body,
+        # GERÇEK EOSDA görüntü: gdw/api, type="jpeg", doğal renk bantları
+        # (B04,B03,B02). Tamamlanınca poll 303 See Other + `location` (imzalı PNG
+        # URL) döner (canlı API ile doğrulandı). NDVI-renkli (bandmath) ham Float32
+        # GeoTIFF olduğundan tarayıcıda gösterilemez — birincil çıktı true-color.
+        params = {
+            "view_id": view_id,
+            "bm_type": "B04,B03,B02",
+            "px_size": 10,
+            "format": fmt,
+            "reference": "toprax-img",
+            "calibrate": 1,
+        }
+        if geometry:
+            params["geometry"] = geometry
+        resp = requests.post(self.STATISTICS_URL, json={"type": "jpeg", "params": params},
                              headers=self._headers, timeout=self.timeout)
         resp.raise_for_status()
         return str(resp.json().get("task_id"))
+
+    def download_image_bytes(self, url: str) -> bytes:
+        """Render task'ının 303 ile döndürdüğü imzalı URL'den PNG baytlarını
+        indirir (imzalı/geçici URL — ek kimlik doğrulaması gerekmez)."""
+        r = requests.get(url, timeout=self.timeout)
+        r.raise_for_status()
+        return r.content
 
     # --- İstatistik: task creation --------------------------------------------
     def request_statistics(self, field_id: str, indices: List[str], date_range: tuple,
@@ -134,9 +167,28 @@ class EOSDAProvider(IRemoteSensingProvider):
         if self.mock_mode:
             return self._mock_status(task_id)
         resp = requests.get(f"{self.STATISTICS_URL}/{task_id}",
-                            headers=self._headers, timeout=self.timeout)
-        resp.raise_for_status()
-        data = resp.json()
+                            headers=self._headers, timeout=self.timeout,
+                            allow_redirects=False)
+        # GÖRÜNTÜ (render) task'ı TAMAMLANINCA 303 See Other + `location` header'ında
+        # imzalı PNG URL'i döner (canlı API ile doğrulandı). İşlenirken boş gövde
+        # döndürür. İstatistik task'ı ise 200 + JSON döner (aşağıdaki yol).
+        if resp.status_code in (301, 302, 303, 307, 308):
+            loc = resp.headers.get("location") or resp.headers.get("Location")
+            if loc:
+                return TaskStatus(task_id=task_id, state=TaskState.COMPLETED,
+                                  result_url=loc, raw={"location": loc})
+            return TaskStatus(task_id=task_id, state=TaskState.POLLING)
+        if resp.status_code >= 400:
+            return TaskStatus(task_id=task_id, state=TaskState.FAILED,
+                              error=f"EOSDA HTTP {resp.status_code}", raw={"code": resp.status_code})
+        body = resp.content or b""
+        if not body.strip():
+            # Görüntü task'ı henüz işleniyor (boş gövde).
+            return TaskStatus(task_id=task_id, state=TaskState.POLLING)
+        try:
+            data = resp.json()
+        except Exception:
+            return TaskStatus(task_id=task_id, state=TaskState.POLLING, raw={"len": len(body)})
         # GERÇEK EOSDA yanıtı bir "status" alanı DÖNDÜRMEZ (canlı API ile
         # doğrulandı); durum task_type/success/error_message/result üzerinden
         # çıkarılır. "status" alanı beklemek görevleri POLLING'de kilitliyor ve
