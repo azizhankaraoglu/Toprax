@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import api from "@/api";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import {
   Wheat, LayoutDashboard, Users, Map, FileText, Sprout, Droplets,
   Settings2, BarChart3, Truck, Bell, LogOut, Award, ChevronRight, FlaskConical,
@@ -113,6 +114,7 @@ const navGroups = [
 
 export default function Layout() {
   const nav = useNavigate();
+  const location = useLocation();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const [mobileOpen, setMobileOpen] = useState(false);
   // IT-33 — Feature Flags: kapatılan bir özelliğin menüsü GERÇEKTEN gizlenir
@@ -205,7 +207,9 @@ export default function Layout() {
         </div>
       </aside>
 
-      <main className="flex-1 md:ml-64 min-h-screen pt-14 md:pt-0"><Outlet /></main>
+      <main className="flex-1 md:ml-64 min-h-screen pt-14 md:pt-0">
+        <ErrorBoundary resetKey={location.pathname}><Outlet /></ErrorBoundary>
+      </main>
       <AnnouncementPopup />
     </div>
   );

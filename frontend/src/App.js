@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import "@/App.css";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import Login from "@/pages/Login";
 import SetupWizard from "@/pages/SetupWizard";
 import Layout from "@/components/Layout";
@@ -67,6 +68,7 @@ function App() {
   return (
     <div className="App">
       <BrowserRouter>
+       <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/kurulum" element={<SetupWizard />} />
@@ -132,6 +134,7 @@ function App() {
             <Route path="/formlar/:id/doldur" element={<FormDoldur isPublic={false} />} />
           </Route>
         </Routes>
+       </ErrorBoundary>
       </BrowserRouter>
     </div>
   );
