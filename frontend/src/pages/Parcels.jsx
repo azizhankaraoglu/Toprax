@@ -8,8 +8,9 @@ import { QuickAddPanel } from "@/components/QuickAdd";
 import { mapTkgmProperties } from "@/lib/tkgmMapping";
 import FarmerSelect from "@/components/FarmerSelect";
 import BulkRemoteSensing from "@/components/BulkRemoteSensing";
+import ParcelsListPanel from "@/components/ParcelsListPanel";
 import {
-  PenLine, Scissors, Combine, Crosshair, Upload, X, Check, Layers, Plus, Satellite
+  PenLine, Scissors, Combine, Crosshair, Upload, X, Check, Layers, Plus, Satellite, List
 } from "lucide-react";
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
@@ -47,6 +48,7 @@ export default function Parcels() {
   const [tool, setTool] = useState(null);
   const [toolMsg, setToolMsg] = useState("");
   const [showBulkRS, setShowBulkRS] = useState(false);   // Toplu Uzaktan Algılama paneli
+  const [showList, setShowList] = useState(false);       // Liste & Filtre & Toplu Silme paneli (#3)
 
   // ÇİZ
   const [drawnGeoJSON, setDrawnGeoJSON] = useState(null);
@@ -353,18 +355,27 @@ export default function Parcels() {
         </div>
       </header>
 
-      {/* TOPLU UZAKTAN ALGILAMA — elastik filtre + parsel seçimi + manuel analiz */}
-      <div className="mb-3">
+      {/* LİSTE & FİLTRE & TOPLU SİLME (#3) + TOPLU UZAKTAN ALGILAMA */}
+      <div className="mb-3 flex flex-wrap gap-2">
+        <button onClick={() => setShowList((s) => !s)}
+          className={`btn ${showList ? "btn-primary" : "btn-ghost"} text-xs`} data-testid="toggle-list-panel">
+          <List size={14} /> Liste & Filtre (Toplu Seç/Sil)
+        </button>
         <button onClick={() => setShowBulkRS((s) => !s)}
           className={`btn ${showBulkRS ? "btn-primary" : "btn-ghost"} text-xs`} data-testid="toggle-bulk-rs">
           <Satellite size={14} /> Uzaktan Algılama (Toplu Sorgu & Analiz)
         </button>
-        {showBulkRS && (
-          <div className="card p-5 mt-3">
-            <BulkRemoteSensing />
-          </div>
-        )}
       </div>
+      {showList && (
+        <div className="card p-5 mb-3">
+          <ParcelsListPanel />
+        </div>
+      )}
+      {showBulkRS && (
+        <div className="card p-5 mb-3">
+          <BulkRemoteSensing />
+        </div>
+      )}
 
       {/* HARİTA ARAÇLARI TOOLBAR */}
       <div className="flex flex-wrap gap-2 mb-3">

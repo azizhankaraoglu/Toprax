@@ -1246,6 +1246,40 @@ async def bulk_update_parcels(body: ParcelBulkUpdateRequest, request: Request,
     return {"updated_count": updated_count, "requested_count": len(body.parcel_ids)}
 
 
+class ParcelBulkDeleteRequest(BaseModel):
+    parcel_ids: List[str]
+
+
+@api_router.post("/parcels/bulk-delete")
+async def bulk_delete_parcels(body: ParcelBulkDeleteRequest, request: Request,
+                              user=Depends(require_min_role("fabrika_muduru"))):
+    """
+    Çoklu parsel toplu SOFT-delete (#3). Bağlı AKTİF sözleşmesi olan parseller
+    silinmez — atlanıp raporlanır (tekil DELETE'in 409 guard'ı ile AYNI kural).
+    Her gerçekten silinen parsel için ayrı log_audit (convention #6).
+    """
+    if not body.parcel_ids:
+        raise HTTPException(400, "Parsel seçilmedi")
+    deleted, skipped = [], []
+    for pid in body.parcel_ids:
+        old = await db.parcels.find_one({"id": pid}, {"_id": 0})
+        if not old:
+            continue
+        linked = await db.contracts.count_documents({"parcel_id": pid, "is_active": {"$ne": False}})
+        if linked > 0:
+            skipped.append({"id": pid, "name": old.get("name") or old.get("parcel_code"),
+                            "reason": f"{linked} bağlı sözleşme"})
+            continue
+        await db.parcels.update_one({"id": pid}, {"$set": {
+            "is_active": False,
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
+            "deleted_by": user.get("full_name") or user.get("email"),
+        }})
+        await log_audit(db, user, action="soft_delete", entity="parcel", entity_id=pid, old_value=old, request=request)
+        deleted.append(pid)
+    return {"deleted_count": len(deleted), "skipped": skipped, "requested_count": len(body.parcel_ids)}
+
+
 @api_router.put("/parcels/{parcel_id}")
 async def update_parcel(parcel_id: str, body: ParcelUpdate, request: Request,
                          user=Depends(require_permission("parcels:edit"))):
