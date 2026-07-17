@@ -54,15 +54,47 @@ class IRemoteSensingProvider(ABC):
 
     # --- İstatistik (2-adımlı task+polling) -----------------------------------
     @abstractmethod
-    def request_statistics(self, field_id: str, indices: List[str], date_range: tuple) -> str:
-        """Task Creation → task_id. Bir istekte 1 parsel, 365 güne kadar,
-        ~5 indeks, ~3 uydu."""
+    def request_statistics(self, field_id: str, indices: List[str], date_range: tuple,
+                           geometry: Optional[dict] = None) -> str:
+        """Task Creation → task_id. Gerçek EOSDA mt_stats geometry'yi DOĞRUDAN
+        kabul eder (field zorunlu değil); mock modda field_id token'ı kullanılır."""
         raise NotImplementedError
 
     @abstractmethod
     def get_task_status(self, task_id: str) -> TaskStatus:
         """(3) Task Status polling — tüm asenkron task tiplerinin ortak durumu."""
         raise NotImplementedError
+
+    def parse_statistics(self, result) -> List[Dict]:
+        """Sağlayıcı istatistik sonucunu ortak seriye çevirir:
+        `[{date, ndvi, ndre?, cloud_pct}]`. İki şekli de kabul eder:
+          - Mock:  `{"series": [{date, ndvi, ...}]}`
+          - Gerçek EOSDA: `[{date, cloud, indexes: {NDVI: {average, median, ...}}}, ...]`
+        (bkz. https://doc.eos.com/docs/statistics/ — mt_stats yanıt şeması).
+        """
+        if not result:
+            return []
+        if isinstance(result, dict):
+            return result.get("series", [])
+        out: List[Dict] = []
+        for sc in result:
+            if not isinstance(sc, dict):
+                continue
+            idx = sc.get("indexes") or {}
+            ndvi_stats = idx.get("NDVI") or idx.get("ndvi") or {}
+            ndre_stats = idx.get("NDRE") or idx.get("ndre") or {}
+            ndvi = ndvi_stats.get("average", ndvi_stats.get("median"))
+            if ndvi is None:
+                continue
+            ndre = ndre_stats.get("average")
+            out.append({
+                "date": sc.get("date"),
+                "ndvi": round(float(ndvi), 3),
+                "ndre": round(float(ndre), 3) if ndre is not None else None,
+                "cloud_pct": round(float(sc.get("cloud", 0) or 0)),
+            })
+        out.sort(key=lambda p: p.get("date") or "")
+        return out
 
     # --- Tasking (yüksek çözünürlük) ------------------------------------------
     def request_tasking(self, field_id: Optional[str], priority: str = "standard",

@@ -23,7 +23,7 @@ export default function BulkRemoteSensing({ title = "Toplu Uzaktan Algılama" })
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState(() => new Set());
   const [indices, setIndices] = useState({ ndvi: true, ndre: false });
-  const [withImage, setWithImage] = useState(true);
+  const [withImage, setWithImage] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
 

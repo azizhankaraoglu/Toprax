@@ -102,23 +102,29 @@ class EOSDAProvider(IRemoteSensingProvider):
         return str(resp.json().get("task_id"))
 
     # --- İstatistik: task creation --------------------------------------------
-    def request_statistics(self, field_id: str, indices: List[str], date_range: tuple) -> str:
+    def request_statistics(self, field_id: str, indices: List[str], date_range: tuple,
+                           geometry: Optional[dict] = None) -> str:
         start, end = date_range
         if self.mock_mode:
             # Sonucu task_id'ye göm (get_task_status deterministik üretsin).
             token = f"{field_id}|{','.join(indices)}|{start:%Y%m%d}|{end:%Y%m%d}"
             return "mock-stattask-" + str(zlib.crc32(token.encode()) % 10_000_000)
-        body = {
-            "type": "mt_stats",
-            "params": {
-                "bm_type": indices,
-                "date_start": start.strftime("%Y-%m-%d"),
-                "date_end": end.strftime("%Y-%m-%d"),
-                "geometry": {"field_id": field_id},
-                "sensors": ["sentinel2", "landsat8"],
-            },
+        # GERÇEK EOSDA mt_stats (canlı API ile doğrulanmış şema,
+        # bkz. https://doc.eos.com/docs/statistics/):
+        #  - bm_type: BÜYÜK HARF indeks adları (en fazla 3), dizi
+        #  - geometry: DOĞRUDAN GeoJSON Polygon (field_id DEĞİL)
+        #  - reference: istek referansı
+        params = {
+            "bm_type": [i.upper() for i in (indices or ["ndvi"])][:3],
+            "date_start": start.strftime("%Y-%m-%d"),
+            "date_end": end.strftime("%Y-%m-%d"),
+            "reference": str(field_id or "toprax"),
+            "sensors": ["sentinel2"],
+            "max_cloud_cover_in_aoi": 80,
         }
-        resp = requests.post(self.STATISTICS_URL, json=body,
+        if geometry:
+            params["geometry"] = geometry
+        resp = requests.post(self.STATISTICS_URL, json={"type": "mt_stats", "params": params},
                              headers=self._headers, timeout=self.timeout)
         resp.raise_for_status()
         return str(resp.json().get("task_id"))
@@ -208,12 +214,12 @@ class EOSDAProvider(IRemoteSensingProvider):
     def get_ndvi_time_series(self, parcel_id: str, geometry: Optional[dict] = None) -> List[Dict]:
         """satellite_provider.SatelliteProvider ile AYNI imza — Time Slider/
         Time Series bu metod üzerinden gerçek EOSDA verisine geçebilir."""
-        field_id = self.create_field(geometry) if geometry else (parcel_id or "seed")
         end = datetime.now(timezone.utc).date()
         start = end - timedelta(days=150)
-        task_id = self.request_statistics(field_id, ["ndvi"], (start, end))
+        # İstatistik geometry ile doğrudan çalışır (gereksiz field çağrısı yok).
+        task_id = self.request_statistics(parcel_id or "seed", ["ndvi"], (start, end), geometry=geometry)
         status = self.get_task_status(task_id)
-        if status.state == TaskState.COMPLETED and status.result:
+        if status.state == TaskState.COMPLETED:
             return [{"date": p["date"], "ndvi": p["ndvi"], "cloud_pct": p.get("cloud_pct", 0)}
-                    for p in status.result.get("series", [])]
+                    for p in self.parse_statistics(status.result)]
         return []

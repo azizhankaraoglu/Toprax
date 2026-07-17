@@ -73,23 +73,27 @@ async def run_task(db, task: dict, provider) -> dict:
     error = None
     try:
         rs = parcel.get("remote_sensing") or {}
-        field_id = rs.get("eosda_field_id") or provider.create_field(geometry or {})
-        api_calls += 1
+        field_id = rs.get("eosda_field_id")
 
         end = datetime.now(timezone.utc).date()
         start = end - timedelta(days=task.get("date_range_days", 365))
         ttype = task["task_type"]
 
         if ttype in (TaskType.STATISTICS.value, "statistics"):
+            # İstatistik geometry ile DOĞRUDAN çalışır — gerçek EOSDA mt_stats
+            # field zorunlu tutmaz, gereksiz avca/fields çağrısı yapılmaz.
             indices = task.get("indices") or ["ndvi"]
-            task_id = provider.request_statistics(field_id, indices, (start, end))
+            task_id = provider.request_statistics(field_id or task["parcel_id"], indices, (start, end), geometry=geometry)
             api_calls += len(indices) * EOSDA_REQUESTS_PER_INDEX
             status = _poll(provider, task_id)
-            series = (status.result or {}).get("series", [])
+            series = provider.parse_statistics(status.result)
             summary = {"points": len(series), "indices": indices}
             await _apply_statistics(db, parcel, provider, series)
-            success = status.state == TaskState.COMPLETED
+            success = status.state == TaskState.COMPLETED and len(series) > 0
         elif ttype in (TaskType.DOWNLOAD.value, "download"):
+            if not field_id:
+                field_id = provider.create_field(geometry or {})
+                api_calls += 1
             scenes = provider.search_scenes(field_id, (start, end))
             api_calls += 1
             if not scenes:
@@ -115,7 +119,7 @@ async def run_task(db, task: dict, provider) -> dict:
             raise ValueError(f"Bilinmeyen task_type: {ttype}")
 
         # field_id'yi ilk oluşturduysak sakla (yeniden kullanılabilir).
-        if geometry and not rs.get("eosda_field_id"):
+        if field_id and geometry and not rs.get("eosda_field_id"):
             await db.parcels.update_one(
                 {"id": parcel.get("id")},
                 {"$set": {"remote_sensing.eosda_field_id": field_id,

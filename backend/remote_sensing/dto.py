@@ -57,7 +57,10 @@ class TaskStatus(BaseModel):
     state: TaskState
     progress_pct: Optional[int] = None
     result_url: Optional[str] = None
-    result: Optional[Dict[str, Any]] = None
+    # Mock modda dict ({"series": [...]}) döner; GERÇEK EOSDA mt_stats bir LIST
+    # ([{date, indexes:{NDVI:{average,...}}}, ...]) döndürdüğünden tip Any olmalı
+    # (parse_statistics her iki şekli de çözer).
+    result: Optional[Any] = None
     error: Optional[str] = None
     raw: Optional[Dict[str, Any]] = None
 

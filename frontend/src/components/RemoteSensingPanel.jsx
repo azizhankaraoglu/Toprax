@@ -81,7 +81,7 @@ export default function RemoteSensingPanel({ parcelId }) {
     try {
       const { data } = await api.post("/remote-sensing/manual-sync", {
         parcel_id: parcelId,
-        task_types: ["statistics", "download"],
+        task_types: ["statistics"],   // NDVI istatistiği (gerçek EOSDA). Görüntü rasterı ayrı bir akış.
         indices: ["ndvi"],
       });
       setMsg(`Analiz çalıştırıldı: ${data.queued ?? 0} görev kuyruğa alındı, ${data.processed ?? 0} işlendi.`);
