@@ -62,10 +62,11 @@ export function AyarlarEntegrasyon() {
     setSaving((s) => ({ ...s, [itype]: true }));
     try {
       const f = forms[itype];
-      // mock_mode'u GÖNDERME — backend, kimlik bilgisi girildiyse otomatik
-      // olarak gerçek moda geçirir ("API key girildiği anda demodan çık").
+      // mock_mode: kullanıcı "Demo (mock) verisiyle çalıştır" kutusunu işaretlediyse
+      // o değer gönderilir (kota harcamadan demo). Hiç dokunulmadıysa config'te
+      // olmaz → backend kimlik bilgisi varsa otomatik gerçek moda geçirir
+      // ("API key girildiği anda demodan çık").
       const config = { ...f.config };
-      delete config.mock_mode;
       await api.put(`/integrations/${itype}`, { provider: f.provider, config, enabled: true });
       setSaved((s) => ({ ...s, [itype]: true }));
       setTimeout(() => setSaved((s) => ({ ...s, [itype]: false })), 2500);
@@ -322,6 +323,11 @@ export function AyarlarEntegrasyon() {
               API key girip <b>Kaydet</b>'e bastığınızda entegrasyon otomatik olarak
               demo modundan çıkıp gerçek moda geçer.
             </p>
+            <label className="flex items-center gap-2 text-xs text-[var(--text-dim)] mt-1">
+              <input type="checkbox" checked={forms.planet_labs?.config?.mock_mode ?? false}
+                     onChange={(e) => setField("planet_labs", "mock_mode", e.target.checked)} />
+              Demo (mock) verisiyle çalıştır — gerçek API çağrısı yapmaz, kota harcamaz (sunum/test için)
+            </label>
           </div>
           <div className="flex gap-2 mt-3">
             <button onClick={() => save("planet_labs")} disabled={saving.planet_labs} className="btn btn-ghost">
@@ -356,6 +362,11 @@ export function AyarlarEntegrasyon() {
               Client ID + Client Secret girip <b>Kaydet</b>'e bastığınızda entegrasyon
               otomatik olarak demo modundan çıkıp gerçek moda geçer.
             </p>
+            <label className="flex items-center gap-2 text-xs text-[var(--text-dim)] mt-1">
+              <input type="checkbox" checked={forms.sentinel_hub?.config?.mock_mode ?? false}
+                     onChange={(e) => setField("sentinel_hub", "mock_mode", e.target.checked)} />
+              Demo (mock) verisiyle çalıştır — gerçek API çağrısı yapmaz, kota harcamaz (sunum/test için)
+            </label>
           </div>
           <div className="flex gap-2 mt-3">
             <button onClick={() => save("sentinel_hub")} disabled={saving.sentinel_hub} className="btn btn-ghost">
@@ -387,6 +398,11 @@ export function AyarlarEntegrasyon() {
               MAP_KEY girip <b>Kaydet</b>'e bastığınızda entegrasyon otomatik olarak
               demo modundan çıkıp gerçek moda geçer.
             </p>
+            <label className="flex items-center gap-2 text-xs text-[var(--text-dim)] mt-1">
+              <input type="checkbox" checked={forms.nasa_firms?.config?.mock_mode ?? false}
+                     onChange={(e) => setField("nasa_firms", "mock_mode", e.target.checked)} />
+              Demo (mock) verisiyle çalıştır — gerçek API çağrısı yapmaz, kota harcamaz (sunum/test için)
+            </label>
           </div>
           <div className="flex gap-2 mt-3">
             <button onClick={() => save("nasa_firms")} disabled={saving.nasa_firms} className="btn btn-ghost">
@@ -421,6 +437,11 @@ export function AyarlarEntegrasyon() {
               Client ID + Client Secret girip <b>Kaydet</b>'e bastığınızda entegrasyon
               otomatik olarak demo modundan çıkıp gerçek moda geçer.
             </p>
+            <label className="flex items-center gap-2 text-xs text-[var(--text-dim)] mt-1">
+              <input type="checkbox" checked={forms.up42?.config?.mock_mode ?? false}
+                     onChange={(e) => setField("up42", "mock_mode", e.target.checked)} />
+              Demo (mock) verisiyle çalıştır — gerçek API çağrısı yapmaz, kota harcamaz (sunum/test için)
+            </label>
           </div>
           <div className="flex gap-2 mt-3">
             <button onClick={() => save("up42")} disabled={saving.up42} className="btn btn-ghost">
@@ -452,6 +473,11 @@ export function AyarlarEntegrasyon() {
               API key girip <b>Kaydet</b>'e bastığınızda entegrasyon otomatik olarak demo modundan çıkıp gerçek moda geçer.
               Anahtarı <b>eos.com</b> hesabınızdan alırsınız (Planet/Gemini anahtarları BURAYA GİRİLMEZ).
             </p>
+            <label className="flex items-center gap-2 text-xs text-[var(--text-dim)] mt-1">
+              <input type="checkbox" checked={forms.eosda?.config?.mock_mode ?? false}
+                     onChange={(e) => setField("eosda", "mock_mode", e.target.checked)} data-testid="eosda-mock-toggle"/>
+              Demo (mock) verisiyle çalıştır — gerçek API çağrısı yapmaz, kota harcamaz (sunum/test için)
+            </label>
           </div>
           <div className="flex gap-2 mt-3">
             <button onClick={() => save("eosda")} disabled={saving.eosda} className="btn btn-ghost">

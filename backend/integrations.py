@@ -377,10 +377,12 @@ def _probe_eosda(cfg: dict, timeout: int) -> Tuple[bool, str]:
             headers={"x-api-key": api_key},
             timeout=timeout,
         )
-        # 200/400/422 = anahtar tanındı (endpoint parametre bekliyor);
-        # 401/403 = anahtar geçersiz.
-        ok = resp.status_code not in (401, 403)
-        return ok, f"EOSDA x-api-key doğrulaması: HTTP {resp.status_code}"
+        # Bu uç POST (task oluşturma) bekler — GET'e 500/400 dönmesi NORMALDİR ve
+        # kimlik doğrulamasının GEÇTİĞİ anlamına gelir. Sadece 401/403 geçersiz
+        # anahtar demektir (kotayı boşa harcamamak için gerçek task oluşturulmaz).
+        if resp.status_code in (401, 403):
+            return False, f"EOSDA anahtarı geçersiz veya yetkisiz (HTTP {resp.status_code})."
+        return True, "EOSDA bağlantısı doğrulandı — anahtar geçerli."
     except Exception as e:
         return False, f"Bağlantı hatası: {e}"
 
