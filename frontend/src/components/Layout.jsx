@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
 import AnnouncementPopup from "@/components/AnnouncementPopup";
+import { getTheme, setTheme } from "@/lib/theme";
+import { Sun, Moon } from "lucide-react";
 
 // Sadece bu roller Ayarlar/Audit Log'u görebilir (backend'deki
 // ADMIN_TIER_ROLES ile tutarlı — config.py).
@@ -245,13 +247,31 @@ export default function Layout() {
 
         <div className="border-t border-[var(--border)] p-3">
           <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] flex items-center justify-center text-white font-bold text-sm">
-              {(user.full_name || "?").charAt(0)}
+            {/* SON HAL — ada tıklayınca Profil sayfası açılır */}
+            <div
+              className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer rounded-lg -mx-1 px-1 py-0.5 hover:bg-[var(--surface)] transition-colors"
+              role="button" tabIndex={0} title="Profilim"
+              data-testid="profile-link"
+              onClick={() => { nav("/profil"); setMobileOpen(false); }}
+              onKeyDown={(e) => { if (e.key === "Enter") nav("/profil"); }}
+            >
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] flex items-center justify-center text-white font-bold text-sm shrink-0">
+                {(user.full_name || "?").charAt(0)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm truncate">{user.full_name || "Kullanıcı"}</div>
+                <div className="text-[10px] text-[var(--text-dim)] uppercase tracking-wider">{user.role || ""}</div>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm truncate">{user.full_name || "Kullanıcı"}</div>
-              <div className="text-[10px] text-[var(--text-dim)] uppercase tracking-wider">{user.role || ""}</div>
-            </div>
+            {/* SON HAL — tema düğmesi (aydınlık varsayılan, tercih kalıcı) */}
+            <button
+              data-testid="theme-toggle"
+              onClick={() => setTheme(getTheme() === "dark" ? "light" : "dark")}
+              className="text-[var(--text-dim)] hover:text-[var(--primary)]"
+              title={getTheme() === "dark" ? "Aydınlık temaya geç" : "Koyu temaya geç"}
+            >
+              {getTheme() === "dark" ? <Sun size={16}/> : <Moon size={16}/>}
+            </button>
             <WorkspaceDrawer />
             <button data-testid="logout-button" onClick={logout} className="text-[var(--text-dim)] hover:text-[var(--danger)]"><LogOut size={16}/></button>
           </div>

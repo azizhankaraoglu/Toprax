@@ -257,6 +257,15 @@ def register_karne_engine_routes(api_router, db, current_user, require_permissio
                         entity_id="default", old_value=old, new_value=new, request=request)
         return new
 
+    @api_router.get("/karne/{farmer_id}/history")
+    async def karne_history(farmer_id: str,
+                            user=Depends(require_permission("farmers:view"))):
+        """SON HAL — karne trendi: her recompute'ta düşülen anlık görüntüler.
+        KarneDetail'deki 'skor nasıl değişmiş' grafiğinin veri kaynağı."""
+        return await db.karne_history.find(
+            {"farmer_id": farmer_id}, {"_id": 0}
+        ).sort([("computed_at", 1)]).to_list(200)
+
     @api_router.get("/karne/{farmer_id}/breakdown")
     async def karne_breakdown(farmer_id: str,
                               user=Depends(require_permission("farmers:view"))):
@@ -291,6 +300,14 @@ def register_karne_engine_routes(api_router, db, current_user, require_permissio
             if "karne_points_seed" not in farmer and farmer.get("karne_points") is not None:
                 sets["karne_points_seed"] = farmer["karne_points"]
             await db.farmers.update_one({"id": farmer["id"]}, {"$set": sets})
+            # SON HAL — trend için anlık görüntü (bileşen özetleriyle birlikte)
+            await db.karne_history.insert_one({
+                "id": str(uuid.uuid4()), "farmer_id": farmer["id"],
+                "points": result["points"], "letter": result["letter"],
+                "computed_at": result["computed_at"],
+                "components": [{"key": c["key"], "score": c["score"],
+                                "has_data": c["has_data"]} for c in result["components"]],
+            })
             letters[result["letter"]] += 1
             updated += 1
         await log_audit(db, user, action="recompute", entity="karne",

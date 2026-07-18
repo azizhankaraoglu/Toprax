@@ -38,7 +38,73 @@ class UserStatusUpdate(BaseModel):
     active: bool
 
 
+# SON HAL — Profil sayfası (kullanıcının KENDİ hesabı; izin gerektirmez,
+# sadece current_user — support.py'nin /portal/* sahiplik deseniyle aynı ruh)
+class MyProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class MyPasswordUpdate(BaseModel):
+    current_password: str
+    new_password: str
+
+
 def register_user_routes(api_router, db, current_user, require_permission, hash_password, log_audit):
+
+    # =================================================================
+    # SON HAL — PROFİL (kendi hesabım). /users/* yönetici uçlarından AYRI:
+    # izin GEREKTİRMEZ, kullanıcı SADECE kendi kaydını görür/değiştirir.
+    # E-posta ve rol buradan DEĞİŞTİRİLEMEZ (e-posta login anahtarı +
+    # tenant-unique index; rol değişimi yönetici işi — /users/{id}/role).
+    # =================================================================
+    @api_router.get("/me/profile")
+    async def get_my_profile(user=Depends(current_user)):
+        doc = await db.users.find_one(
+            {"id": user["id"]}, {"_id": 0, "password": 0, "totp_secret": 0})
+        if not doc:
+            raise HTTPException(404, "Kullanıcı bulunamadı")
+        return doc
+
+    @api_router.put("/me/profile")
+    async def update_my_profile(body: MyProfileUpdate, request: Request,
+                                user=Depends(current_user)):
+        old = await db.users.find_one(
+            {"id": user["id"]}, {"_id": 0, "password": 0, "totp_secret": 0})
+        if not old:
+            raise HTTPException(404, "Kullanıcı bulunamadı")
+        updates = {}
+        if body.full_name is not None and body.full_name.strip():
+            updates["full_name"] = body.full_name.strip()
+        if body.phone is not None:
+            updates["phone"] = body.phone.strip() or None
+        if updates:
+            await db.users.update_one({"id": user["id"]}, {"$set": updates})
+        new = await db.users.find_one(
+            {"id": user["id"]}, {"_id": 0, "password": 0, "totp_secret": 0})
+        await log_audit(db, user, action="update_profile", entity="user",
+                        entity_id=user["id"], old_value=old, new_value=new, request=request)
+        return new
+
+    @api_router.put("/me/password")
+    async def update_my_password(body: MyPasswordUpdate, request: Request,
+                                 user=Depends(current_user)):
+        from security import verify_password
+        doc = await db.users.find_one({"id": user["id"]})
+        if not doc:
+            raise HTTPException(404, "Kullanıcı bulunamadı")
+        if not verify_password(body.current_password, doc.get("password", "")):
+            # Audit'e başarısız deneme de düşülür (yanlış mevcut şifre)
+            await log_audit(db, user, action="password_change_failed", entity="user",
+                            entity_id=user["id"], request=request)
+            raise HTTPException(400, "Mevcut şifre hatalı")
+        if len(body.new_password) < 8:
+            raise HTTPException(400, "Yeni şifre en az 8 karakter olmalı")
+        await db.users.update_one(
+            {"id": user["id"]}, {"$set": {"password": hash_password(body.new_password)}})
+        await log_audit(db, user, action="password_changed", entity="user",
+                        entity_id=user["id"], request=request)
+        return {"status": "updated"}
 
     @api_router.get("/users")
     async def list_users(user=Depends(require_permission("settings:users_view"))):

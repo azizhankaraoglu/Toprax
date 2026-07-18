@@ -16,7 +16,7 @@ export default function Breadcrumb({ items }) {
           {item.to ? (
             <Link to={item.to} className="hover:text-[var(--primary)]">{item.label}</Link>
           ) : (
-            <span className="text-white">{item.label}</span>
+            <span className="text-[var(--text)]">{item.label}</span>
           )}
         </span>
       ))}

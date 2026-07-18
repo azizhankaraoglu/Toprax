@@ -29,6 +29,7 @@ import { QuickAddPanel } from "@/components/QuickAdd";
 import { Zap, History, MessageCircle } from "lucide-react";
 import VisitHistory from "@/components/VisitHistory";
 import CommunicationTab from "@/components/CommunicationTab";
+import { getBasemapUrl } from "@/lib/theme";
 
 // Sayı formatla (Türkçe ayraçlarla)
 const fmt = (n) => new Intl.NumberFormat("tr-TR").format(n);
@@ -430,7 +431,7 @@ export default function FarmerDetail() {
             <div className="card overflow-hidden lg:col-span-2" style={{ height: 480 }}>
               {parcels.length > 0 && parcels[0].geometry ? (
                 <MapContainer center={[parcels[0].geometry.coordinates[0][0][1], parcels[0].geometry.coordinates[0][0][0]]} zoom={9} style={{ height: "100%", width: "100%" }}>
-                  <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; OpenStreetMap"/>
+                  <TileLayer url={getBasemapUrl()} attribution="&copy; OpenStreetMap"/>
                   {parcels.map((p) => p.geometry && (
                     <Polygon
                       key={p.id}

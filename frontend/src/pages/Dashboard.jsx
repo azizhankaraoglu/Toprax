@@ -208,10 +208,11 @@ export default function Dashboard() {
         <KPI icon={Plane} label="Drone Görevi" value={fmt(k.drone_missions_total)} accent="bg-info/10 text-info" to="/operasyon" />
       </div>
 
-      {/* #2 — Ekili / Söküm durumu (uydu + manuel) */}
+      {/* #2 — Ekili / Söküm durumu (uydu + manuel). SON HAL: kartlar artık
+          Parseller'in yeni "Ekili mi" lookup filtresine önceden-filtreli gider. */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <KPI icon={Wheat} label="Ekili Parsel" value={fmt(k.ekili_parcels ?? 0)} accent="bg-success/10 text-success" to="/parseller" />
-        <KPI icon={MapIcon} label="Ekili Değil" value={fmt(k.ekili_degil_parcels ?? 0)} to="/parseller" />
+        <KPI icon={Wheat} label="Ekili Parsel" value={fmt(k.ekili_parcels ?? 0)} accent="bg-success/10 text-success" to="/parseller?ekili=evet" />
+        <KPI icon={MapIcon} label="Ekili Değil" value={fmt(k.ekili_degil_parcels ?? 0)} to="/parseller?ekili=hayir" />
         <KPI icon={TrendingUp} label="Sökülen Parsel" value={fmt(k.sokulen_parcels ?? 0)} accent="bg-warning/10 text-warning" to="/parseller" />
         <KPI icon={Wheat} label="Sökülen Alan" value={fmt(k.sokulen_alan_dekar ?? 0)} suffix="dekar" accent="bg-warning/10 text-warning" />
         <KPI icon={Target} label="Kalan (Sökülecek) Alan" value={fmt(k.kalan_alan_dekar ?? 0)} suffix="dekar" accent="bg-info/10 text-info" />

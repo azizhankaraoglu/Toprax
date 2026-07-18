@@ -295,26 +295,78 @@ export function Karne() {
 }
 
 export function Bildirimler() {
+  // SON HAL — sayfa TÜM bildirimleri limitsiz basıyordu ("ekrana sığmıyor"):
+  // artık 30'ar gösterir ("Daha fazla" ile açılır), okunmamış filtresi ve
+  // tek tık / toplu okundu işaretleme eklendi.
   const notifsQ = useFetch("/notifications", { initialData: [] });
   const notifs = notifsQ.data;
+  const [shown, setShown] = useState(30);
+  const [onlyUnread, setOnlyUnread] = useState(false);
   const chBadge = { sms: "badge-b", whatsapp: "badge-a", push: "badge-c", in_app: "badge-neutral" };
+
+  const filtered = onlyUnread ? notifs.filter((n) => n.status !== "okundu") : notifs;
+  const visible = filtered.slice(0, shown);
+  const unreadCount = notifs.filter((n) => n.status !== "okundu").length;
+
+  async function markRead(n) {
+    if (n.status === "okundu") return;
+    await api.put(`/notifications/${n.id}/read`);
+    notifsQ.reload();
+  }
+  async function markAllRead() {
+    await api.post("/notifications/mark-all-read");
+    notifsQ.reload();
+  }
+
   return (
-    <div className="p-8" data-testid="bildirimler-page">
+    <div className="p-8 max-w-[1000px]" data-testid="bildirimler-page">
       <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M11 · MODÜL</div>
-      <h1 className="font-display text-4xl mb-6">Bildirim Merkezi</h1>
+      <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
+        <h1 className="font-display text-4xl">Bildirim Merkezi</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setOnlyUnread(!onlyUnread); setShown(30); }}
+                  className={`btn ${onlyUnread ? "btn-primary" : "btn-ghost"} text-xs`}
+                  data-testid="notif-unread-filter">
+            Okunmamışlar ({unreadCount})
+          </button>
+          {unreadCount > 0 && (
+            <button onClick={markAllRead} className="btn btn-ghost text-xs" data-testid="notif-mark-all">
+              Tümünü okundu işaretle
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="card overflow-hidden">
-        {notifs.map((n) => (
-          <div key={n.id} className="p-4 border-b border-[var(--border)] flex items-start gap-4">
+        {visible.length === 0 && (
+          <div className="p-6 text-center text-[var(--text-dim)] text-sm">
+            {onlyUnread ? "Okunmamış bildirim yok." : "Bildirim yok."}
+          </div>
+        )}
+        {visible.map((n) => (
+          <div key={n.id}
+               className={`p-4 border-b border-[var(--border)] flex items-start gap-4 ${n.status !== "okundu" ? "bg-[var(--primary)]/5 cursor-pointer hover:bg-[var(--primary)]/10" : ""}`}
+               onClick={() => markRead(n)}
+               title={n.status !== "okundu" ? "Okundu işaretlemek için tıklayın" : undefined}>
             <span className={`badge ${chBadge[n.channel]||"badge-neutral"}`}>{n.channel}</span>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="text-sm font-medium">{n.title}</div>
-              <div className="text-xs text-[var(--text-dim)] mt-0.5">{n.message}</div>
+              <div className="text-xs text-[var(--text-dim)] mt-0.5 break-words">{n.message}</div>
               <div className="text-[10px] text-[var(--text-dim)] mt-1">{new Date(n.created_at).toLocaleString("tr-TR")}</div>
             </div>
-            <span className={`badge ${n.status==="okundu"?"badge-a":"badge-c"}`}>{n.status}</span>
+            <span className={`badge ${n.status==="okundu"?"badge-a":"badge-c"} shrink-0`}>{n.status}</span>
           </div>
         ))}
       </div>
+
+      {filtered.length > shown && (
+        <div className="mt-3 flex justify-center">
+          <button onClick={() => setShown((s) => s + 30)} className="btn btn-ghost text-xs"
+                  data-testid="notif-load-more">
+            Daha fazla göster ({filtered.length - shown} kaldı)
+          </button>
+        </div>
+      )}
     </div>
   );
 }

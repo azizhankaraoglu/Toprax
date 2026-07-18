@@ -3,6 +3,7 @@ import api from "@/api";
 import { MapContainer, TileLayer, Polygon, Polyline, CircleMarker } from "react-leaflet";
 import { Upload, Check, X, Layers } from "lucide-react";
 import { mapTkgmProperties, TKGM_FIELD_LABELS } from "@/lib/tkgmMapping";
+import { getBasemapUrl } from "@/lib/theme";
 
 /**
  * IT-13.5 — Geo Dosya İçe Aktarma. GeoJSON/KML/DXF/SHP(.zip) dosyası
@@ -145,7 +146,7 @@ export default function GeoFileImport({ onConfirm }) {
           {selectedFeature && (
             <div className="card overflow-hidden" style={{ height: 300 }}>
               <MapContainer center={centerOf(selectedFeature.geometry)} zoom={15} style={{ height: "100%", width: "100%" }}>
-                <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; OpenStreetMap" />
+                <TileLayer url={getBasemapUrl()} attribution="&copy; OpenStreetMap" />
                 {selectedFeature.geometry.type === "Polygon" && (
                   <Polygon positions={selectedFeature.geometry.coordinates[0].map(([lng, lat]) => [lat, lng])} pathOptions={{ color: "#FF8C00" }} />
                 )}
@@ -164,7 +165,7 @@ export default function GeoFileImport({ onConfirm }) {
               <div className="text-[var(--primary)]">TKGM alanları algılandı:</div>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-[var(--text-dim)]">
                 {Object.entries(detectedTkgmFields).map(([k, v]) => (
-                  <span key={k}><strong className="text-white">{TKGM_FIELD_LABELS[k] || k}:</strong> {v}</span>
+                  <span key={k}><strong className="text-[var(--text)]">{TKGM_FIELD_LABELS[k] || k}:</strong> {v}</span>
                 ))}
               </div>
               <label className="flex items-center gap-2 cursor-pointer">

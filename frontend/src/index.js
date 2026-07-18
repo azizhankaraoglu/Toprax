@@ -3,6 +3,11 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@/index.css";
 import App from "@/App";
+import { applyTheme } from "@/lib/theme";
+
+// SON HAL — tema render'dan ÖNCE uygulanır (koyu-flaş önlenir).
+// Varsayılan AYDINLIK; tercih localStorage("toprax_theme")'de.
+applyTheme();
 
 const queryClient = new QueryClient({
   defaultOptions: {

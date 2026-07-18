@@ -22,6 +22,27 @@
   --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
 }
 
+/* SON HAL — Aydınlık tema (VARSAYILAN — src/index.js açılışta
+   localStorage("toprax_theme") yoksa "light" uygular). Turuncu marka
+   rengi iki temada da aynı; sadece zemin/yüzey/metin tersine döner. */
+:root[data-theme="light"] {
+  --bg: #f5f4ef;
+  --surface: #ffffff;
+  --surface-2: #efede6;
+  --border: #dcd8cc;
+  --text: #1e1d1a;
+  --text-dim: #6d6b63;
+  --primary: #E67E00;          /* açık zeminde bir ton koyu turuncu (kontrast) */
+  --primary-dark: #CC7000;
+  --primary-light: #FF9D33;
+}
+
+/* Aydınlık temada koda gömülü koyu-tema Tailwind sınıflarının düzeltmeleri:
+   "hover:text-white" koyu zemine göre yazılmıştı — açık zeminde görünmez
+   olurdu. Kaynak dosyaları tek tek değiştirmek yerine tek noktadan ezilir. */
+:root[data-theme="light"] .hover\:text-white:hover { color: var(--text) !important; }
+:root[data-theme="light"] .leaflet-container { background: #dfe5dc !important; }
+
 * { box-sizing: border-box; }
 
 html, body, #root, .App {

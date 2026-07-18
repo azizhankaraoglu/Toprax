@@ -62,7 +62,7 @@ export default function AiAssistantBox({ module = "parcels", onResults, placehol
       </form>
       {result && (
         <div className="text-xs mt-2 text-[var(--text-dim)]" data-testid={`${testId}-result`}>
-          <b className="text-white">{result.count}</b> sonuç — {result.summary}
+          <b className="text-[var(--text)]">{result.count}</b> sonuç — {result.summary}
           {result.ai === false && " (anahtar kelime eşleştirmesi — AI servisi yapılandırılmamış)"}
         </div>
       )}

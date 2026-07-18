@@ -10,6 +10,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import api from "@/api";
+import { getBasemapUrl } from "@/lib/theme";
 import {
   Plus, Trash2, GripVertical, Save, Share2, Send, Eye, BarChart3,
   MapPin, Camera, Star, Calendar, Type, AlignLeft, Hash, List, CheckSquare,
@@ -707,7 +708,7 @@ export function FormDashboard() {
                 {w.type === "map" && (
                   <div style={{ height: 300 }}>
                     <MapContainer center={mapCenter} zoom={6} style={{ height: "100%", borderRadius: 8 }}>
-                      <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"/>
+                      <TileLayer url={getBasemapUrl()}/>
                       {w.points.map((p) => (
                         <Marker key={p.id} position={[p.lat, p.lng]}>
                           <Popup>{p.id.substring(0, 8)}</Popup>

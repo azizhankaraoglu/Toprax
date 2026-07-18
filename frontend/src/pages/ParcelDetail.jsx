@@ -27,6 +27,7 @@ import GeoFileImport from "@/components/GeoFileImport";
 import VisitHistory from "@/components/VisitHistory";
 import FarmerSelect from "@/components/FarmerSelect";
 import RemoteSensingPanel from "@/components/RemoteSensingPanel";
+import { getBasemapUrl } from "@/lib/theme";
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
 const SOIL_TYPES = ["Killi", "Kumlu", "Tınlı", "Kireçli", "Killi-Tınlı"];
@@ -152,7 +153,7 @@ export default function ParcelDetail() {
         <div className="card overflow-hidden lg:col-span-2" style={{ height: 380 }}>
           {parcel.geometry && (
             <MapContainer center={[centerLat, centerLng]} zoom={14} style={{ height: "100%", width: "100%" }}>
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; OpenStreetMap"/>
+              <TileLayer url={getBasemapUrl()} attribution="&copy; OpenStreetMap"/>
               <Polygon
                 positions={parcel.geometry.coordinates[0].map(([lng, lat]) => [lat, lng])}
                 pathOptions={{ color: riskColor, fillColor: riskColor, fillOpacity: 0.5, weight: 3 }}

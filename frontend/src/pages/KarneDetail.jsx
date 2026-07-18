@@ -10,7 +10,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/api";
 import Breadcrumb from "@/components/Breadcrumb";
-import { Award, RefreshCw, SlidersHorizontal, AlertTriangle } from "lucide-react";
+import { Award, RefreshCw, SlidersHorizontal, AlertTriangle, TrendingUp } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 const LETTER_BADGE = { A: "badge-a", B: "badge-b", C: "badge-c", D: "badge-d" };
 
@@ -23,12 +24,14 @@ export default function KarneDetail() {
   const [editWeights, setEditWeights] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [history, setHistory] = useState([]);           // SON HAL — trend
 
   const load = () => {
     api.get(`/karne/${farmerId}/breakdown`)
       .then((r) => setData(r.data))
       .catch((e) => setError(e.response?.data?.detail || "Karne yüklenemedi"));
     api.get("/karne/parameters").then((r) => setParams(r.data)).catch(() => {});
+    api.get(`/karne/${farmerId}/history`).then((r) => setHistory(r.data)).catch(() => {});
   };
   useEffect(load, [farmerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -152,6 +155,32 @@ export default function KarneDetail() {
           </tfoot>
         </table>
       </div>
+
+      {/* SON HAL — karne trendi (her recompute'ta düşen anlık görüntüler) */}
+      {history.length >= 2 && (
+        <div className="card p-5 mb-6" data-testid="karne-trend">
+          <h3 className="font-display text-lg mb-3 flex items-center gap-2">
+            <TrendingUp size={17}/> Skor Geçmişi
+          </h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={history.map((h) => ({
+              tarih: new Date(h.computed_at).toLocaleDateString("tr-TR"),
+              puan: h.points,
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="tarih" stroke="var(--text-dim)" style={{ fontSize: 11 }} />
+              <YAxis domain={[0, 100]} stroke="var(--text-dim)" style={{ fontSize: 11 }} />
+              <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }} />
+              <Line type="monotone" dataKey="puan" stroke="var(--primary)" strokeWidth={2} dot />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      {history.length === 1 && (
+        <p className="text-xs text-[var(--text-dim)] mb-4">
+          Trend grafiği için en az iki hesap gerekir — bir sonraki "Yeniden Hesapla" sonrası burada skor geçmişi çizilecek.
+        </p>
+      )}
 
       <div className="flex items-center gap-3 flex-wrap mb-4">
         <button className="btn btn-primary" onClick={recompute} disabled={busy}

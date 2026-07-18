@@ -10,6 +10,7 @@ import FarmerSelect from "@/components/FarmerSelect";
 import BulkRemoteSensing from "@/components/BulkRemoteSensing";
 import ParcelsListPanel from "@/components/ParcelsListPanel";
 import AiAssistantBox from "@/components/AiAssistantBox";
+import { getBasemapUrl, getTheme } from "@/lib/theme";
 import {
   PenLine, Scissors, Combine, Crosshair, Upload, X, Check, Layers, Plus, Satellite, List, ClipboardPlus
 } from "lucide-react";
@@ -96,10 +97,16 @@ export default function Parcels() {
   const [showAdminAreas, setShowAdminAreas] = useState(false);
   const [adminAreas, setAdminAreas] = useState([]);
 
-  // SON HAL — sabit lookup filtre çubuğu (DB'deki gerçek distinct değerler)
+  // SON HAL — sabit lookup filtre çubuğu (DB'deki gerçek distinct değerler).
+  // Dashboard drill-down'ları URL parametresiyle gelir (?ekili=evet|hayir,
+  // ?il=, ?ilce= — CLAUDE.md Kural 11 drill-down konvansiyonu).
   const [filterOpts, setFilterOpts] = useState(null);
-  const [lf, setLf] = useState({ il: "", ilce: "", mahalle: "", ada: "", parsel: "",
-                                 areaMin: "", areaMax: "", ekili: "" });
+  const [lf, setLf] = useState(() => ({
+    il: searchParams.get("il") || "",
+    ilce: searchParams.get("ilce") || "",
+    mahalle: "", ada: "", parsel: "", areaMin: "", areaMax: "",
+    ekili: ["evet", "hayir"].includes(searchParams.get("ekili")) ? searchParams.get("ekili") : "",
+  }));
   // SON HAL — AI asistanı sonucu (id kümesi; null = filtre yok)
   const [aiIds, setAiIds] = useState(null);
   // SON HAL — parselin en güncel sözleşmesi (popup "Sözleşme detayına git")
@@ -568,7 +575,7 @@ export default function Parcels() {
           <MapContainer center={[39.0, 33.5]} zoom={7} style={{ height: "100%", width: "100%" }}>
             <TileLayer
               attribution='&copy; OpenStreetMap'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              url={getBasemapUrl()}
             />
 
             {/* İdari Sınırlar katmanı — IT-13.6 Layer v1 (aç/kapa) */}
@@ -607,7 +614,8 @@ export default function Parcels() {
                   key={p.id}
                   positions={p.geometry.coordinates[0].map(([lng, lat]) => [lat, lng])}
                   pathOptions={{
-                    color: isSelected ? "#ffffff" : color,
+                    // Seçim vurgusu: koyu haritada beyaz, açık haritada koyu çizgi
+                    color: isSelected ? (getTheme() === "dark" ? "#ffffff" : "#1e1d1a") : color,
                     fillColor: color,
                     fillOpacity: isEditOrSplitTarget ? 0.1 : (isMergeSelected || isSelected ? 0.55 : 0.4),
                     weight: isSelected ? 4 : (isMergeSelected || isEditOrSplitTarget ? 3 : 1.5),

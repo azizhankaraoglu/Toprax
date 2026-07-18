@@ -23,6 +23,7 @@ import { Sozlesmeler, Lojistik, Karne, Bildirimler } from "@/pages/Other";
 import ContractDetail from "@/pages/ContractDetail";
 import EkimKaydi from "@/pages/EkimKaydi";
 import KarneDetail from "@/pages/KarneDetail";
+import Profil from "@/pages/Profil";
 import { FormListesi, FormBuilder, FormDoldur, FormDashboard } from "@/pages/Forms";
 import { AlanTanimlari, LookupYonetimi } from "@/pages/FormYonetimi";
 import AdminAreaManagement from "@/pages/AdminAreaManagement";
@@ -101,6 +102,7 @@ function App() {
             <Route path="/karne" element={<Karne />} />
             <Route path="/karne/:farmerId" element={<KarneDetail />} />
             <Route path="/bildirimler" element={<Bildirimler />} />
+            <Route path="/profil" element={<Profil />} />
             <Route path="/uydu" element={<UyduGorunutu />} />
             <Route path="/uzaktan-algilama" element={<RemoteSensing />} />
             <Route path="/copilot" element={<AICopilot />} />

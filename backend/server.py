@@ -3053,6 +3053,15 @@ async def startup():
         await db.contracts.create_index("production_cycle_id")
         await db.plantings.create_index("production_cycle_id")
         await db.soil_samples.create_index("production_cycle_id")
+        # SON HAL — yeni sorgu kalıpları: sözleşme detayı + parsel popup'ı
+        # (parcel_id→sözleşme), Ekim Kaydı ?parcel= filtresi, karne motoru
+        # (parsel bazlı sulama/toprak taramaları) ve karne trend geçmişi.
+        await db.contracts.create_index([("parcel_id", 1), ("season", -1)])
+        await db.plantings.create_index([("parcel_id", 1), ("season", -1)])
+        await db.irrigation_events.create_index("parcel_id")
+        await db.soil_samples.create_index("parcel_id")
+        await db.kantar_records.create_index("production_cycle_id")
+        await db.karne_history.create_index([("farmer_id", 1), ("computed_at", 1)])
 
         # İdari Alanlar (IT-13.6) — $geoIntersects için 2dsphere index gerekli.
         # parcels.geometry'de daha önce hiç index yoktu (sadece Leaflet

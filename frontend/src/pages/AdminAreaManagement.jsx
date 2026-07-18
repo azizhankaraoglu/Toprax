@@ -14,6 +14,7 @@ import Drawer from "@/components/Drawer";
 import DynamicFieldsSection from "@/components/DynamicFieldsSection";
 import GeoFileImport from "@/components/GeoFileImport";
 import { QuickAddPanel } from "@/components/QuickAdd";
+import { getBasemapUrl } from "@/lib/theme";
 
 const GRID_COLUMNS = [
   { key: "name", label: "Ad", type: "text" },
@@ -168,7 +169,7 @@ function AreaDrawer({ area, onClose, onChanged }) {
           {detail.geometry && (
             <div className="card overflow-hidden" style={{ height: 220 }}>
               <MapContainer center={centerOf(detail.geometry)} zoom={11} style={{ height: "100%", width: "100%" }}>
-                <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; OpenStreetMap" />
+                <TileLayer url={getBasemapUrl()} attribution="&copy; OpenStreetMap" />
                 {(detail.geometry.type === "MultiPolygon" ? detail.geometry.coordinates.flat() : detail.geometry.coordinates).map((ring, i) => (
                   <Polygon key={i} positions={ring.map(([lng, lat]) => [lat, lng])} pathOptions={{ color: "#60a5fa" }} />
                 ))}
