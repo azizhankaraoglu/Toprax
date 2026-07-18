@@ -1,7 +1,60 @@
+import { useState, useEffect } from "react";
 import api from "@/api";
 import { QuickAddPanel } from "@/components/QuickAdd";
 import RowActions from "@/components/RowActions";
 import { useFetch } from "@/hooks/use-fetch";
+
+// #7 — Sezon kota→alan kuralı parametreleri (ton/dekar + sapma%). Pancara özel.
+function SeasonParamsPanel({ season }) {
+  const paramsQ = useFetch("/season-parameters", { params: { season }, initialData: [] });
+  const pancar = (paramsQ.data || []).find((p) => (p.crop || "").toLowerCase().includes("pancar"));
+  const [tpd, setTpd] = useState("");
+  const [sapma, setSapma] = useState("");
+  const [msg, setMsg] = useState("");
+  useEffect(() => { if (pancar) { setTpd(pancar.ton_per_dekar); setSapma(pancar.sapma_yuzde); } }, [pancar]);
+
+  async function save() {
+    setMsg("");
+    await api.post("/season-parameters", {
+      season, crop: "Şeker Pancarı",
+      ton_per_dekar: Number(tpd), sapma_yuzde: Number(sapma),
+      ndvi_ekili_esigi: pancar?.ndvi_ekili_esigi ?? 0.55,
+      ndvi_sokum_esigi: pancar?.ndvi_sokum_esigi ?? 0.25,
+    });
+    setMsg("Kaydedildi."); paramsQ.reload();
+  }
+  async function seed() { await api.post(`/season-parameters/seed-defaults?season=${season}`); paramsQ.reload(); }
+
+  return (
+    <div className="card p-4 mb-4" data-testid="season-params-panel">
+      <div className="text-sm font-medium mb-1">Kota → Ekilebilir Alan Kuralı ({season} · Şeker Pancarı)</div>
+      <p className="text-[11px] text-[var(--text-dim)] mb-3">
+        Gereken alan = kota (ton) ÷ (ton/dekar). Ekilebilir alan yetersizse: sapma içindeyse sözleşme
+        <b> onaya düşer</b>, dışındaysa <b>yapılamaz</b>. (Parametresi olmayan ürünlerde kural uygulanmaz.)
+      </p>
+      {pancar ? (
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="text-[11px] text-[var(--text-dim)] block">Ton / Dekar</label>
+            <input className="input w-28" type="number" step="0.1" value={tpd}
+                   onChange={(e) => setTpd(e.target.value)} data-testid="sp-tpd" />
+          </div>
+          <div>
+            <label className="text-[11px] text-[var(--text-dim)] block">Sapma (%)</label>
+            <input className="input w-28" type="number" step="1" value={sapma}
+                   onChange={(e) => setSapma(e.target.value)} data-testid="sp-sapma" />
+          </div>
+          <button onClick={save} className="btn btn-primary text-xs" data-testid="sp-save">Kaydet</button>
+          {msg && <span className="text-xs text-[var(--primary)]">{msg}</span>}
+        </div>
+      ) : (
+        <button onClick={seed} className="btn btn-ghost text-xs" data-testid="sp-seed">
+          Varsayılanları Yükle (4 ton/dekar, %10 sapma)
+        </button>
+      )}
+    </div>
+  );
+}
 
 const STATUS_OPTS = [
   { value: "taslak", label: "Taslak" }, { value: "imzalı", label: "İmzalı" }, { value: "iptal", label: "İptal" },
@@ -26,6 +79,8 @@ export function Sozlesmeler() {
     <div className="p-8" data-testid="sozlesmeler-page">
       <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M04 · MODÜL</div>
       <h1 className="font-display text-4xl mb-6">Sözleşme & Kota — 2025</h1>
+
+      <SeasonParamsPanel season={2025} />
 
       <QuickAddPanel
         title="Yeni Sözleşme"
@@ -69,9 +124,24 @@ export function Sozlesmeler() {
                 <td className="p-4">{c.kota_dekar}</td>
                 <td className="p-4">{c.kota_ton}</td>
                 <td className="p-4">{c.advance_seed_kg} kg</td>
-                <td className="p-4"><span className={`badge ${c.status==="imzalı"?"badge-a":"badge-c"}`}>{c.status}</span></td>
                 <td className="p-4">
-                  <div className="flex justify-end">
+                  <span className={`badge ${c.status==="imzalı"?"badge-a":c.status==="onay_bekliyor"?"badge-d":c.status==="iptal"?"badge-neutral":"badge-c"}`}
+                        title={c.deviation?.aciklama || ""}>
+                    {c.status==="onay_bekliyor" ? "onay bekliyor" : c.status}
+                  </span>
+                </td>
+                <td className="p-4">
+                  <div className="flex justify-end items-center gap-1">
+                    {c.status === "onay_bekliyor" && (
+                      <>
+                        <button data-testid="contract-dev-approve"
+                          onClick={async () => { await api.post(`/contracts/${c.id}/deviation-decision`, { decision: "onayla" }); contractsQ.reload(); }}
+                          className="btn btn-ghost text-xs text-green-400" title={c.deviation?.aciklama || "Sapma onayı"}>Onayla</button>
+                        <button data-testid="contract-dev-reject"
+                          onClick={async () => { const note = window.prompt("Red sebebi (opsiyonel):") || ""; await api.post(`/contracts/${c.id}/deviation-decision`, { decision: "reddet", note }); contractsQ.reload(); }}
+                          className="btn btn-ghost text-xs text-red-400">Reddet</button>
+                      </>
+                    )}
                     <RowActions
                       entityLabel="sözleşme"
                       values={c}

@@ -367,6 +367,10 @@ class ParcelCreate(BaseModel):
     village: str
     region_id: str
     area_dekar: float
+    # B6 (#7) — EKİLEBİLİR alan (dekar). Parselin toplam alanı ≠ ekilebilir alanı
+    # (yol/dere/kayalık düşülür). Sözleşme kota→alan kuralı BUNU baz alır; boşsa
+    # kural toplam area_dekar'a düşer (bkz. data_entry.py create_contract).
+    ekilebilir_alan_dekar: Optional[float] = None
     soil_type: str
     irrigation: str
     geometry: Optional[Dict[str, Any]] = None               # GeoJSON Polygon
@@ -1166,6 +1170,7 @@ class ParcelUpdate(BaseModel):
     name: Optional[str] = None
     village: Optional[str] = None
     area_dekar: Optional[float] = None
+    ekilebilir_alan_dekar: Optional[float] = None            # B6 (#7) — ekilebilir alan
     soil_type: Optional[str] = None
     irrigation: Optional[str] = None
     current_crop: Optional[str] = None
@@ -2708,6 +2713,10 @@ register_geo_import_routes(api_router, db, current_user, require_permission, log
 # geometrileri, IT-13.5 ile içe aktarılır (sistemde hazır sınır YOK).
 from admin_areas import register_admin_area_routes
 register_admin_area_routes(api_router, db, current_user, require_permission, log_audit)
+
+# Sezon Parametreleri (B3) — #7 kota→alan kuralı + #2 NDVI eşikleri için parametrik katsayılar
+from season_parameters import register_season_parameter_routes
+register_season_parameter_routes(api_router, db, current_user, require_permission, log_audit)
 
 # Dosya Depolama (IT-04) — basit dosya/resim upload + field_definitions
 # file/image/multifile alan tiplerinin ve "Belgeler" sekmesinin backend'i.

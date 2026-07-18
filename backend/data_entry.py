@@ -104,6 +104,44 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         doc["id"] = str(uuid.uuid4())
         doc["farmer_id"] = body.farmer_id or parcel["farmer_id"]
         doc["region_id"] = parcel["region_id"]
+
+        # ---- #7 KOTA → EKİLEBİLİR ALAN KURALI (parametrik) --------------------
+        # Yalnızca (sezon, ürün) için season_parameters TANIMLIYSA uygulanır
+        # (böylece "sadece pancarda" ayrı bir kod dalı yerine veriyle sağlanır).
+        #   gereken alan = kota_ton / ton_per_dekar
+        #   yeterli  → normal (taslak)
+        #   sapma içinde eksik → "onay_bekliyor" (yetkili onaylayana dek geçersiz)
+        #   sapma dışında eksik → 400 (sözleşme yapılamaz)
+        from season_parameters import get_season_params
+        params = await get_season_params(db, body.season, doc.get("crop") or parcel.get("current_crop") or "")
+        deviation = None
+        if params and float(params.get("ton_per_dekar") or 0) > 0 and float(body.kota_ton or 0) > 0:
+            tpd = float(params["ton_per_dekar"])
+            sapma = float(params.get("sapma_yuzde") or 0)
+            _e = parcel.get("ekilebilir_alan_dekar")
+            ekilebilir = float(_e) if _e not in (None, "") else float(parcel.get("area_dekar") or 0)
+            required = body.kota_ton / tpd
+            min_with_dev = required * (1 - sapma / 100.0)
+            if ekilebilir + 1e-9 >= required:
+                pass  # yeterli alan
+            elif ekilebilir + 1e-9 >= min_with_dev:
+                deviation = {
+                    "required_area_dekar": round(required, 2),
+                    "ekilebilir_alan_dekar": round(ekilebilir, 2),
+                    "sapma_yuzde": sapma, "ton_per_dekar": tpd, "kota_ton": body.kota_ton,
+                    "aciklama": (f"Ekilebilir alan {ekilebilir:.1f} dekar; {body.kota_ton} ton kota için "
+                                 f"gereken {required:.1f} dekarın altında ama %{sapma:.0f} sapma içinde — "
+                                 f"ziraat mühendisi/bölge sorumlusu onayı gerekir."),
+                }
+            else:
+                raise HTTPException(400,
+                    f"Sözleşme yapılamaz: {body.kota_ton} ton kota için en az {required:.1f} dekar "
+                    f"(±%{sapma:.0f} sapmayla {min_with_dev:.1f} dekar) ekilebilir alan gerekir; "
+                    f"parselin ekilebilir alanı {ekilebilir:.1f} dekar.")
+        if deviation:
+            doc["status"] = "onay_bekliyor"
+            doc["deviation"] = deviation
+
         # IT-05: production_cycle_id verilmediyse otomatik bağla (orphan kayıt
         # kalmaz; eski parcel_id KORUNUR — backward-compatible).
         if not doc.get("production_cycle_id"):
@@ -135,6 +173,36 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
             await publish(db, "contract_approved", {
                 "farmer_id": new["farmer_id"], "parcel_id": new["parcel_id"], "contract_id": new["id"],
             })
+        return new
+
+    class DeviationDecision(BaseModel):
+        decision: str                     # onayla | reddet
+        note: Optional[str] = None
+
+    @api_router.post("/contracts/{contract_id}/deviation-decision")
+    async def contract_deviation_decision(contract_id: str, body: DeviationDecision, request: Request,
+                                          user=Depends(require_permission("contracts:edit"))):
+        """#7 — Kota→alan sapması nedeniyle 'onay_bekliyor'da bekleyen sözleşmeyi
+        yetkili (ziraat mühendisi/bölge sorumlusu; contracts:edit) onaylar/reddeder.
+        Onay → 'taslak' (geçerli sözleşme); Red → 'iptal'."""
+        c = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
+        if not c:
+            raise HTTPException(404, "Sözleşme bulunamadı")
+        if c.get("status") != "onay_bekliyor":
+            raise HTTPException(400, "Bu sözleşme sapma onayı beklemiyor")
+        if body.decision not in ("onayla", "reddet"):
+            raise HTTPException(400, "decision 'onayla' veya 'reddet' olmalı")
+        new_status = "taslak" if body.decision == "onayla" else "iptal"
+        await db.contracts.update_one({"id": contract_id}, {"$set": {
+            "status": new_status,
+            "deviation_decided_by": user.get("full_name") or user.get("email"),
+            "deviation_decided_at": datetime.now(timezone.utc).isoformat(),
+            "deviation_decision_note": body.note,
+        }})
+        new = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
+        await log_audit(db, user, action="deviation_decision", entity="contract", entity_id=contract_id,
+                        old_value={"status": "onay_bekliyor"},
+                        new_value={"status": new_status, "decision": body.decision}, request=request)
         return new
 
     @api_router.delete("/contracts/{contract_id}")

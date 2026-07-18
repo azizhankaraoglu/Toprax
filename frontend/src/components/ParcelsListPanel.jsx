@@ -20,6 +20,7 @@ const risk = (lvl) => ({ yesil: "badge-a", sari: "badge-c", turuncu: "badge-c", 
 const EDIT_FIELDS = [
   { name: "name", label: "Ad", span2: true },
   { name: "area_dekar", label: "Alan (dekar)", type: "number", step: "0.1" },
+  { name: "ekilebilir_alan_dekar", label: "Ekilebilir Alan (dekar)", type: "number", step: "0.1" },
   { name: "current_crop", label: "Ürün" },
   { name: "risk_level", label: "Risk", type: "select", options: [
     { value: "yesil", label: "Düşük Risk" }, { value: "sari", label: "İzlemeye Değer" },
@@ -116,6 +117,7 @@ export default function ParcelsListPanel() {
                           onSave={async (v) => {
                             const body = { ...v };
                             if (body.area_dekar) body.area_dekar = Number(body.area_dekar);
+                            if (body.ekilebilir_alan_dekar) body.ekilebilir_alan_dekar = Number(body.ekilebilir_alan_dekar);
                             await api.put(`/parcels/${p.id}`, body);
                             setRows((prev) => prev.map((r) => (r.id === p.id ? { ...r, ...body } : r)));
                           }}
