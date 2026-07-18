@@ -49,6 +49,26 @@ export default function OrganizationChart() {
   const [assignForm, setAssignForm] = useState({ user_id: "", position_id: "", manager_user_id: "" });
   const [error, setError] = useState("");
 
+  // #6 — Portföy: bir personelin sorumlu olduğu köyler + oradaki çiftçi/parseller
+  const [portfolioUser, setPortfolioUser] = useState("");
+  const [portfolio, setPortfolio] = useState(null);
+  const [portfolioBusy, setPortfolioBusy] = useState(false);
+
+  async function loadPortfolio(uid) {
+    setPortfolioUser(uid);
+    setPortfolio(null);
+    if (!uid) return;
+    setPortfolioBusy(true);
+    try {
+      const { data } = await api.get(`/portfolio/${uid}`);
+      setPortfolio(data);
+    } catch {
+      setPortfolio(null);
+    } finally {
+      setPortfolioBusy(false);
+    }
+  }
+
   function loadAll() {
     api.get("/org-chart").then((r) => setTree(r.data.tree));
     api.get("/organization-units").then((r) => setUnits(r.data));
@@ -100,11 +120,59 @@ export default function OrganizationChart() {
         <h1 className="font-display text-4xl">Organizasyon Hiyerarşisi</h1>
         <p className="text-[var(--text-dim)] text-sm mt-1">
           Birim / Pozisyon / Yönetici ataması — Onay Zinciri Motoru'nun "hiyerarşi bazlı" (talep sahibinin
-          doğrudan yöneticisi) onay hedefini bu yapı belirler.
+          doğrudan yöneticisi) onay hedefini bu yapı belirler. Saha sorumluluğu (portföy) ise
+          <b> köy bazlıdır</b>: İdari Alanlar'da köye atanan sorumlu, o köydeki çiftçi ve parselleri devralır.
         </p>
       </header>
 
       {error && <div className="text-xs text-red-400 p-2 bg-red-500/10 rounded mb-4">{error}</div>}
+
+      {/* #6 — PORTFÖY: personelin sorumlu olduğu köyler + çiftçi/parsel özeti */}
+      <div className="card p-4 mb-6" data-testid="portfolio-panel">
+        <div className="text-sm font-medium mb-2">Portföy (Saha Sorumluluğu)</div>
+        <select className="input max-w-sm" value={portfolioUser}
+                onChange={(e) => loadPortfolio(e.target.value)} data-testid="portfolio-user">
+          <option value="">Personel seçin…</option>
+          {users.filter((u) => u.role !== "ciftci").map((u) => (
+            <option key={u.id} value={u.id}>{u.full_name || u.email} ({u.role})</option>
+          ))}
+        </select>
+
+        {portfolioBusy && <div className="text-xs text-[var(--text-dim)] mt-3">Yükleniyor…</div>}
+        {portfolio && (
+          <div className="mt-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              <div className="bg-[var(--surface-2)] rounded-lg p-3 text-center">
+                <div className="font-display text-2xl">{portfolio.areas?.length || 0}</div>
+                <div className="text-[10px] text-[var(--text-dim)] uppercase">Sorumlu Köy</div>
+              </div>
+              <div className="bg-[var(--surface-2)] rounded-lg p-3 text-center">
+                <div className="font-display text-2xl">{portfolio.farmer_count}</div>
+                <div className="text-[10px] text-[var(--text-dim)] uppercase">Çiftçi</div>
+              </div>
+              <div className="bg-[var(--surface-2)] rounded-lg p-3 text-center">
+                <div className="font-display text-2xl">{portfolio.parcel_count}</div>
+                <div className="text-[10px] text-[var(--text-dim)] uppercase">Parsel</div>
+              </div>
+              <div className="bg-[var(--surface-2)] rounded-lg p-3 text-center">
+                <div className="font-display text-2xl">{portfolio.total_area_dekar}</div>
+                <div className="text-[10px] text-[var(--text-dim)] uppercase">Toplam Alan (da)</div>
+              </div>
+            </div>
+            {portfolio.areas?.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {portfolio.areas.map((a) => (
+                  <span key={a.id} className="badge badge-neutral text-[11px]">{a.name}</span>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-[var(--text-dim)]">
+                Bu personele hiç köy atanmamış — İdari Alanlar'dan bir köye "Sorumlu Personel" olarak atayın.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <form onSubmit={submitUnit} className="card p-4 space-y-2">

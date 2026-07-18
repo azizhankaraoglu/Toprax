@@ -959,8 +959,13 @@ async def get_farmer_360(farmer_id: str, user=Depends(require_permission("farmer
         key=lambda x: x["year"]
     )
     
+    # #6 — SORUMLU (portföy): çiftçinin köyünden MİRAS (isimle eşleştirme).
+    from admin_areas import resolve_responsible
+    farmer_responsible = await resolve_responsible(db, (farmer or {}).get("village"))
+
     return {
         "farmer": farmer,
+        "responsible": farmer_responsible,
         "summary": {
             "parcel_count": len(parcels),
             "total_area_dekar": round(total_area, 1),
@@ -1138,9 +1143,14 @@ async def get_parcel_detail(parcel_id: str, user=Depends(require_permission("par
         {"parcel_id": parcel_id}, {"_id": 0}
     ).sort([("flight_date", -1)]).to_list(20)
 
+    # #6 — SORUMLU (portföy): köy adından MİRAS alınır (isimle eşleştirme).
+    from admin_areas import resolve_responsible
+    responsible = await resolve_responsible(db, p.get("village") or p.get("mahalle"))
+
     return {
         "parcel": p,
         "farmer": farmer,
+        "responsible": responsible,
         "plantings": plantings,
         "soil_samples": soil,
         "irrigation_events": irrigation,

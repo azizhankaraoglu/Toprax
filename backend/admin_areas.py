@@ -62,6 +62,54 @@ def _simplify_geometry(geometry: Optional[Dict[str, Any]], max_points: int = MAX
     return geometry
 
 
+# =====================================================================
+# #6 — SORUMLU KİŞİ (PORTFÖY) ÇÖZÜMLEYİCİ — köy bazlı MİRAS
+# =====================================================================
+# Karar (kullanıcı): parselin/çiftçinin hangi köye ait olduğu **İSİMLE**
+# eşleştirilir (geometrik $geoIntersects DEĞİL) — parsel.village / parsel.mahalle
+# veya çiftçi.village adı, `area_type="mahalle"` bir idari alanın adıyla
+# (büyük/küçük harf ve boşluk duyarsız) karşılaştırılır. O idari alanın
+# `responsible_user_id`'si o köydeki TÜM parsel/çiftçilere MİRAS kalır.
+
+def _norm_name(v) -> str:
+    return str(v or "").strip().lower()
+
+
+async def find_area_for_village(db, village_name: str) -> Optional[Dict[str, Any]]:
+    """Köy/mahalle ADINA göre idari alanı bulur (isimle eşleştirme kararı)."""
+    name = _norm_name(village_name)
+    if not name:
+        return None
+    areas = await db.admin_areas.find(
+        {"area_type": "mahalle", "is_active": {"$ne": False}}, {"_id": 0}).to_list(5000)
+    for a in areas:
+        if _norm_name(a.get("name")) == name:
+            return a
+    return None
+
+
+async def resolve_responsible(db, village_name: str) -> Optional[Dict[str, Any]]:
+    """Köy adından SORUMLU personeli çözer. Dönen: {user_id, full_name, email,
+    role, source_area_id, source_area_name} veya None (köy yok / sorumlu atanmamış)."""
+    area = await find_area_for_village(db, village_name)
+    if not area:
+        return None
+    uid = area.get("responsible_user_id")
+    if not uid:
+        return None
+    u = await db.users.find_one({"id": uid}, {"_id": 0, "password": 0, "totp_secret": 0})
+    if not u:
+        return None
+    return {
+        "user_id": uid,
+        "full_name": u.get("full_name") or u.get("email"),
+        "email": u.get("email"),
+        "role": u.get("role"),
+        "source_area_id": area.get("id"),
+        "source_area_name": area.get("name"),
+    }
+
+
 class AdminAreaCreate(BaseModel):
     name: str
     area_type: str                                   # il | ilce | mahalle
@@ -174,6 +222,40 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
         await db.admin_areas.update_one({"id": area_id}, {"$set": {"is_active": False}})
         await log_audit(db, user, action="delete", entity="admin_area", entity_id=area_id, old_value=old, request=request)
         return {"status": "deactivated"}
+
+    @api_router.get("/portfolio/{user_id}")
+    async def user_portfolio(user_id: str, user=Depends(require_permission("admin_areas:view"))):
+        """#6 — Bir personelin PORTFÖYÜ: sorumlu olduğu köyler + o köylerdeki
+        (isimle eşleşen) çiftçi/parsel özeti. Sorumluluk köy seviyesindedir,
+        parsel/çiftçi bunu devralır."""
+        areas = await db.admin_areas.find(
+            {"responsible_user_id": user_id, "is_active": {"$ne": False}}, {"_id": 0}).to_list(1000)
+        names = {_norm_name(a.get("name")) for a in areas if a.get("name")}
+        if not names:
+            return {"user_id": user_id, "areas": [], "farmer_count": 0, "parcel_count": 0,
+                    "total_area_dekar": 0, "parcels": [], "farmers": []}
+
+        parcels = await db.parcels.find(
+            {"is_active": {"$ne": False}},
+            {"_id": 0, "id": 1, "name": 1, "parcel_code": 1, "village": 1, "mahalle": 1,
+             "area_dekar": 1, "ekim_durumu": 1, "farmer_id": 1}).to_list(20000)
+        farmers = await db.farmers.find(
+            {"is_active": {"$ne": False}},
+            {"_id": 0, "id": 1, "full_name": 1, "member_no": 1, "village": 1, "phone": 1}).to_list(20000)
+
+        my_parcels = [p for p in parcels
+                      if _norm_name(p.get("village")) in names or _norm_name(p.get("mahalle")) in names]
+        my_farmers = [f for f in farmers if _norm_name(f.get("village")) in names]
+        return {
+            "user_id": user_id,
+            "areas": [{"id": a.get("id"), "name": a.get("name"), "area_type": a.get("area_type")} for a in areas],
+            "farmer_count": len(my_farmers),
+            "parcel_count": len(my_parcels),
+            "total_area_dekar": round(sum(p.get("area_dekar") or 0 for p in my_parcels), 1),
+            "ekili_parcels": sum(1 for p in my_parcels if p.get("ekim_durumu") == "ekili"),
+            "parcels": my_parcels[:200],
+            "farmers": my_farmers[:200],
+        }
 
     @api_router.post("/admin-areas/bulk-import")
     async def bulk_import_admin_areas(body: BulkImportRequest, request: Request, user=Depends(require_permission("admin_areas:manage"))):

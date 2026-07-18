@@ -156,6 +156,22 @@ export default function FarmerDetail() {
           <div className="flex items-center gap-2"><Phone size={14} className="text-[var(--text-dim)]"/>{farmer.phone}</div>
           <div className="flex items-center gap-2"><Mail size={14} className="text-[var(--text-dim)]"/>{farmer.email || "—"}</div>
           <div className="text-xs text-[var(--text-dim)] font-mono">TC: {farmer.tc_no}</div>
+          {/* #6 — SORUMLU (köyden miras) */}
+          <div className="pt-2 mt-2 border-t border-[var(--border)]">
+            <div className="text-[10px] text-[var(--text-dim)] tracking-widest uppercase mb-1">SORUMLU PERSONEL</div>
+            {data.responsible ? (
+              <div>
+                <div className="text-sm">{data.responsible.full_name}</div>
+                <div className="text-[11px] text-[var(--text-dim)]">
+                  {data.responsible.role} · köy: {data.responsible.source_area_name}
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-[var(--text-dim)]">
+                Köye sorumlu atanmamış (İdari Alanlar'dan atanır)
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Karne kartı */}

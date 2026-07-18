@@ -215,6 +215,23 @@ export default function ParcelDetail() {
               </div>
             )}
           </div>
+
+          {/* #6 — SORUMLU (köyden miras alınır) */}
+          <div className="pt-3 border-t border-[var(--border)]">
+            <div className="text-[10px] text-[var(--text-dim)] uppercase mb-1">SORUMLU PERSONEL</div>
+            {data.responsible ? (
+              <div className="p-2">
+                <div className="text-sm">{data.responsible.full_name}</div>
+                <div className="text-[11px] text-[var(--text-dim)]">
+                  {data.responsible.role} · köy: {data.responsible.source_area_name}
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-[var(--text-dim)] p-2">
+                Bu köy için sorumlu atanmamış — İdari Alanlar'dan köye sorumlu personel atayın.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
