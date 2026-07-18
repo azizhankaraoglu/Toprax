@@ -28,6 +28,7 @@ import { DestekKatalogu } from "@/pages/SupportCatalog";
 import UfydDashboard from "@/pages/UfydDashboard";
 import SahaOperasyonlari from "@/pages/SahaOperasyonlari";
 import AutomationRules from "@/pages/AutomationRules";
+import EkimPlanlama from "@/pages/EkimPlanlama";
 import { SablonYonetimi } from "@/pages/TemplateManagement";
 import AnnouncementManagement from "@/pages/AnnouncementManagement";
 import CampaignManagement from "@/pages/CampaignManagement";
@@ -127,6 +128,7 @@ function App() {
             <Route path="/ufyd-dashboard" element={<UfydDashboard />} />
             <Route path="/saha-operasyonlari" element={<SahaOperasyonlari />} />
             <Route path="/otomasyon-kurallari" element={<AutomationRules />} />
+            <Route path="/ekim-planlama" element={<EkimPlanlama />} />
             <Route path="/formlar" element={<FormListesi />} />
             <Route path="/formlar/yeni" element={<FormBuilder />} />
             <Route path="/formlar/:id/duzenle" element={<FormBuilder />} />

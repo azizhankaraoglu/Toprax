@@ -34,6 +34,7 @@ const navGroups = [
     items: [
       { to: "/sozlesmeler", icon: FileText, label: "Sözleşme & Kota" },
       { to: "/ekim", icon: Sprout, label: "Ekim Planlama" },
+      { to: "/ekim-planlama", icon: Sparkles, label: "Ekim Karar Motoru" },
       { to: "/sulama", icon: Droplets, label: "Sulama & Kaynak" },
       { to: "/operasyon", icon: Settings2, label: "Operasyon" },
     ]

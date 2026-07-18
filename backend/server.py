@@ -2749,6 +2749,11 @@ register_season_parameter_routes(api_router, db, current_user, require_permissio
 from groups import register_group_routes
 register_group_routes(api_router, db, current_user, require_permission, log_audit)
 
+# Ekim Planlama Karar Motoru (#10) — parsel arama + çeşit lookup'ı +
+# düzenlenebilir agronomik bilgi/prompt kütüphanesi + polar odaklı analiz.
+from agronomy import register_agronomy_routes
+register_agronomy_routes(api_router, db, current_user, require_permission, log_audit)
+
 # Dosya Depolama (IT-04) — basit dosya/resim upload + field_definitions
 # file/image/multifile alan tiplerinin ve "Belgeler" sekmesinin backend'i.
 from storage import register_storage_routes

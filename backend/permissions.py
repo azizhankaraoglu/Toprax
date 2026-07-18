@@ -91,6 +91,16 @@ PERMISSION_CATALOG = {
             {"key": "plantings:delete", "label": "Sil"},
         ],
     },
+    # #10 — Ekim Planlama Karar Motoru (agronomy.py). `rules_manage`
+    # bilgi/prompt kütüphanesini değiştirir (tüm analizlerin sonucunu
+    # etkiler) — bu yüzden analizden AYRI bir izin.
+    "agronomy": {
+        "label": "Ekim Planlama Karar Motoru",
+        "permissions": [
+            {"key": "agronomy:analyze", "label": "Analiz çalıştır"},
+            {"key": "agronomy:rules_manage", "label": "Bilgi kütüphanesini yönet"},
+        ],
+    },
     "soil_irrigation": {
         "label": "Toprak & Sulama",
         "permissions": [
@@ -356,6 +366,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "production_cycles:view", "production_cycles:create", "production_cycles:edit",
         "contracts:view", "contracts:create", "contracts:edit", "contracts:delete",
         "plantings:view", "plantings:create", "plantings:edit", "plantings:delete",
+        "agronomy:analyze", "agronomy:rules_manage",
         "soil:view", "soil:create", "soil:edit", "soil:delete",
         "irrigation:view", "irrigation:create", "irrigation:edit", "irrigation:delete",
         "operations:view", "operations:machines_manage", "operations:workers_manage", "operations:tasks_manage",
@@ -396,6 +407,10 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "production_cycles:view", "production_cycles:create", "production_cycles:edit",
         "contracts:view",
         "plantings:view", "plantings:create", "plantings:edit", "plantings:delete",
+        # Ziraat mühendisi bu motorun ALAN UZMANIDIR — kural kütüphanesini
+        # de düzenleyebilir (kullanıcının "düzenlenebilir AI bilgi
+        # kütüphanesi" isteğinin asıl hedef kitlesi).
+        "agronomy:analyze", "agronomy:rules_manage",
         "soil:view", "soil:create", "soil:edit", "soil:delete",
         "irrigation:view", "irrigation:create", "irrigation:edit", "irrigation:delete",
         "operations:view", "operations:tasks_manage",
