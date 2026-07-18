@@ -192,6 +192,13 @@ async def _apply_statistics(db, parcel: dict, provider, series: List[Dict]) -> N
             "count": len(vals), "series": series, "created_at": _now(),
         }
         await db.remote_sensing_statistics.insert_one(dict(stat))
+    # Ekili/söküm durumu (#2) — NDVI serisi + manuel kayıtlardan, tarih damgalı.
+    try:
+        from .crop_status import update_crop_status
+        await update_crop_status(db, parcel, series)
+    except Exception:
+        pass
+
     # Anomali → Communication Policy (KONU 1.4).
     anomaly = provider.detect_anomaly(series)
     await publish_anomaly(db, parcel, anomaly, provider.name)

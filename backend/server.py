@@ -655,6 +655,17 @@ async def dashboard_overview(user=Depends(current_user)):
 
     last_satellite_scan = max((p.get("last_satellite_scan") for p in parcels if p.get("last_satellite_scan")), default=None)
 
+    # ============ EKİLİ / SÖKÜM DURUMU (#2 — uydu+manuel, crop_status.py) ============
+    active_parcels = [p for p in parcels if p.get("is_active") is not False]
+    def _plantable(p):
+        e = p.get("ekilebilir_alan_dekar")
+        return e if isinstance(e, (int, float)) and e else (p.get("area_dekar") or 0)
+    ekili_count = sum(1 for p in active_parcels if p.get("ekim_durumu") == "ekili")
+    sokulen_count = sum(1 for p in active_parcels if p.get("ekim_durumu") == "sokuldu")
+    ekili_degil_count = sum(1 for p in active_parcels if p.get("ekim_durumu") not in ("ekili", "sokuldu"))
+    sokulen_alan = sum(_plantable(p) for p in active_parcels if p.get("ekim_durumu") == "sokuldu")
+    kalan_alan = sum(_plantable(p) for p in active_parcels if p.get("ekim_durumu") == "ekili")
+
     return {
         "kpis": {
             "farmers_total": farmers_total,
@@ -673,6 +684,12 @@ async def dashboard_overview(user=Depends(current_user)):
             "drone_missions_total": drone_total,
             "drone_last_flight_at": drone_last[0]["flight_date"] if drone_last else None,
             "last_satellite_scan": last_satellite_scan,
+            # --- #2 Ekili / Söküm durumu (uydu + manuel) ---
+            "ekili_parcels": ekili_count,
+            "sokulen_parcels": sokulen_count,
+            "ekili_degil_parcels": ekili_degil_count,
+            "sokulen_alan_dekar": round(sokulen_alan, 1),
+            "kalan_alan_dekar": round(kalan_alan, 1),
         },
         "regions": region_stats,
         "yield_trend": trend,

@@ -185,6 +185,21 @@ export default function ParcelDetail() {
             <div><div className="text-[10px] text-[var(--text-dim)] uppercase">Ürün</div><div className="font-medium">{parcel.current_crop}</div></div>
             <div><div className="text-[10px] text-[var(--text-dim)] uppercase">Toprak</div><div className="font-medium">{parcel.soil_type}</div></div>
             <div><div className="text-[10px] text-[var(--text-dim)] uppercase">Sulama</div><div className="font-medium">{parcel.irrigation}</div></div>
+            <div><div className="text-[10px] text-[var(--text-dim)] uppercase">Ekilebilir Alan</div><div className="font-medium">{parcel.ekilebilir_alan_dekar != null ? `${parcel.ekilebilir_alan_dekar} da` : "—"}</div></div>
+            <div>
+              <div className="text-[10px] text-[var(--text-dim)] uppercase">Ekim Durumu</div>
+              <div className="font-medium">
+                {parcel.ekim_durumu === "ekili" ? "🌱 Ekili"
+                  : parcel.ekim_durumu === "sokuldu" ? "🚜 Söküldü"
+                  : parcel.ekim_durumu === "ekili_degil" ? "Ekili değil" : "—"}
+                {parcel.son_ndvi != null && <span className="text-[10px] text-[var(--text-dim)]"> · NDVI {parcel.son_ndvi}</span>}
+              </div>
+              {parcel.crop_status_date && (
+                <div className="text-[9px] text-[var(--text-dim)]">
+                  {parcel.crop_status_source} · {new Date(parcel.crop_status_date).toLocaleDateString("tr-TR")}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="pt-3 border-t border-[var(--border)]">

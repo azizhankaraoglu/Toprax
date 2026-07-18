@@ -120,6 +120,10 @@ CORE_FILTERABLE_FIELDS = {
         {"key": "ndvi_latest", "label": "NDVI (son ölçüm)", "type": "number"},
         {"key": "risk_level", "label": "Risk Seviyesi", "type": "text"},
         {"key": "expected_yield_ton", "label": "Beklenen Verim (ton)", "type": "number"},
+        # #2 — ekili/söküm durumu (uydu+manuel) + ekilebilir alan
+        {"key": "ekim_durumu", "label": "Ekim Durumu (ekili/sokuldu/ekili_degil)", "type": "text"},
+        {"key": "son_ndvi", "label": "Son NDVI (ekim durumu)", "type": "number"},
+        {"key": "ekilebilir_alan_dekar", "label": "Ekilebilir Alan (dekar)", "type": "number"},
         # "Her bilgisiyle sorgulanabilsin" — IT-02'nin gerçek parsel kolonları
         # (kadastro/coğrafi/sahiplik/altyapı) + uzaktan algılama son NDVI'si.
         # Bunlar doğrudan doküman alanı olduğundan filtre/sıralamada güvenli.

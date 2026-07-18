@@ -178,6 +178,18 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
                         new_value={"count": len(parcel_ids), "trigger": "manual"}, request=request)
         return {"queued": len(created), **result}
 
+    # ---- Ekili/Söküm durumu toplu yeniden-hesaplama (#2) ---------------------
+    @api_router.post("/remote-sensing/recompute-crop-status")
+    async def rs_recompute_crop_status(request: Request,
+                                       user=Depends(require_permission("remote_sensing:manual_sync"))):
+        """TÜM aktif parseller için ekili/söküm durumunu (manuel ekim + son
+        NDVI'dan, EOSDA çağrısı YAPMADAN) yeniden hesaplar — Dashboard'u besler."""
+        from .crop_status import recompute_all
+        result = await recompute_all(db)
+        await log_audit(db, user, action="recompute_crop_status", entity="remote_sensing",
+                        entity_id="all", new_value=result.get("counts"), request=request)
+        return result
+
     # ---- Scheduler (otomatik tarama turu) ------------------------------------
     @api_router.post("/remote-sensing/scheduler/run")
     async def rs_run_scheduler(request: Request,
