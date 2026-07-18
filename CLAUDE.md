@@ -2133,6 +2133,73 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   geçmişi parsel taşıyan `yields`'ten okunur. İklim/hava sinyali YOK
   (kurulu bir hava servisi yok).
 
+- ✅ **2026-07-18 — SON HAL UI/UX yeniden tasarımı (Faz 1-8) TAMAMLANDI**
+  (Build 18072026-1245). Kullanıcının 8 maddelik "son hal" talebi:
+
+  **Faz 1 — Nav:** `Layout.jsx` grupları kapanır/açılır (chevron,
+  `localStorage("toprax_nav_open")`, aktif rotayı içeren grup otomatik
+  açılır). Yeniden sınıflandırma: **ANA ALAN** (Dashboard/Çiftçiler/
+  Parseller/Sözleşmeler), Harita Paneli→SAHA & LOJİSTİK, İdari Alanlar→
+  SİSTEM, yeni **İLETİŞİM** grubu (Bildirimler/Duyuru/Kampanya/Şablon/
+  Politikalar), Toprak Analizleri→ÜRETİM, /ekim adı "Ekim Kaydı".
+  **Faz 2:** Global arama Dashboard'a gömüldü (`DashboardSearch`,
+  debounce 300ms, modül gruplu sonuç → moduleRoutes ile detaya);
+  `/arama` → `/` yönlendirme, GlobalSearch.jsx emekli (dosya duruyor,
+  route'u yok). **Faz 3:** `GET /contracts/{id}` (farmer/parcel özet +
+  plantings + kantar) + `ContractDetail.jsx` (`/sozlesmeler/:id`);
+  moduleRoutes contracts artık kendi detayına gider; tüm sözleşme
+  satırları tıklanır; `GET /parcels/{id}` yanıtına `contracts` eklendi +
+  ParcelDetail'e Sözleşmeler kartı. **Faz 4:** ortak
+  `components/ParcelPicker.jsx` (EkimPlanlama'dan çıkarıldı) +
+  QuickAddPanel'e yeni **"parcel" alan tipi** (elle required kontrolü) +
+  `pages/EkimKaydi.jsx` (sezon seçilebilir, `?parcel=` filtresi,
+  toplu ekim `POST /plantings/bulk-create`, toplu silme
+  `POST /plantings/bulk-delete` — Other.jsx'in `Ekim` export'u SİLİNDİ).
+  **Faz 5:** ortak `components/BulkParcelSelect.jsx` (FilterPanel +
+  checkbox tablo); Sulama'ya toplu sulama (`POST /irrigation/events/
+  bulk-create`), Operasyon'a toplu görev (endpoint YOK — mevcut POST
+  döngüsü, IT-15 emsali); iki sayfada da parsel alanı ParcelPicker oldu
+  (Operasyon'un 500'lük parcels fetch'i kaldırıldı). **Faz 6:**
+  `backend/karne_engine.py` — karne artık GERÇEK hesap: kota %30 +
+  polar-vs-bölge %25 + sulama %15 + toprak güncelliği %15 + finans %15
+  (ağırlıklar `karne_parameters`, admin düzenler); **verisi olmayan
+  bileşen nötr sayılmaz, hesaptan çıkarılıp kalan ağırlıklar yeniden
+  normalize edilir**; `GET /karne/{id}/breakdown` (canlı hesap, DB'yi
+  değiştirmez, `stored_is_stale` bayrağıyla eski seed skoru kıyaslanır),
+  `POST /karne/recompute` (İLK çalıştırmada eski skor
+  `karne_points_seed`e yedeklenir; otomatik ÇALIŞTIRILMADI — kullanıcı
+  UI'dan tetikler), `GET/PUT /karne/parameters`; yeni `karne:manage`
+  izni; `pages/KarneDetail.jsx` (`/karne/:farmerId`) + Farmers rozeti/
+  FarmerDetail kartı/Karne liderlik satırları tıklanır. **Faz 7:**
+  `/ai/copilot`'a `module: "parcels"|"farmers"` (farmers için ayrı
+  prompt + keyword fallback; yanıtta artık `items` + geriye uyumlu
+  `parcels`); ortak `components/AiAssistantBox.jsx` → Çiftçiler +
+  Parseller sayfalarına eklendi. **Faz 8:** Parseller yeniden kurgusu —
+  parsel SATIRLARI ÜSTTE (300 satır, tıkla→seç), harita ALTTA; seçim
+  çift yönlü (satır↔harita, `MapFlyTo` useMap+useEffect — stale-closure
+  tuzağına girmez); sağ paneldeki eski liste "Seçili Parsel" kartına
+  dönüştü (araç panelleri AYNEN korundu); zengin popup (il/ilçe/mahalle/
+  ada/parsel no/ad/yüzölçümü/ekili + 4 buton: parsel detayı, sözleşme
+  detayı [parselin en güncel sözleşmesi — `/contracts` tek fetch +
+  parcel_id map], ekim detayı [`/ekim?parcel=`], görev ata mini-form);
+  sabit lookup filtre çubuğu `GET /parcels/filter-options` (Mongo
+  distinct; il→ilçe→mahalle kaskad eşlemeleri; yüzölçümü min-max;
+  "Ekili mi" Evet/Hayır `ekim_durumu==="ekili"` üzerinden) — **route
+  sırası: /parcels/{parcel_id}'den ÖNCE tanımlı** (bulk-update tuzağı).
+
+  **Doğrulama:** backend uçtan uca API testleri (konteyner içinden —
+  bulk create/delete round-trip, karne breakdown gerçek veriyle
+  [Salih Çelik: seed 52/D → canlı 80/B], farmers copilot Gemini ile
+  gerçek AI, filter-options kaskadı) + gerçek tarayıcıda tıklanarak
+  (nav aç/kapa+localStorage, dashboard arama, sözleşme satırı→detay,
+  Ekim Kaydı sayfası, karne rozeti→breakdown, Parseller liste↔harita
+  senkron+kaskad filtre). Konsolda hata yok.
+  **Bilinçli kapsam notları:** karne recompute kullanıcı onayına
+  bırakıldı (skorlar görünür şekilde değişecek); HaritaPaneli kendi AI
+  asistan kodunu koruyor (AiAssistantBox'a geçirilmedi — çalışan kodu
+  bozmama tercihi); Sozlesmeler listesi hâlâ 2025 hardcode (ayrı bir
+  iyileştirme adayı).
+
   **ORTAM TUZAĞI (bu oturumda 3 saat kaybettirdi, MUTLAKA OKU):**
   Bu makinede **İKİ ayrı Docker motoru** var — Docker Desktop ve WSL
   Ubuntu'nun kendi `dockerd`'si. Docker Desktop kapalıyken WSL içinden
