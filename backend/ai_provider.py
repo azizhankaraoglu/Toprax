@@ -41,7 +41,10 @@ class OpenAIProvider(AIProvider):
             headers={"Authorization": f"Bearer {self.api_key}"},
             json={"model": self.model or "gpt-4o-mini",
                   "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_text}]},
-            timeout=20,
+            # 60 sn: uzun bağlamlı metin üretimi (ör. agronomy.py'nin ekim
+            # planlama anlatımı) 20 sn'de gerçek sağlayıcılarda zaman aşımına
+            # uğruyordu — Gemini ile canlı olarak gözlemlendi.
+            timeout=60,
         )
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
@@ -74,7 +77,7 @@ class GeminiProvider(AIProvider):
         resp = requests.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{self.model or 'gemini-flash-latest'}:generateContent?key={self.api_key}",
             json={"contents": [{"parts": [{"text": system_prompt + "\n\n" + user_text}]}]},
-            timeout=20,
+            timeout=60,                                   # bkz. OpenAIProvider notu
         )
         resp.raise_for_status()
         return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
@@ -102,7 +105,7 @@ class AnthropicProvider(AIProvider):
             headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01"},
             json={"model": self.model or "claude-sonnet-4-6", "max_tokens": 500,
                   "system": system_prompt, "messages": [{"role": "user", "content": user_text}]},
-            timeout=20,
+            timeout=60,                                   # bkz. OpenAIProvider notu
         )
         resp.raise_for_status()
         return resp.json()["content"][0]["text"]
