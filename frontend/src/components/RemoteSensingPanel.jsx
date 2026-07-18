@@ -43,17 +43,32 @@ export default function RemoteSensingPanel({ parcelId }) {
     return (latest?.series || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   }, [stats]);
 
-  const imageByDate = useMemo(() => {
-    const m = {};
-    images.forEach((im) => { if (im.capture_date) m[im.capture_date] = im; });
-    return m;
-  }, [images]);
+  // Görüntüler tarihe göre sıralı — seçili tarihte görüntü YOKSA o tarihten
+  // ÖNCEKİ en yeni görüntü gösterilir ("son bilinen görüntü"), aksi halde tek
+  // bir tarih dışında hep "görüntü yok" görünürdü.
+  const sortedImages = useMemo(
+    () => images.filter((im) => im.capture_date && im.stored_name)
+                .slice().sort((a, b) => (a.capture_date || "").localeCompare(b.capture_date || "")),
+    [images]
+  );
 
   const dates = series.map((s) => s.date);
   const cur = series[Math.min(idx, Math.max(0, series.length - 1))] || null;
-  const curImg = cur ? imageByDate[cur.date] : null;
+  const curImg = useMemo(() => {
+    if (!cur?.date) return null;
+    let found = null;
+    for (const im of sortedImages) {
+      if ((im.capture_date || "") <= cur.date) found = im; else break;
+    }
+    return found || null;
+  }, [cur, sortedImages]);
+  const imgIsExact = curImg && curImg.capture_date === cur?.date;
 
-  useEffect(() => { setIdx(0); setImgError(false); setInterp(null); }, [stats]);
+  // Slider EN GÜNCEL tarihte açılsın (uydu görüntüsü de en yeni tarihte olur).
+  useEffect(() => {
+    setIdx(Math.max(0, series.length - 1));
+    setImgError(false); setInterp(null);
+  }, [stats, series.length]);
 
   async function runInterpret() {
     setInterpBusy(true);
@@ -164,16 +179,23 @@ export default function RemoteSensingPanel({ parcelId }) {
               <div className="aspect-video rounded-lg overflow-hidden border border-[var(--border)] flex items-center justify-center relative"
                    style={{ background: `${ndviColor(cur?.ndvi)}22` }}>
                 {imgSrc && !imgError ? (
-                  <img src={imgSrc} alt={cur?.date} className="w-full h-full object-cover" onError={() => setImgError(true)} />
+                  <>
+                    <img src={imgSrc} alt={curImg?.capture_date} className="w-full h-full object-cover" onError={() => setImgError(true)} />
+                    <div className="absolute bottom-0 left-0 right-0 text-[10px] px-2 py-1 bg-black/60 text-white">
+                      {imgIsExact ? `Uydu görüntüsü · ${curImg.capture_date}`
+                                  : `Son bilinen görüntü · ${curImg.capture_date} (seçili tarih: ${cur?.date})`}
+                      {curImg?.cloud_pct != null && ` · bulut %${curImg.cloud_pct}`}
+                    </div>
+                  </>
                 ) : (
                   <div className="text-center p-4">
                     <ImageIcon size={28} className="mx-auto mb-1" style={{ color: ndviColor(cur?.ndvi) }} />
                     <div className="text-xs text-[var(--text-dim)]">
-                      {curImg
-                        ? (status && !status.is_real
-                            ? "MOCK modda gerçek raster gelmez — EOSDA gerçek moda alınmalı"
-                            : "Bu tarih için görüntü indirilemedi")
-                        : "Bu tarihte kayıtlı uydu görüntüsü yok"}
+                      {status && !status.is_real
+                        ? "MOCK modda gerçek raster gelmez — EOSDA gerçek moda alınmalı"
+                        : images.length === 0
+                          ? "Bu parsel için henüz uydu görüntüsü indirilmedi — “Uydu Analizini Güncelle”ye basın (render ~1-2 dk sürer)."
+                          : "Seçili tarihten önce görüntü yok — slider'ı sağa (daha yeni tarihe) çekin."}
                     </div>
                   </div>
                 )}
