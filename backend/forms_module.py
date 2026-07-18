@@ -60,9 +60,17 @@ def register_form_routes(api_router, db, current_user, is_admin, security):
         is_active: Optional[bool] = None
     
     class FormAssign(BaseModel):
+        """#8 — form atama hedefleri. Çiftçi/kullanıcı listelerine EK olarak
+        grup (groups.py karma üyelik), rol ve "tüm kurum" hedefleri desteklenir;
+        hepsi somut farmer_id/user_id kümelerine ÇÖZÜLÜR (lms.py'nin hedef
+        çözümleyici deseniyle AYNI fikir)."""
         farmer_ids: List[str] = []
         user_ids: List[str] = []
+        group_ids: List[str] = []          # groups.py — personel + çiftçi karma
+        roles: List[str] = []              # ör. ["ziraat_muhendisi", "saha_personeli"]
+        all_staff: bool = False            # tüm kurum (çiftçi olmayan tüm kullanıcılar)
         send_notification: bool = True
+        notify_channels: List[str] = ["push"]   # Communication Hub kanalları
         due_date: Optional[str] = None
     
     class FormResponseSubmit(BaseModel):
@@ -101,9 +109,13 @@ def register_form_routes(api_router, db, current_user, is_admin, security):
         if is_admin(user):
             docs = await db.forms.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(500)
         else:
-            # Çiftçi sadece atanmış olanları görür
+            # Kullanıcı SADECE kendisine atanmışları görür — #8: atama artık
+            # çiftçiye VEYA personele (user_id) yapılabiliyor, ikisi de kapsanır.
+            or_targets = [{"user_id": user["id"]}]
+            if user.get("farmer_id"):
+                or_targets.append({"farmer_id": user["farmer_id"]})
             assignments = await db.form_assignments.find(
-                {"farmer_id": user.get("farmer_id")}, {"_id": 0}
+                {"$or": or_targets}, {"_id": 0}
             ).to_list(500)
             form_ids = [a["form_id"] for a in assignments]
             # + internal formlar
@@ -159,41 +171,106 @@ def register_form_routes(api_router, db, current_user, is_admin, security):
         form = await db.forms.find_one({"id": form_id}, {"_id": 0})
         if not form:
             raise HTTPException(404, "Form bulunamadı")
-        
-        # Atamaları kaydet
+
+        # ---- Hedefleri SOMUT farmer_id / user_id kümelerine çöz --------------
+        farmer_ids = set(body.farmer_ids or [])
+        user_ids = set(body.user_ids or [])
+
+        if body.group_ids:
+            from groups import resolve_group_recipients
+            for ctype, cid in await resolve_group_recipients(db, body.group_ids):
+                (user_ids if ctype == "personnel" else farmer_ids).add(cid)
+
+        if body.roles:
+            async for u in db.users.find({"role": {"$in": body.roles}}, {"_id": 0, "id": 1}):
+                user_ids.add(u["id"])
+
+        if body.all_staff:
+            async for u in db.users.find({"role": {"$ne": "ciftci"}}, {"_id": 0, "id": 1}):
+                user_ids.add(u["id"])
+
+        # Zaten atanmış olanları ATLA (aynı forma ikinci kez atama kopya üretmesin)
+        existing = await db.form_assignments.find({"form_id": form_id}, {"_id": 0}).to_list(5000)
+        has_farmer = {a.get("farmer_id") for a in existing if a.get("farmer_id")}
+        has_user = {a.get("user_id") for a in existing if a.get("user_id")}
+        farmer_ids -= has_farmer
+        user_ids -= has_user
+
+        now = datetime.now(timezone.utc).isoformat()
         assignments = []
-        for fid in body.farmer_ids:
-            assignments.append({
-                "id": str(uuid.uuid4()),
-                "form_id": form_id,
-                "farmer_id": fid,
-                "due_date": body.due_date,
-                "status": "atandı",
-                "assigned_by": user["id"],
-                "assigned_at": datetime.now(timezone.utc).isoformat()
-            })
+        for fid in farmer_ids:
+            assignments.append({"id": str(uuid.uuid4()), "form_id": form_id, "farmer_id": fid,
+                                "user_id": None, "due_date": body.due_date, "status": "atandı",
+                                "assigned_by": user["id"], "assigned_at": now})
+        for uid in user_ids:
+            assignments.append({"id": str(uuid.uuid4()), "form_id": form_id, "farmer_id": None,
+                                "user_id": uid, "due_date": body.due_date, "status": "atandı",
+                                "assigned_by": user["id"], "assigned_at": now})
         if assignments:
-            await db.form_assignments.insert_many(assignments)
-        
-        # Bildirim oluştur (her çiftçi için)
+            await db.form_assignments.insert_many([dict(a) for a in assignments])
+
+        # ---- Bildirim: (1) uygulama-içi zil, (2) Communication Hub kanalları ---
+        sent = 0
         if body.send_notification:
             notifs = []
-            for fid in body.farmer_ids:
-                notifs.append({
-                    "id": str(uuid.uuid4()),
-                    "type": "form_atandı",
-                    "title": f"Yeni görev: {form['title']}",
-                    "message": form.get("description", "Lütfen formu doldurun"),
-                    "channel": "push",
-                    "status": "gönderildi",
-                    "farmer_id": fid,
-                    "form_id": form_id,
-                    "created_at": datetime.now(timezone.utc).isoformat()
-                })
+            for fid in farmer_ids:
+                notifs.append({"id": str(uuid.uuid4()), "type": "form_atandı",
+                               "title": f"Yeni form: {form['title']}",
+                               "message": form.get("description") or "Lütfen formu doldurun",
+                               "channel": "push", "status": "gönderildi", "farmer_id": fid,
+                               "form_id": form_id, "created_at": now})
+            for uid in user_ids:
+                notifs.append({"id": str(uuid.uuid4()), "type": "form_atandı",
+                               "title": f"Yeni form: {form['title']}",
+                               "message": form.get("description") or "Lütfen formu doldurun",
+                               "channel": "push", "status": "gönderildi", "user_id": uid,
+                               "form_id": form_id, "created_at": now})
             if notifs:
                 await db.notifications.insert_many(notifs)
-        
-        return {"assigned": len(assignments), "notifications": len(body.farmer_ids) if body.send_notification else 0}
+
+            # Gerçek gönderim motoru (kara liste/tercih kontrolleri dahil).
+            # Şablon ZORUNLU değil — içerik doğrudan verilir.
+            try:
+                from communications import send_via_channel
+                text = (f"Size yeni bir form atandı: {form['title']}."
+                        + (f" Son tarih: {body.due_date}." if body.due_date else "")
+                        + " Mobil uygulamadan doldurabilirsiniz.")
+                for channel in (body.notify_channels or ["push"]):
+                    for fid in farmer_ids:
+                        await send_via_channel(db, channel=channel, contact_type="farmer", contact_id=fid,
+                                               content=text, subject=f"Yeni form: {form['title']}",
+                                               sent_by=f"form ataması: {form['title']}", message_kind="operational")
+                        sent += 1
+                    for uid in user_ids:
+                        await send_via_channel(db, channel=channel, contact_type="personnel", contact_id=uid,
+                                               content=text, subject=f"Yeni form: {form['title']}",
+                                               sent_by=f"form ataması: {form['title']}", message_kind="operational")
+                        sent += 1
+            except Exception:
+                pass   # bildirim bir YAN ETKİ — atama yine de geçerlidir
+
+        return {"assigned": len(assignments), "farmers": len(farmer_ids),
+                "users": len(user_ids), "messages_sent": sent}
+
+    @api_router.get("/forms/{form_id}/assignments")
+    async def list_form_assignments(form_id: str, user=Depends(current_user)):
+        """#8 — kime atandı + durum (admin görünürlüğü)."""
+        if not is_admin(user):
+            raise HTTPException(403, "Yetkiniz yok")
+        rows = await db.form_assignments.find({"form_id": form_id}, {"_id": 0}).to_list(2000)
+        fmap = {f["id"]: f for f in await db.farmers.find(
+            {"id": {"$in": [r["farmer_id"] for r in rows if r.get("farmer_id")]}},
+            {"_id": 0, "id": 1, "full_name": 1, "member_no": 1}).to_list(2000)}
+        umap = {u["id"]: u for u in await db.users.find(
+            {"id": {"$in": [r["user_id"] for r in rows if r.get("user_id")]}},
+            {"_id": 0, "id": 1, "full_name": 1, "email": 1, "role": 1}).to_list(2000)}
+        for r in rows:
+            if r.get("farmer_id"):
+                r["target_type"], r["target_name"] = "farmer", (fmap.get(r["farmer_id"], {}).get("full_name") or "—")
+            else:
+                u2 = umap.get(r.get("user_id"), {})
+                r["target_type"], r["target_name"] = "personnel", (u2.get("full_name") or u2.get("email") or "—")
+        return rows
 
     # =====================================================================
     # PUBLIC FORM (token'la erişim)
@@ -255,12 +332,15 @@ def register_form_routes(api_router, db, current_user, is_admin, security):
         }
         await db.form_responses.insert_one(doc)
         
-        # Atama varsa durumunu güncelle
+        # Atama varsa durumunu güncelle — #8: çiftçi ATAMASI veya PERSONEL ataması
+        now_iso = datetime.now(timezone.utc).isoformat()
+        or_targets = [{"user_id": user["id"]}]
         if user.get("farmer_id"):
-            await db.form_assignments.update_one(
-                {"form_id": form_id, "farmer_id": user["farmer_id"]},
-                {"$set": {"status": "tamamlandı", "completed_at": datetime.now(timezone.utc).isoformat()}}
-            )
+            or_targets.append({"farmer_id": user["farmer_id"]})
+        await db.form_assignments.update_one(
+            {"form_id": form_id, "$or": or_targets},
+            {"$set": {"status": "tamamlandı", "completed_at": now_iso}}
+        )
         
         doc.pop("_id", None)
         return {"status": "ok", "response_id": doc["id"]}

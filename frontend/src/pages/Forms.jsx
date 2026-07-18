@@ -132,6 +132,15 @@ export function FormBuilder() {
   const [farmers, setFarmers] = useState([]);
   const [showAssign, setShowAssign] = useState(false);
   const [selectedFarmers, setSelectedFarmers] = useState([]);
+  // #8 — çiftçi DIŞI hedefler: personel / grup / rol / tüm kurum
+  const [staff, setStaff] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [selectedGroups, setSelectedGroups] = useState([]);
+  const [selectedRoles, setSelectedRoles] = useState([]);
+  const [allStaff, setAllStaff] = useState(false);
+  const [dueDate, setDueDate] = useState("");
   const [searchFarmer, setSearchFarmer] = useState("");
   const [createdFormId, setCreatedFormId] = useState(null);
 
@@ -194,20 +203,37 @@ export function FormBuilder() {
   useEffect(() => {
     if (showAssign && farmers.length === 0) {
       api.get("/farmers?limit=300").then((r) => setFarmers(r.data));
+      api.get("/users").then((r) => setStaff((r.data || []).filter((u) => u.role !== "ciftci"))).catch(() => {});
+      api.get("/groups").then((r) => setGroups(r.data || [])).catch(() => {});
+      api.get("/users/roles").then((r) => setRoles(r.data?.built_in || r.data || [])).catch(() => {});
     }
   }, [showAssign]);
-  
+
+  const toggle = (list, setList, v) =>
+    setList(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+
   async function assign() {
     const formId = createdFormId || id;
     if (!formId) { alert("Önce formu kaydedin"); return; }
-    if (selectedFarmers.length === 0) { alert("En az 1 çiftçi seçin"); return; }
-    await api.post(`/forms/${formId}/assign`, {
-      farmer_ids: selectedFarmers,
-      send_notification: true
-    });
-    alert(`${selectedFarmers.length} çiftçiye atandı (bildirim gönderildi)`);
-    setShowAssign(false);
-    setSelectedFarmers([]);
+    const hasTarget = selectedFarmers.length || selectedUsers.length || selectedGroups.length || selectedRoles.length || allStaff;
+    if (!hasTarget) { alert("En az bir hedef seçin (çiftçi / personel / grup / rol / tüm kurum)"); return; }
+    try {
+      const { data } = await api.post(`/forms/${formId}/assign`, {
+        farmer_ids: selectedFarmers,
+        user_ids: selectedUsers,
+        group_ids: selectedGroups,
+        roles: selectedRoles,
+        all_staff: allStaff,
+        due_date: dueDate || null,
+        send_notification: true,
+      });
+      alert(`Atandı: ${data.assigned} kişi (${data.farmers} çiftçi, ${data.users} personel) — ${data.messages_sent} bildirim gönderildi.`);
+      setShowAssign(false);
+      setSelectedFarmers([]); setSelectedUsers([]); setSelectedGroups([]); setSelectedRoles([]);
+      setAllStaff(false); setDueDate("");
+    } catch (err) {
+      alert(err.response?.data?.detail || "Atama başarısız");
+    }
   }
 
   return (
@@ -219,9 +245,9 @@ export function FormBuilder() {
         </div>
         <div className="flex gap-2">
           <button onClick={() => nav("/formlar")} className="btn btn-ghost">İptal</button>
-          {(isEdit || createdFormId) && form.share_mode === "private" && (
-            <button onClick={() => setShowAssign(true)} className="btn btn-ghost">
-              <Send size={14}/> Çiftçilere Ata
+          {(isEdit || createdFormId) && form.share_mode !== "public" && (
+            <button onClick={() => setShowAssign(true)} className="btn btn-ghost" data-testid="open-assign">
+              <Send size={14}/> Ata (Kişi / Grup / Kurum)
             </button>
           )}
           <button onClick={save} className="btn btn-primary" data-testid="save-form-btn">
@@ -320,9 +346,64 @@ export function FormBuilder() {
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowAssign(false)}>
           <div className="card max-w-2xl w-full p-6 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display text-xl">Çiftçilere Ata</h3>
+              <h3 className="font-display text-xl">Formu Ata</h3>
               <button onClick={() => setShowAssign(false)}><X size={20}/></button>
             </div>
+
+            {/* #8 — çiftçi DIŞI hedefler: grup / rol / personel / tüm kurum */}
+            <div className="space-y-3 mb-3">
+              <div>
+                <div className="text-xs text-[var(--text-dim)] mb-1">Gruplar</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {groups.length === 0 && <span className="text-[11px] text-[var(--text-dim)]">Grup yok (İletişim Politikaları'ndan oluşturulur)</span>}
+                  {groups.map((g) => (
+                    <button key={g.id} type="button" onClick={() => toggle(selectedGroups, setSelectedGroups, g.id)}
+                            className={`btn text-[11px] ${selectedGroups.includes(g.id) ? "btn-primary" : "btn-ghost"}`}>
+                      {g.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-[var(--text-dim)] mb-1">Roller</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(roles || []).map((r) => {
+                    const key = typeof r === "string" ? r : (r.key || r.value || r.name);
+                    const label = typeof r === "string" ? r : (r.label || key);
+                    return (
+                      <button key={key} type="button" onClick={() => toggle(selectedRoles, setSelectedRoles, key)}
+                              className={`btn text-[11px] ${selectedRoles.includes(key) ? "btn-primary" : "btn-ghost"}`}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-[var(--text-dim)] mb-1">Personel</div>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto scrollbar">
+                  {staff.map((u) => (
+                    <button key={u.id} type="button" onClick={() => toggle(selectedUsers, setSelectedUsers, u.id)}
+                            className={`btn text-[11px] ${selectedUsers.includes(u.id) ? "btn-primary" : "btn-ghost"}`}>
+                      {u.full_name || u.email}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-4">
+                <label className="flex items-center gap-2 text-xs">
+                  <input type="checkbox" checked={allStaff} onChange={(e) => setAllStaff(e.target.checked)}
+                         data-testid="assign-all-staff" />
+                  Tüm kuruma ata (çiftçi olmayan tüm kullanıcılar)
+                </label>
+                <label className="flex items-center gap-2 text-xs">
+                  Son tarih:
+                  <input className="input py-1" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                </label>
+              </div>
+            </div>
+
+            <div className="text-xs text-[var(--text-dim)] mb-1 border-t border-[var(--border)] pt-2">Çiftçiler</div>
             <input className="input mb-3" placeholder="Çiftçi ara..." value={searchFarmer} onChange={(e) => setSearchFarmer(e.target.value)}/>
             <div className="flex-1 overflow-y-auto scrollbar space-y-1">
               {farmers
@@ -343,8 +424,12 @@ export function FormBuilder() {
               ))}
             </div>
             <div className="flex gap-2 mt-3">
-              <div className="flex-1 text-xs text-[var(--text-dim)] pt-2">{selectedFarmers.length} seçili</div>
-              <button onClick={() => setSelectedFarmers([])} className="btn btn-ghost text-xs">Temizle</button>
+              <div className="flex-1 text-xs text-[var(--text-dim)] pt-2">
+                {selectedFarmers.length} çiftçi · {selectedUsers.length} personel · {selectedGroups.length} grup
+                · {selectedRoles.length} rol{allStaff ? " · TÜM KURUM" : ""}
+              </div>
+              <button onClick={() => { setSelectedFarmers([]); setSelectedUsers([]); setSelectedGroups([]); setSelectedRoles([]); setAllStaff(false); }}
+                      className="btn btn-ghost text-xs">Temizle</button>
               <button onClick={assign} className="btn btn-primary" data-testid="assign-confirm">
                 <Send size={14}/> Ata & Bildir
               </button>
