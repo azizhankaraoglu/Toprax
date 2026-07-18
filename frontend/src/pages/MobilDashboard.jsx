@@ -38,7 +38,7 @@
  * kütüphanesi eklemeden AYNI güvenlik özelliğini verir — bkz. support.py
  * docstring'i).
  */
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import api from "@/api";
 import { enqueue, flush, getAll as getQueuedItems } from "@/lib/offlineQueue";
@@ -223,8 +223,67 @@ export default function MobilDashboard() {
   const [generatedCodes, setGeneratedCodes] = useState({}); // request_id -> {code, expires_at}
   const [deliveryCodeInput, setDeliveryCodeInput] = useState("");
 
+  // --- #9: mobil toprak numunesi ("Z" izi + lab akışı) ---
+  const [taskTypes, setTaskTypes] = useState([]);
+  const [soilTracking, setSoilTracking] = useState(false);
+  const [soilTrack, setSoilTrack] = useState([]);
+  const [soilDepth, setSoilDepth] = useState("");
+  const [soilNotes, setSoilNotes] = useState("");
+  const [soilResult, setSoilResult] = useState(null);
+  const [soilBusy, setSoilBusy] = useState(false);
+  const soilWatchRef = useRef(null);
+
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) || null;
   const selectedForm = forms.find((f) => f.id === selectedFormId) || null;
+  const taskTypeName = (id) => (taskTypes.find((t) => t.id === id) || {}).name || "";
+  // Görev tipi "Toprak Numunesi" ise numune akışı görünür
+  const isSoilTask = selectedTask && /toprak|numune/i.test(taskTypeName(selectedTask.task_type_id));
+
+  // GPS iz kaydı — numune alırken tarlada çizilen "Z"yi izler
+  function toggleSoilTracking() {
+    if (soilTracking) {
+      if (soilWatchRef.current != null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(soilWatchRef.current);
+      }
+      soilWatchRef.current = null;
+      setSoilTracking(false);
+      return;
+    }
+    if (!navigator.geolocation) { alert("Cihaz konum servisi desteklemiyor."); return; }
+    setSoilTrack([]);
+    setSoilResult(null);
+    soilWatchRef.current = navigator.geolocation.watchPosition(
+      (pos) => setSoilTrack((prev) => [...prev, {
+        lat: pos.coords.latitude, lng: pos.coords.longitude, t: new Date().toISOString(),
+      }]),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+    );
+    setSoilTracking(true);
+  }
+
+  async function saveSoilSample() {
+    if (!selectedTask || soilBusy) return;
+    setSoilBusy(true);
+    setSoilResult(null);
+    try {
+      if (soilTracking) toggleSoilTracking();
+      const { data } = await api.post("/soil-samples/field", {
+        parcel_id: selectedTask.parcel_id,
+        field_task_id: selectedTask.id,
+        gps_track: soilTrack,
+        depth_cm: soilDepth ? Number(soilDepth) : null,
+        notes: soilNotes || null,
+        form_response: Object.keys(formAnswers || {}).length ? formAnswers : null,
+      });
+      setSoilResult(data.track_eval || { note: "Numune kaydedildi." });
+      setSoilTrack([]); setSoilDepth(""); setSoilNotes("");
+    } catch (err) {
+      setSoilResult({ z_ok: false, note: err.response?.data?.detail || "Numune kaydedilemedi." });
+    } finally {
+      setSoilBusy(false);
+    }
+  }
 
   const refreshQueueCount = useCallback(() => {
     getQueuedItems().then((items) => setQueueCount(items.length)).catch(() => {});
@@ -257,6 +316,8 @@ export default function MobilDashboard() {
     refreshQueueCount();
     trySync();
     api.get("/forms").then((r) => setForms(r.data)).catch(() => {});
+    // #9 — görev tipi adları (Toprak Numunesi akışını tanımak için)
+    if (!isFarmer) api.get("/task-types").then((r) => setTaskTypes(r.data || [])).catch(() => {});
 
     if (isFarmer) {
       api.get("/farmer/my-dashboard").then((r) => setFarmerDashboard(r.data)).catch(() => {});
@@ -554,6 +615,45 @@ export default function MobilDashboard() {
 
               {selectedTask.status === "planlandi" && (
                 <div className="text-xs text-[var(--text-dim)]">Görev planlandı — yönetici ataması onayı bekleniyor.</div>
+              )}
+
+              {/* #9 — TOPRAK NUMUNESİ: "Z" izi + numune kaydı (lab sonucu sonra girilir) */}
+              {isSoilTask && ["yerine_ulasildi", "calisiliyor", "kabul_edildi"].includes(selectedTask.status) && (
+                <div className="rounded-lg border border-[var(--border)] p-3 space-y-2" data-testid="soil-sampling">
+                  <div className="text-xs font-medium">Toprak Numunesi ("Z" deseni)</div>
+                  <p className="text-[10px] text-[var(--text-dim)]">
+                    İz kaydını başlatıp tarlada <b>Z çizerek</b> numune alın; kapsama otomatik değerlendirilir
+                    (uyarı amaçlı, kaydı engellemez).
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button onClick={toggleSoilTracking}
+                            className={`btn ${soilTracking ? "btn-ghost text-red-400" : "btn-primary"} text-xs flex-1`}
+                            data-testid="soil-track-toggle">
+                      {soilTracking ? "İz Kaydını Durdur" : "İz Kaydını Başlat"}
+                    </button>
+                    <span className="text-[11px] text-[var(--text-dim)]" data-testid="soil-track-count">
+                      {soilTrack.length} nokta
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input className="input text-xs flex-1" type="number" step="1" placeholder="Derinlik (cm)"
+                           value={soilDepth} onChange={(e) => setSoilDepth(e.target.value)} />
+                  </div>
+                  <textarea className="input text-xs" rows={2} placeholder="Numune notu (opsiyonel)"
+                            value={soilNotes} onChange={(e) => setSoilNotes(e.target.value)} />
+                  <button onClick={saveSoilSample} disabled={soilBusy}
+                          className="btn btn-primary w-full text-xs" data-testid="soil-save">
+                    {soilBusy ? "Kaydediliyor…" : "Numuneyi Kaydet"}
+                  </button>
+                  {soilResult && (
+                    <div className={`text-[11px] p-2 rounded ${soilResult.z_ok ? "text-[var(--primary)]" : "text-amber-400"}`}>
+                      {soilResult.note}
+                      {soilResult.points != null && (
+                        <span className="text-[var(--text-dim)]"> ({soilResult.points} nokta · {soilResult.turns} dönüş · {soilResult.span_m} m)</span>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
 
               {selectedTask.status === "atandi" && (

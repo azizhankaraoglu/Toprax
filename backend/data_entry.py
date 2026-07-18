@@ -28,7 +28,7 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import HTTPException, Depends, Request
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from event_bus import publish
 
@@ -431,6 +431,143 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
             "production_cycle_id": doc.get("production_cycle_id"),
         })
         return doc
+
+    # =====================================================================
+    # #9 — MOBİL SAHA NUMUNESİ ("Z" izi) + LABORATUVAR TAKİBİ
+    # =====================================================================
+    class FieldSoilSampleCreate(BaseModel):
+        """Sahada numune ALIM anını kaydeder — laboratuvar sonuçları HENÜZ YOK
+        (ph/ec/N-P-K sonradan `PUT /soil-samples/{id}/lab` ile girilir)."""
+        parcel_id: str
+        field_task_id: Optional[str] = None
+        visit_id: Optional[str] = None
+        gps_track: List[Dict[str, Any]] = []      # [{lat, lng, t}] — numune alırken çizilen iz
+        depth_cm: Optional[float] = None
+        notes: Optional[str] = None
+        lab_name: Optional[str] = None
+        form_response: Optional[Dict[str, Any]] = None   # görev tipine bağlı M18 formu
+        production_cycle_id: Optional[str] = None
+
+    class SoilLabUpdate(BaseModel):
+        """Numunenin laboratuvar yaşam döngüsü + sonuç girişi."""
+        lab_status: Optional[str] = None          # beklemede | gonderildi | sonuclandi
+        lab_name: Optional[str] = None
+        dispatch_date: Optional[str] = None
+        return_date: Optional[str] = None
+        courier: Optional[str] = None
+        analiz_rapor_no: Optional[str] = None
+        # Lab dönünce girilen sonuçlar
+        ph: Optional[float] = None
+        ec: Optional[float] = None
+        organic_matter_pct: Optional[float] = None
+        n_ppm: Optional[int] = None
+        p_ppm: Optional[int] = None
+        k_ppm: Optional[int] = None
+        recommendation: Optional[str] = None
+
+    def _evaluate_track(track: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """GPS izinden basit 'Z deseni / kapsama' değerlendirmesi.
+        UYARICIDIR — numune kaydını ASLA bloklamaz (kullanıcı kararı, bkz. #9).
+        Sezgi: bir "Z" en az 2 belirgin yön değişimi + anlamlı bir yayılım demektir."""
+        import math
+        pts = [(p.get("lat"), p.get("lng")) for p in (track or [])
+               if p.get("lat") is not None and p.get("lng") is not None]
+        n = len(pts)
+        if n < 3:
+            return {"points": n, "turns": 0, "span_m": 0.0, "z_ok": False,
+                    "note": "Yetersiz GPS noktası — tarlada Z çizerek numune alın."}
+        lat0 = sum(p[0] for p in pts) / n
+        mx = 111320 * math.cos(math.radians(lat0))
+        my = 110540
+        xs = [p[1] * mx for p in pts]
+        ys = [p[0] * my for p in pts]
+        span = math.hypot(max(xs) - min(xs), max(ys) - min(ys))
+        turns = 0
+        for i in range(1, n - 1):
+            ax, ay = xs[i] - xs[i - 1], ys[i] - ys[i - 1]
+            bx, by = xs[i + 1] - xs[i], ys[i + 1] - ys[i]
+            na, nb = math.hypot(ax, ay), math.hypot(bx, by)
+            if na < 1 or nb < 1:
+                continue
+            cosv = max(-1.0, min(1.0, (ax * bx + ay * by) / (na * nb)))
+            if math.degrees(math.acos(cosv)) > 45:
+                turns += 1
+        z_ok = n >= 5 and turns >= 2 and span >= 20
+        note = ("Z deseni ve tarla kapsaması uygun görünüyor."
+                if z_ok else
+                "Uyarı: iz Z desenine benzemiyor (yeterli dönüş/mesafe yok) — "
+                "numune tarlayı temsil etmiyor olabilir.")
+        return {"points": n, "turns": turns, "span_m": round(span, 1), "z_ok": z_ok, "note": note}
+
+    @api_router.post("/soil-samples/field")
+    async def create_field_soil_sample(body: FieldSoilSampleCreate, request: Request,
+                                       user=Depends(current_user)):
+        """#9 — Mobilden numune alımı. Görevi üstlenen personel çağırır; lab
+        sonucu YOK, `lab_status="beklemede"` ile açılır. GPS izi + Z
+        değerlendirmesi + (varsa) bağlı form yanıtı birlikte saklanır."""
+        parcel = await db.parcels.find_one({"id": body.parcel_id}, {"_id": 0})
+        if not parcel:
+            raise HTTPException(404, "Parsel bulunamadı")
+        now = datetime.now(timezone.utc)
+        track_eval = _evaluate_track(body.gps_track)
+        doc = body.model_dump()
+        doc.update({
+            "id": str(uuid.uuid4()),
+            "date": now.strftime("%Y-%m-%d"),
+            "track_eval": track_eval,
+            "lab_status": "beklemede",
+            "sampled_by": user.get("full_name") or user.get("email"),
+            "sampled_by_id": user.get("id"),
+            "entered_by": user.get("full_name"),
+            "source": "mobil_saha",
+            "created_at": now.isoformat(),
+        })
+        if not doc.get("production_cycle_id"):
+            from production_cycles import ensure_cycle_for
+            doc["production_cycle_id"] = await ensure_cycle_for(
+                db, body.parcel_id, now.year, parcel.get("farmer_id"))
+        await db.soil_samples.insert_one(dict(doc))
+        doc.pop("_id", None)
+        await log_audit(db, user, action="create", entity="soil_sample", entity_id=doc["id"],
+                        new_value={"source": "mobil_saha", "parcel_id": body.parcel_id,
+                                   "track": track_eval}, request=request)
+        # Bağlı ziyaret varsa form yanıtını oraya da işle (Visit.form_response).
+        if body.visit_id and body.form_response:
+            await db.visits.update_one({"id": body.visit_id},
+                                       {"$set": {"form_response": body.form_response}})
+        return doc
+
+    @api_router.put("/soil-samples/{sample_id}/lab")
+    async def update_soil_lab(sample_id: str, body: SoilLabUpdate, request: Request,
+                              user=Depends(require_permission("soil:create"))):
+        """#9 — Laboratuvar gönderim/dönüş takibi + sonuç girişi. Sonuç
+        girildiğinde (`lab_status="sonuclandi"`) otomasyon event'i yayınlanır."""
+        old = await db.soil_samples.find_one({"id": sample_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Toprak numunesi bulunamadı")
+        updates = {k: v for k, v in body.model_dump().items() if v is not None}
+        if not updates:
+            raise HTTPException(400, "Güncellenecek alan yok")
+        if updates.get("lab_status") == "sonuclandi" and updates.get("ph") and not updates.get("recommendation"):
+            updates["recommendation"] = _auto_recommendation(float(updates["ph"]))
+        updates["lab_updated_by"] = user.get("full_name") or user.get("email")
+        updates["lab_updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.soil_samples.update_one({"id": sample_id}, {"$set": updates})
+        new = await db.soil_samples.find_one({"id": sample_id}, {"_id": 0})
+        await log_audit(db, user, action="lab_update", entity="soil_sample", entity_id=sample_id,
+                        old_value={"lab_status": old.get("lab_status")},
+                        new_value={k: updates.get(k) for k in
+                                   ("lab_status", "dispatch_date", "return_date", "courier", "analiz_rapor_no")},
+                        request=request)
+        # Sonuç GELDİĞİNDE analiz "tamamlanmış" sayılır → otomasyon zinciri.
+        if updates.get("lab_status") == "sonuclandi" and old.get("lab_status") != "sonuclandi":
+            parcel = await db.parcels.find_one({"id": new.get("parcel_id")}, {"_id": 0}) or {}
+            await publish(db, "soil_analysis_completed", {
+                "farmer_id": parcel.get("farmer_id"),
+                "parcel_id": new.get("parcel_id"),
+                "production_cycle_id": new.get("production_cycle_id"),
+            })
+        return new
 
     class SoilSampleAdminUpdate(BaseModel):
         date: Optional[str] = None
