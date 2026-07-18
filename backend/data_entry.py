@@ -154,6 +154,46 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         await log_audit(db, user, action="create", entity="contract", entity_id=doc["id"], new_value=doc, request=request)
         return doc
 
+    @api_router.get("/contracts/{contract_id}")
+    async def get_contract_detail(contract_id: str,
+                                  user=Depends(require_permission("contracts:view"))):
+        """Sözleşme Detay sayfasının (SON HAL — /sozlesmeler/:id) veri kaynağı.
+        ParcelDetail'in GET /parcels/{id} kalıbıyla aynı: ana kayıt + gömülü
+        farmer/parcel özetleri + bağlı ekim kayıtları + (sezon bağlıysa)
+        kantar kayıtları tek yanıtta döner."""
+        c = await db.contracts.find_one(
+            {"id": contract_id, "is_active": {"$ne": False}}, {"_id": 0})
+        if not c:
+            raise HTTPException(404, "Sözleşme bulunamadı")
+
+        farmer = None
+        if c.get("farmer_id"):
+            farmer = await db.farmers.find_one(
+                {"id": c["farmer_id"]},
+                {"_id": 0, "id": 1, "full_name": 1, "member_no": 1, "village": 1,
+                 "phone": 1, "karne_score": 1, "karne_points": 1})
+        parcel = None
+        if c.get("parcel_id"):
+            parcel = await db.parcels.find_one(
+                {"id": c["parcel_id"]},
+                {"_id": 0, "id": 1, "name": 1, "parcel_code": 1, "il": 1, "ilce": 1,
+                 "mahalle": 1, "village": 1, "ada_no": 1, "parsel_no_tapu": 1,
+                 "area_dekar": 1, "ekim_durumu": 1})
+
+        plantings = await db.plantings.find(
+            {"$or": [{"contract_id": contract_id},
+                     {"parcel_id": c.get("parcel_id"), "season": c.get("season")}],
+             "is_active": {"$ne": False}}, {"_id": 0}).to_list(100)
+
+        kantar = []
+        if c.get("production_cycle_id"):
+            kantar = await db.kantar_records.find(
+                {"production_cycle_id": c["production_cycle_id"]},
+                {"_id": 0}).sort([("weighing_at", -1)]).to_list(100)
+
+        return {**c, "farmer": farmer, "parcel": parcel,
+                "plantings": plantings, "kantar_records": kantar}
+
     @api_router.put("/contracts/{contract_id}")
     async def update_contract(contract_id: str, body: ContractUpdate, request: Request,
                                user=Depends(require_permission("contracts:edit"))):
@@ -348,6 +388,82 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         )
         await log_audit(db, user, action="soft_delete", entity="planting", entity_id=planting_id, old_value=old, request=request)
         return {"status": "deactivated"}
+
+    # ---- SON HAL — Ekim Kaydı toplu işlemleri --------------------------------
+    # POST rotaları /plantings/{id} ile ÇAKIŞMAZ (path-param'lı POST yok);
+    # kalıp: server.py'nin /parcels/bulk-delete'i (her kayıt için ayrı audit).
+    class PlantingBulkCreate(BaseModel):
+        parcel_ids: List[str]
+        season: int
+        variety: str
+        planting_date: str
+        expected_harvest_date: str
+        stage: str = "ekim"
+        crop: str = "Şeker Pancarı"
+        ekim_yontemi: Optional[str] = None
+        tohum_kaynagi: Optional[str] = None
+
+    @api_router.post("/plantings/bulk-create")
+    async def bulk_create_plantings(body: PlantingBulkCreate, request: Request,
+                                    user=Depends(require_permission("plantings:create"))):
+        """Filtreyle seçilmiş ÇOK sayıda parsele tek formda ekim kaydı açar.
+        farmer_id her parselden türetilir; parseli bulunamayan id atlanır ve
+        yanıtta raporlanır (sessiz veri kaybı yok)."""
+        if not body.parcel_ids:
+            raise HTTPException(400, "parcel_ids boş olamaz")
+        if len(body.parcel_ids) > 500:
+            raise HTTPException(400, "Tek seferde en fazla 500 parsel işlenebilir")
+
+        from production_cycles import ensure_cycle_for
+        created, skipped = [], []
+        for pid in body.parcel_ids:
+            parcel = await db.parcels.find_one(
+                {"id": pid, "is_active": {"$ne": False}}, {"_id": 0})
+            if not parcel:
+                skipped.append({"parcel_id": pid, "reason": "Parsel bulunamadı"})
+                continue
+            doc = {
+                "id": str(uuid.uuid4()), "parcel_id": pid,
+                "farmer_id": parcel.get("farmer_id"), "region_id": parcel.get("region_id"),
+                "season": body.season, "crop": body.crop, "variety": body.variety,
+                "planting_date": body.planting_date,
+                "expected_harvest_date": body.expected_harvest_date,
+                "stage": body.stage, "actual_harvest_date": None,
+                "ekim_yontemi": body.ekim_yontemi, "tohum_kaynagi": body.tohum_kaynagi,
+            }
+            doc["production_cycle_id"] = await ensure_cycle_for(db, pid, body.season, doc["farmer_id"])
+            await db.plantings.insert_one(doc)
+            doc.pop("_id", None)
+            await log_audit(db, user, action="create", entity="planting",
+                            entity_id=doc["id"], new_value=doc, request=request)
+            created.append(doc["id"])
+        return {"created_count": len(created), "created_ids": created, "skipped": skipped}
+
+    class PlantingBulkDelete(BaseModel):
+        planting_ids: List[str]
+
+    @api_router.post("/plantings/bulk-delete")
+    async def bulk_delete_plantings(body: PlantingBulkDelete, request: Request,
+                                    user=Depends(require_permission("plantings:delete"))):
+        """Seçili ekim kayıtlarını topluca pasife alır (soft delete, konvansiyon #3)."""
+        if not body.planting_ids:
+            raise HTTPException(400, "planting_ids boş olamaz")
+        deleted, skipped = [], []
+        now = datetime.now(timezone.utc).isoformat()
+        who = user.get("full_name") or user.get("email")
+        for pid in body.planting_ids:
+            old = await db.plantings.find_one(
+                {"id": pid, "is_active": {"$ne": False}}, {"_id": 0})
+            if not old:
+                skipped.append({"planting_id": pid, "reason": "Kayıt bulunamadı"})
+                continue
+            await db.plantings.update_one(
+                {"id": pid},
+                {"$set": {"is_active": False, "deleted_at": now, "deleted_by": who}})
+            await log_audit(db, user, action="soft_delete", entity="planting",
+                            entity_id=pid, old_value=old, request=request)
+            deleted.append(pid)
+        return {"deleted_count": len(deleted), "skipped": skipped}
 
     # =====================================================================
     # TOPRAK ANALİZİ (admin/mühendis girişi — çiftçi self-servisten ayrı)
@@ -644,6 +760,45 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         doc.pop("_id", None)
         await log_audit(db, user, action="create", entity="irrigation_event", entity_id=doc["id"], new_value=doc, request=request)
         return doc
+
+    # ---- SON HAL — toplu sulama kaydı (plantings/bulk-create ile AYNI kalıp) --
+    class IrrigationBulkCreate(BaseModel):
+        parcel_ids: List[str]
+        date: str
+        method: str
+        water_m3: float                              # parsel BAŞINA su miktarı
+        moisture_before: Optional[int] = None
+        moisture_after: Optional[int] = None
+
+    @api_router.post("/irrigation/events/bulk-create")
+    async def bulk_create_irrigation(body: IrrigationBulkCreate, request: Request,
+                                     user=Depends(require_permission("irrigation:create"))):
+        """Filtreyle seçilmiş ÇOK parsele tek formda sulama kaydı açar.
+        water_m3 her parsele AYNEN yazılır (parsel başına miktar)."""
+        if not body.parcel_ids:
+            raise HTTPException(400, "parcel_ids boş olamaz")
+        if len(body.parcel_ids) > 500:
+            raise HTTPException(400, "Tek seferde en fazla 500 parsel işlenebilir")
+        created, skipped = [], []
+        for pid in body.parcel_ids:
+            parcel = await db.parcels.find_one(
+                {"id": pid, "is_active": {"$ne": False}}, {"_id": 0})
+            if not parcel:
+                skipped.append({"parcel_id": pid, "reason": "Parsel bulunamadı"})
+                continue
+            doc = {
+                "id": str(uuid.uuid4()), "parcel_id": pid,
+                "farmer_id": parcel.get("farmer_id"), "region_id": parcel.get("region_id"),
+                "date": body.date, "method": body.method, "water_m3": body.water_m3,
+                "moisture_before": body.moisture_before, "moisture_after": body.moisture_after,
+                "entered_by": user.get("full_name"),
+            }
+            await db.irrigation_events.insert_one(doc)
+            doc.pop("_id", None)
+            await log_audit(db, user, action="create", entity="irrigation_event",
+                            entity_id=doc["id"], new_value=doc, request=request)
+            created.append(doc["id"])
+        return {"created_count": len(created), "created_ids": created, "skipped": skipped}
 
     class IrrigationEventAdminUpdate(BaseModel):
         date: Optional[str] = None

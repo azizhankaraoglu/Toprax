@@ -1,13 +1,87 @@
 import { useEffect, useState } from "react";
 import api from "@/api";
-import { Droplets, AlertTriangle, Waves } from "lucide-react";
+import { Droplets, AlertTriangle, Waves, Layers } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import { QuickAddPanel } from "@/components/QuickAdd";
 import RowActions from "@/components/RowActions";
+import BulkParcelSelect from "@/components/BulkParcelSelect";
 
 const METHOD_COLORS = { damla: "#4ade80", yağmurlama: "#60a5fa", karık: "#fbbf24", diğer: "#97a8a0" };
 const RISK_COLORS = { düşük: "text-[var(--primary)]", orta: "text-amber-400", yüksek: "text-red-400" };
 const METHOD_OPTS = [{ value: "damla", label: "Damla" }, { value: "yağmurlama", label: "Yağmurlama" }, { value: "karık", label: "Karık" }];
+
+// SON HAL — toplu sulama kaydı (BulkParcelSelect + /irrigation/events/bulk-create)
+function BulkIrrigationSection({ onCreated }) {
+  const [open, setOpen] = useState(false);
+  const [selIds, setSelIds] = useState([]);
+  const [form, setForm] = useState({ date: "", method: "damla", water_m3: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function submit() {
+    if (selIds.length === 0) { setMsg("Önce parsel seçin."); return; }
+    if (!form.date || !form.water_m3) { setMsg("Tarih ve su miktarı zorunlu."); return; }
+    setBusy(true); setMsg("");
+    try {
+      const { data } = await api.post("/irrigation/events/bulk-create", {
+        parcel_ids: selIds, date: form.date, method: form.method,
+        water_m3: Number(form.water_m3),
+      });
+      setMsg(`${data.created_count} sulama kaydı oluşturuldu` +
+        (data.skipped.length ? `, ${data.skipped.length} parsel atlandı.` : "."));
+      onCreated();
+    } catch (err) {
+      setMsg(err.response?.data?.detail || "Toplu kayıt başarısız.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="btn btn-ghost mb-4 ml-2" data-testid="bulk-irrigation-open">
+        <Layers size={15} /> Toplu Sulama Kaydı
+      </button>
+    );
+  }
+
+  return (
+    <div className="card p-4 mb-4 w-full" data-testid="bulk-irrigation-panel">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-display text-lg flex items-center gap-2"><Layers size={17} /> Toplu Sulama Kaydı</h3>
+        <button onClick={() => setOpen(false)} className="text-xs text-[var(--text-dim)] hover:text-white">Kapat</button>
+      </div>
+      <p className="text-xs text-[var(--text-dim)] mb-3">
+        Filtreyle parselleri seçin; her parsele girilen su miktarıyla ayrı bir sulama kaydı açılır.
+      </p>
+      <BulkParcelSelect onSelectionChange={setSelIds} testId="bulk-irrigation" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 items-end">
+        <div>
+          <label className="text-xs text-[var(--text-dim)] block mb-1">Tarih *</label>
+          <input className="input" type="date" value={form.date}
+                 onChange={(e) => setForm({ ...form, date: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-xs text-[var(--text-dim)] block mb-1">Yöntem</label>
+          <select className="input" value={form.method}
+                  onChange={(e) => setForm({ ...form, method: e.target.value })}>
+            {METHOD_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-[var(--text-dim)] block mb-1">Su / parsel (m³) *</label>
+          <input className="input" type="number" step="0.1" value={form.water_m3}
+                 onChange={(e) => setForm({ ...form, water_m3: e.target.value })} />
+        </div>
+        <button className="btn btn-primary" disabled={busy || selIds.length === 0}
+                onClick={submit} data-testid="bulk-irrigation-submit">
+          {busy ? "Kaydediliyor…" : `${selIds.length} Parsele Uygula`}
+        </button>
+      </div>
+      {msg && <div className="text-xs mt-2 text-[var(--primary)]" data-testid="bulk-irrigation-msg">{msg}</div>}
+    </div>
+  );
+}
 
 export default function Sulama() {
   const [data, setData] = useState(null);
@@ -21,7 +95,7 @@ export default function Sulama() {
   const parcelName = (pid) => { const p = parcels.find((x) => x.id === pid); return p ? `${p.parcel_code} — ${p.name}` : pid; };
   useEffect(() => {
     load();
-    api.get("/parcels", { params: { limit: 500 } }).then((r) => setParcels(r.data));
+    api.get("/parcels", { params: { limit: 2000 } }).then((r) => setParcels(r.data));
   }, []);
   if (!data) return <div className="p-10 text-[var(--text-dim)]">Yükleniyor…</div>;
 
@@ -120,29 +194,31 @@ export default function Sulama() {
         </div>
       </div>
 
-      <QuickAddPanel
-        title="Yeni Sulama Kaydı"
-        testId="irrigation-add"
-        fields={[
-          { name: "parcel_id", label: "Parsel", type: "select", required: true,
-            options: parcels.map((p) => ({ value: p.id, label: `${p.parcel_code} — ${p.name}` })) },
-          { name: "date", label: "Tarih", type: "date", required: true },
-          { name: "method", label: "Yöntem", type: "select", required: true,
-            options: [{ value: "damla", label: "Damla" }, { value: "yağmurlama", label: "Yağmurlama" }, { value: "karık", label: "Karık" }] },
-          { name: "water_m3", label: "Su Miktarı (m³)", type: "number", step: "0.1", required: true },
-          { name: "moisture_before", label: "Nem (öncesi, %)", type: "number" },
-          { name: "moisture_after", label: "Nem (sonrası, %)", type: "number" },
-        ]}
-        onSubmit={async (v) => {
-          await api.post("/irrigation/events", {
-            ...v,
-            water_m3: Number(v.water_m3),
-            moisture_before: v.moisture_before ? Number(v.moisture_before) : null,
-            moisture_after: v.moisture_after ? Number(v.moisture_after) : null,
-          });
-          load();
-        }}
-      />
+      <div className="flex items-start flex-wrap">
+        <QuickAddPanel
+          title="Yeni Sulama Kaydı"
+          testId="irrigation-add"
+          fields={[
+            { name: "parcel_id", label: "Parsel (il/ilçe/mahalle/ada/ad ile ara)", type: "parcel", required: true, span2: true },
+            { name: "date", label: "Tarih", type: "date", required: true },
+            { name: "method", label: "Yöntem", type: "select", required: true,
+              options: [{ value: "damla", label: "Damla" }, { value: "yağmurlama", label: "Yağmurlama" }, { value: "karık", label: "Karık" }] },
+            { name: "water_m3", label: "Su Miktarı (m³)", type: "number", step: "0.1", required: true },
+            { name: "moisture_before", label: "Nem (öncesi, %)", type: "number" },
+            { name: "moisture_after", label: "Nem (sonrası, %)", type: "number" },
+          ]}
+          onSubmit={async (v) => {
+            await api.post("/irrigation/events", {
+              ...v,
+              water_m3: Number(v.water_m3),
+              moisture_before: v.moisture_before ? Number(v.moisture_before) : null,
+              moisture_after: v.moisture_after ? Number(v.moisture_after) : null,
+            });
+            load();
+          }}
+        />
+        <BulkIrrigationSection onCreated={load} />
+      </div>
 
       <div className="card overflow-hidden mt-4">
         <div className="p-4 border-b border-[var(--border)]"><h3 className="font-display text-lg">Son Sulama Kayıtları</h3></div>

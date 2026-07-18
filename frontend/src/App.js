@@ -5,7 +5,6 @@ import Login from "@/pages/Login";
 import SetupWizard from "@/pages/SetupWizard";
 import Layout from "@/components/Layout";
 import Dashboard from "@/pages/Dashboard";
-import GlobalSearch from "@/pages/GlobalSearch";
 import Farmers from "@/pages/Farmers";
 import FarmerDetail from "@/pages/FarmerDetail";
 import Parcels from "@/pages/Parcels";
@@ -20,7 +19,10 @@ import Toprak from "@/pages/Toprak";
 import FarmerHome from "@/pages/FarmerHome";
 import PlatformAdmin from "@/pages/PlatformAdmin";
 import { KullaniciYonetimi, OzelRoller } from "@/pages/UserManagement";
-import { Sozlesmeler, Ekim, Lojistik, Karne, Bildirimler } from "@/pages/Other";
+import { Sozlesmeler, Lojistik, Karne, Bildirimler } from "@/pages/Other";
+import ContractDetail from "@/pages/ContractDetail";
+import EkimKaydi from "@/pages/EkimKaydi";
+import KarneDetail from "@/pages/KarneDetail";
 import { FormListesi, FormBuilder, FormDoldur, FormDashboard } from "@/pages/Forms";
 import { AlanTanimlari, LookupYonetimi } from "@/pages/FormYonetimi";
 import AdminAreaManagement from "@/pages/AdminAreaManagement";
@@ -80,7 +82,8 @@ function App() {
           <Route path="/ciftci/form/:id" element={<PrivateRoute><FormDoldur isPublic={false} /></PrivateRoute>} />
           <Route element={<PrivateRoute adminOnly={true}><Layout /></PrivateRoute>}>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/arama" element={<GlobalSearch />} />
+            {/* /arama emekli edildi — arama Dashboard'a gömüldü, eski linkler kırılmasın */}
+            <Route path="/arama" element={<Navigate to="/" replace />} />
             <Route path="/ciftciler" element={<Farmers />} />
             <Route path="/ciftciler/:id" element={<FarmerDetail />} />
             <Route path="/parseller" element={<Parcels />} />
@@ -88,13 +91,15 @@ function App() {
             <Route path="/harita-paneli" element={<HaritaPaneli />} />
             <Route path="/uretim-sezonlari/:id" element={<ProductionCycleDetail />} />
             <Route path="/sozlesmeler" element={<Sozlesmeler />} />
-            <Route path="/ekim" element={<Ekim />} />
+            <Route path="/sozlesmeler/:id" element={<ContractDetail />} />
+            <Route path="/ekim" element={<EkimKaydi />} />
             <Route path="/toprak" element={<Toprak />} />
             <Route path="/sulama" element={<Sulama />} />
             <Route path="/operasyon" element={<Operasyon />} />
             <Route path="/verimlilik" element={<Verimlilik />} />
             <Route path="/lojistik" element={<Lojistik />} />
             <Route path="/karne" element={<Karne />} />
+            <Route path="/karne/:farmerId" element={<KarneDetail />} />
             <Route path="/bildirimler" element={<Bildirimler />} />
             <Route path="/uydu" element={<UyduGorunutu />} />
             <Route path="/uzaktan-algilama" element={<RemoteSensing />} />

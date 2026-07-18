@@ -7,6 +7,7 @@ import api from "@/api";
 import { Search, UserPlus, Phone, X } from "lucide-react";
 import DynamicFieldsSection from "@/components/DynamicFieldsSection";
 import FilterPanel from "@/components/FilterPanel";
+import AiAssistantBox from "@/components/AiAssistantBox";
 
 export default function Farmers() {
   const nav = useNavigate();
@@ -87,6 +88,13 @@ export default function Farmers() {
         </div>
       </div>
 
+      {/* SON HAL — AI asistanı artık Çiftçiler'de de (Harita Paneli emsali) */}
+      <div className="mb-4 flex">
+        <AiAssistantBox module="farmers" onResults={(items) => setFarmers(items)}
+                        placeholder='Örn: "Konya bölgesindeki A karneli 10 çiftçiyi göster"'
+                        testId="farmers-ai" />
+      </div>
+
       <FilterPanel module="farmers" onResults={(items) => setFarmers(items)} />
 
       <div className="card overflow-hidden">
@@ -105,7 +113,13 @@ export default function Farmers() {
                 <td className="p-4 font-medium">{f.full_name}</td>
                 <td className="p-4">{f.village}</td>
                 <td className="p-4 text-[var(--text-dim)] flex items-center gap-2"><Phone size={12}/>{f.phone}</td>
-                <td className="p-4"><span className={`badge badge-${f.karne_score.toLowerCase()}`}>{f.karne_score} · {f.karne_points}</span></td>
+                {/* SON HAL — karne rozeti "neden bu skor?" sayfasına gider */}
+                <td className="p-4" onClick={(e) => { e.stopPropagation(); nav(`/karne/${f.id}`); }}>
+                  <span className={`badge badge-${f.karne_score.toLowerCase()} cursor-pointer`}
+                        title="Karne analizini aç" data-testid={`karne-badge-${f.member_no}`}>
+                    {f.karne_score} · {f.karne_points}
+                  </span>
+                </td>
                 <td className="p-4 text-[var(--text-dim)]">{f.membership_year}</td>
                 <td className="p-4"><span className={`badge ${f.status === "aktif" ? "badge-a" : "badge-neutral"}`}>{f.status}</span></td>
               </tr>

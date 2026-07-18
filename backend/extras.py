@@ -177,6 +177,9 @@ def register_extra_routes(api_router, db, current_user, is_admin, require_featur
 
     class CopilotQuery(BaseModel):
         query: str
+        # SON HAL — AI asistanı artık Çiftçiler sayfasında da var: "parcels"
+        # (varsayılan, geriye uyumlu) veya "farmers".
+        module: str = "parcels"
 
     COPILOT_SCHEMA_PROMPT = """Sen bir tarım veritabanı sorgu asistanısın. Kullanıcının Türkçe
 doğal dil sorgusunu, aşağıdaki alanlara sahip bir "parcels" koleksiyonu için
@@ -211,6 +214,48 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
         return ai.generate_text(system_prompt, user_text)
 
     REGION_NAMES = ["Konya", "Eskişehir", "Kayseri", "Erzurum", "Afyon", "Çorum", "Ankara", "Yozgat"]
+
+    # ---- SON HAL — Çiftçi (farmers) modülü için AI şeması + fallback --------
+    COPILOT_FARMERS_PROMPT = """Sen bir tarım veritabanı sorgu asistanısın. Kullanıcının Türkçe
+doğal dil sorgusunu, aşağıdaki alanlara sahip bir "farmers" (çiftçi) koleksiyonu
+için SADECE JSON formatında bir filtreye çevir. Başka açıklama/markdown ekleme.
+
+Alanlar:
+- region_name: string (Konya, Eskişehir, Kayseri, Erzurum, Afyon, Çorum, Ankara, Yozgat)
+- village: string (köy adı, biliyorsan)
+- karne_score: "A" | "B" | "C" | "D" listesi (örn. "iyi çiftçiler" = ["A"], "kötü karne" = ["C","D"])
+- full_name_contains: string (isimle arama)
+- sort_by: "karne_score" | "membership_year" (varsayılan: karne_score)
+- sort_dir: "asc" | "desc" (A en iyi olduğundan "en iyiler" için "asc")
+- limit: sayı (varsayılan 20)
+- summary: kullanıcıya gösterilecek KISA (1 cümle) Türkçe özet
+
+Sadece anlamlı alanları dahil et.
+Örnek: {"region_name": "Konya", "karne_score": ["A"], "sort_by": "karne_score", "sort_dir": "asc", "limit": 10, "summary": "Konya bölgesindeki A karneli 10 çiftçi"}
+"""
+
+    def _rule_based_parse_farmers(query: str) -> dict:
+        """AI yapılandırılmamışken çiftçi sorguları için anahtar-kelime fallback'i
+        (_rule_based_parse'ın farmers karşılığı — aynı dürüstlük deseni)."""
+        q = query.lower()
+        spec: Dict[str, Any] = {}
+        if "çumra" in q:
+            spec["region_name"] = "Konya"
+        else:
+            for r in REGION_NAMES:
+                if r.lower() in q:
+                    spec["region_name"] = r
+                    break
+        if any(w in q for w in ["a karne", "en iyi", "başarılı", "yüksek karne"]):
+            spec["karne_score"] = ["A"]
+            spec["sort_by"], spec["sort_dir"] = "karne_score", "asc"
+        elif any(w in q for w in ["kötü", "düşük karne", "d karne", "geliştirme", "zayıf"]):
+            spec["karne_score"] = ["C", "D"]
+            spec["sort_by"], spec["sort_dir"] = "karne_score", "desc"
+        m = re.search(r"(\d+)\s*(çiftçi|kişi|tane|adet)?", q)
+        spec["limit"] = min(int(m.group(1)), 200) if m else 20
+        spec["summary"] = f"“{query}” sorgusu anahtar kelime eşleştirmeyle yorumlandı (AI servisi yapılandırılmamış)."
+        return spec
 
     def _rule_based_parse(query: str) -> dict:
         """
@@ -269,9 +314,13 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
         from integrations import get_ai_service_config
         ai_cfg = await get_ai_service_config(db)
 
+        module = body.module if body.module in ("parcels", "farmers") else "parcels"
+        schema_prompt = COPILOT_FARMERS_PROMPT if module == "farmers" else COPILOT_SCHEMA_PROMPT
+        fallback = _rule_based_parse_farmers if module == "farmers" else _rule_based_parse
+
         if ai_cfg:
             await _check_ai_limit(user, "copilot")
-            raw = await _call_ai_text(ai_cfg, COPILOT_SCHEMA_PROMPT, body.query)
+            raw = await _call_ai_text(ai_cfg, schema_prompt, body.query)
             # AI bazen JSON'u ```json ... ``` bloğu içinde döner — temizle
             cleaned = raw.strip()
             if cleaned.startswith("```"):
@@ -282,10 +331,10 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
                 filt_spec = json.loads(cleaned.strip())
             except json.JSONDecodeError:
                 # AI geçerli JSON üretemedi — fallback'e düş (sert hata vermek yerine)
-                filt_spec = _rule_based_parse(body.query)
+                filt_spec = fallback(body.query)
                 filt_spec["summary"] = "AI yanıtı ayrıştırılamadı, anahtar kelime eşleştirmesine geçildi. " + filt_spec["summary"]
         else:
-            filt_spec = _rule_based_parse(body.query)
+            filt_spec = fallback(body.query)
 
         # AI'nin ürettiği filtreyi GÜVENLİ şekilde Query Engine'in (IT-08)
         # filter DSL'ine çevir — AI'nin ürettiği metni doğrudan sorguya
@@ -302,39 +351,57 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
                 filters.append({"field": "region_id", "operator": "eq", "value": region["id"]})
         if filt_spec.get("village"):
             filters.append({"field": "village", "operator": "eq", "value": filt_spec["village"]})
-        if filt_spec.get("risk_level"):
-            rl = filt_spec["risk_level"]
-            filters.append({"field": "risk_level", "operator": "in", "value": rl if isinstance(rl, list) else [rl]})
-        if filt_spec.get("soil_type"):
-            filters.append({"field": "soil_type", "operator": "eq", "value": filt_spec["soil_type"]})
-        if filt_spec.get("irrigation"):
-            filters.append({"field": "irrigation", "operator": "eq", "value": filt_spec["irrigation"]})
-        if "min_ndvi" in filt_spec and "max_ndvi" in filt_spec:
-            filters.append({"field": "ndvi_latest", "operator": "between",
-                             "value": [float(filt_spec["min_ndvi"]), float(filt_spec["max_ndvi"])]})
-        elif "min_ndvi" in filt_spec:
-            filters.append({"field": "ndvi_latest", "operator": "gte", "value": float(filt_spec["min_ndvi"])})
-        elif "max_ndvi" in filt_spec:
-            filters.append({"field": "ndvi_latest", "operator": "lte", "value": float(filt_spec["max_ndvi"])})
 
-        sort_field_map = {"risk": "ndvi_latest", "ndvi": "ndvi_latest", "area_dekar": "area_dekar",
-                           "expected_yield_ton": "expected_yield_ton"}
-        sort_field = sort_field_map.get(filt_spec.get("sort_by"), "ndvi_latest")
+        if module == "farmers":
+            if filt_spec.get("karne_score"):
+                ks = filt_spec["karne_score"]
+                filters.append({"field": "karne_score", "operator": "in",
+                                "value": ks if isinstance(ks, list) else [ks]})
+            if filt_spec.get("full_name_contains"):
+                filters.append({"field": "full_name", "operator": "contains",
+                                "value": filt_spec["full_name_contains"]})
+            sort_field = "membership_year" if filt_spec.get("sort_by") == "membership_year" else "karne_score"
+        else:
+            if filt_spec.get("risk_level"):
+                rl = filt_spec["risk_level"]
+                filters.append({"field": "risk_level", "operator": "in", "value": rl if isinstance(rl, list) else [rl]})
+            if filt_spec.get("soil_type"):
+                filters.append({"field": "soil_type", "operator": "eq", "value": filt_spec["soil_type"]})
+            if filt_spec.get("irrigation"):
+                filters.append({"field": "irrigation", "operator": "eq", "value": filt_spec["irrigation"]})
+            if "min_ndvi" in filt_spec and "max_ndvi" in filt_spec:
+                filters.append({"field": "ndvi_latest", "operator": "between",
+                                 "value": [float(filt_spec["min_ndvi"]), float(filt_spec["max_ndvi"])]})
+            elif "min_ndvi" in filt_spec:
+                filters.append({"field": "ndvi_latest", "operator": "gte", "value": float(filt_spec["min_ndvi"])})
+            elif "max_ndvi" in filt_spec:
+                filters.append({"field": "ndvi_latest", "operator": "lte", "value": float(filt_spec["max_ndvi"])})
+
+            sort_field_map = {"risk": "ndvi_latest", "ndvi": "ndvi_latest", "area_dekar": "area_dekar",
+                               "expected_yield_ton": "expected_yield_ton"}
+            sort_field = sort_field_map.get(filt_spec.get("sort_by"), "ndvi_latest")
+
         sort_dir = "desc" if filt_spec.get("sort_dir") == "desc" else "asc"
         limit = min(int(filt_spec.get("limit", 20)), 200)
 
-        result = await execute_query(db, "parcels", user, filters, logic="AND",
+        # execute_query modülün kendi iznini (parcels:view / farmers:view) uygular.
+        result = await execute_query(db, module, user, filters, logic="AND",
                                       sort_by=sort_field, sort_dir=sort_dir, page=1, page_size=limit)
         results = result["items"]
 
-        return {
+        entity_label = "çiftçi" if module == "farmers" else "parsel"
+        out = {
             "query": body.query,
+            "module": module,
             "interpreted_filter": filt_spec,
-            "summary": filt_spec.get("summary", f"{len(results)} parsel bulundu."),
+            "summary": filt_spec.get("summary", f"{len(results)} {entity_label} bulundu."),
             "result_count": len(results),
-            "parcels": results,
+            "items": results,
             "ai_powered": bool(ai_cfg),
         }
+        if module == "parcels":
+            out["parcels"] = results          # geriye uyumluluk (HaritaPaneli/AICopilot)
+        return out
 
     # =====================================================================
     # AUDIT LOG — Sistem aktivite kaydı

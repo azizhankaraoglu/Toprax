@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "@/api";
 import {
   Users, Map as MapIcon, FileText, TrendingUp, Wheat, Target,
-  ArrowUpRight, AlertTriangle, Satellite, Radio, Plane
+  ArrowUpRight, AlertTriangle, Satellite, Radio, Plane, Search, Sprout, X
 } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, CartesianGrid, Legend
 } from "recharts";
+import { moduleDetailPath } from "@/lib/moduleRoutes";
 
 const fmt = (n) => new Intl.NumberFormat("tr-TR").format(n);
 
@@ -50,6 +51,117 @@ function KPI({ icon: Icon, label, value, suffix, delta, accent, to }) {
 
 const KARNE_COLORS = { A: "#FF8C00", B: "#3B82F6", C: "#F59E0B", D: "#EF4444" };
 
+// Gömülü global arama (eski GlobalSearch.jsx sayfasının yerine — /arama
+// kaldırıldı, arama artık dashboard'un doğal parçası). Backend aynı:
+// GET /search?q= (query_engine.py), izin olmayan modüller sessizce atlanır.
+const SEARCH_MODULE_META = {
+  farmers: { label: "Çiftçiler", icon: Users },
+  parcels: { label: "Parseller", icon: MapIcon },
+  contracts: { label: "Sözleşmeler", icon: FileText },
+  production_cycles: { label: "Üretim Sezonları", icon: Sprout },
+};
+
+function searchRowLabel(module, item) {
+  if (module === "farmers") return item.full_name;
+  if (module === "parcels") return item.name;
+  if (module === "contracts") return `${item.crop} — ${item.variety} (${item.season})`;
+  if (module === "production_cycles") return `${item.crop} — ${item.year} ${item.season}`;
+  return item.id;
+}
+
+function searchRowSubtitle(module, item) {
+  if (module === "farmers") return `${item.member_no || ""} · ${item.village || ""}`.trim();
+  if (module === "parcels") return item.village || "";
+  return item.status || "";
+}
+
+function DashboardSearch() {
+  const nav = useNavigate();
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState(null);          // null = arama pasif
+  const [loading, setLoading] = useState(false);
+  const timer = useRef(null);
+
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
+    if (q.trim().length < 2) { setResults(null); setLoading(false); return; }
+    setLoading(true);
+    timer.current = setTimeout(() => {
+      api.get("/search", { params: { q: q.trim() } })
+        .then((r) => setResults(r.data.results))
+        .catch(() => setResults({}))
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => timer.current && clearTimeout(timer.current);
+  }, [q]);
+
+  const moduleKeys = results ? Object.keys(results) : [];
+
+  return (
+    <div className="mb-6" data-testid="dashboard-search">
+      <div className="card p-4">
+        <div className="relative">
+          <Search size={16} className="absolute left-4 top-3.5 text-[var(--text-dim)]" />
+          <input
+            data-testid="dashboard-search-input"
+            className="input pl-11 pr-10"
+            placeholder="Çiftçi, parsel, sözleşme, üretim sezonu ara… (en az 2 karakter)"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          {q && (
+            <button
+              type="button"
+              onClick={() => setQ("")}
+              className="absolute right-3 top-3 text-[var(--text-dim)] hover:text-white"
+              data-testid="dashboard-search-clear"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {loading && <div className="text-[var(--text-dim)] text-sm mt-3">Aranıyor…</div>}
+
+      {!loading && results && moduleKeys.length === 0 && (
+        <div className="text-[var(--text-dim)] text-sm mt-3">Sonuç bulunamadı.</div>
+      )}
+
+      {!loading && moduleKeys.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4" data-testid="dashboard-search-results">
+          {moduleKeys.map((module) => {
+            const meta = SEARCH_MODULE_META[module];
+            const group = results[module];
+            if (!meta || !group) return null;
+            const Icon = meta.icon;
+            return (
+              <div key={module} className="card p-4">
+                <div className="flex items-center gap-2 text-sm font-medium mb-3">
+                  <Icon size={15} /> {meta.label}
+                  <span className="text-[var(--text-dim)] font-normal">({group.total})</span>
+                </div>
+                <div className="space-y-1">
+                  {group.items.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => { const p = moduleDetailPath(module, item); if (p) nav(p); }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] flex items-center justify-between"
+                    >
+                      <span>{searchRowLabel(module, item)}</span>
+                      <span className="text-xs text-[var(--text-dim)]">{searchRowSubtitle(module, item)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
 
@@ -74,6 +186,8 @@ export default function Dashboard() {
           <span className="pulse-dot"/> Canlı veri
         </div>
       </header>
+
+      <DashboardSearch />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPI icon={Users} label="Sözleşmeli Çiftçi" value={fmt(k.farmers_total)} to="/ciftciler" />

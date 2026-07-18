@@ -1,8 +1,10 @@
+import { useState } from "react";
 import api from "@/api";
-import { Tractor, Users2, ListChecks, Wrench } from "lucide-react";
+import { Tractor, Users2, ListChecks, Wrench, Layers } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { QuickAddPanel } from "@/components/QuickAdd";
 import RowActions from "@/components/RowActions";
+import BulkParcelSelect from "@/components/BulkParcelSelect";
 import { useFetch } from "@/hooks/use-fetch";
 
 const TASK_STATUS_OPTS = [
@@ -12,6 +14,79 @@ const TASK_STATUS_OPTS = [
 const MACHINE_STATUS_OPTS = [
   { value: "aktif", label: "Aktif" }, { value: "bakım", label: "Bakım" }, { value: "boşta", label: "Boşta" },
 ];
+const TASK_TYPES = ["toprak işleme", "ekim", "gübreleme", "ilaçlama", "sulama", "hasat", "nakliye"];
+
+// SON HAL — toplu görev: seçili her parsel için mevcut POST /operations/tasks
+// tekrarlanır (IT-15'in HaritaPaneli toplu görev emsali — yeni endpoint YOK).
+function BulkTaskSection({ onCreated }) {
+  const [open, setOpen] = useState(false);
+  const [selIds, setSelIds] = useState([]);
+  const [form, setForm] = useState({ task_type: "toprak işleme", scheduled_date: "", notes: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function submit() {
+    if (selIds.length === 0) { setMsg("Önce parsel seçin."); return; }
+    if (!form.scheduled_date) { setMsg("Planlanan tarih zorunlu."); return; }
+    setBusy(true); setMsg("");
+    let ok = 0, fail = 0;
+    for (const pid of selIds) {
+      try {
+        await api.post("/operations/tasks", {
+          task_type: form.task_type, parcel_id: pid,
+          scheduled_date: new Date(form.scheduled_date).toISOString(),
+          notes: form.notes || null, machine_id: null, worker_id: null,
+        });
+        ok += 1;
+      } catch { fail += 1; }
+    }
+    setMsg(`${ok} görev oluşturuldu${fail ? `, ${fail} başarısız` : ""}.`);
+    setBusy(false);
+    onCreated();
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="btn btn-ghost mb-4 ml-2" data-testid="bulk-task-open">
+        <Layers size={15} /> Toplu Görev
+      </button>
+    );
+  }
+
+  return (
+    <div className="card p-4 mb-4 w-full" data-testid="bulk-task-panel">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-display text-lg flex items-center gap-2"><Layers size={17} /> Toplu Görev Oluştur</h3>
+        <button onClick={() => setOpen(false)} className="text-xs text-[var(--text-dim)] hover:text-white">Kapat</button>
+      </div>
+      <BulkParcelSelect onSelectionChange={setSelIds} testId="bulk-task" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 items-end">
+        <div>
+          <label className="text-xs text-[var(--text-dim)] block mb-1">Görev Tipi</label>
+          <select className="input" value={form.task_type}
+                  onChange={(e) => setForm({ ...form, task_type: e.target.value })}>
+            {TASK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-[var(--text-dim)] block mb-1">Planlanan Tarih *</label>
+          <input className="input" type="date" value={form.scheduled_date}
+                 onChange={(e) => setForm({ ...form, scheduled_date: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-xs text-[var(--text-dim)] block mb-1">Not</label>
+          <input className="input" value={form.notes}
+                 onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+        </div>
+        <button className="btn btn-primary" disabled={busy || selIds.length === 0}
+                onClick={submit} data-testid="bulk-task-submit">
+          {busy ? "Oluşturuluyor…" : `${selIds.length} Parsele Görev Aç`}
+        </button>
+      </div>
+      {msg && <div className="text-xs mt-2 text-[var(--primary)]" data-testid="bulk-task-msg">{msg}</div>}
+    </div>
+  );
+}
 
 // Refactoring notu (2026-07-11): 6 bagimsiz useState+useEffect+api.get
 // kalibi useFetch hook'una tasindi (bkz. hooks/use-fetch.js) -- DAVRANIS
@@ -22,14 +97,14 @@ export default function Operasyon() {
   const tasksQ = useFetch("/operations/tasks", { initialData: [] });
   const machinesQ = useFetch("/operations/machines", { initialData: [] });
   const workersQ = useFetch("/operations/workers", { initialData: [] });
-  const parcelsQ = useFetch("/parcels", { params: { limit: 500 }, initialData: [] });
+  // (SON HAL) parcels fetch'i kaldırıldı — parsel seçimi artık ParcelPicker
+  // ile sunucu taraflı aramadan geliyor, 500 kayıtlık select listesi gerekmiyor.
   const regionsQ = useFetch("/regions", { initialData: [] });
 
   const summary = summaryQ.data;
   const tasks = tasksQ.data;
   const machines = machinesQ.data;
   const workers = workersQ.data;
-  const parcels = parcelsQ.data;
   const regions = regionsQ.data;
 
   const loadAll = () => {
@@ -113,32 +188,34 @@ export default function Operasyon() {
         </div>
       </div>
 
-      {/* GÖREV EKLE */}
-      <QuickAddPanel
-        title="Yeni Görev"
-        testId="task-add"
-        fields={[
-          { name: "task_type", label: "Görev Tipi", type: "select", required: true,
-            options: ["toprak işleme", "ekim", "gübreleme", "ilaçlama", "sulama", "hasat", "nakliye"].map((t) => ({ value: t, label: t })) },
-          { name: "parcel_id", label: "Parsel", type: "select", required: true,
-            options: parcels.map((p) => ({ value: p.id, label: `${p.parcel_code} — ${p.name}` })) },
-          { name: "scheduled_date", label: "Planlanan Tarih", type: "date", required: true },
-          { name: "machine_id", label: "Makine (opsiyonel)", type: "select",
-            options: machines.map((m) => ({ value: m.id, label: `${m.type} — ${m.model}` })) },
-          { name: "worker_id", label: "İşçi (opsiyonel)", type: "select",
-            options: workers.map((w) => ({ value: w.id, label: w.full_name })) },
-          { name: "notes", label: "Notlar", type: "textarea", span2: true },
-        ]}
-        onSubmit={async (v) => {
-          await api.post("/operations/tasks", {
-            ...v,
-            scheduled_date: new Date(v.scheduled_date).toISOString(),
-            machine_id: v.machine_id || null,
-            worker_id: v.worker_id || null,
-          });
-          loadAll();
-        }}
-      />
+      {/* GÖREV EKLE — SON HAL: parsel artık aranabilir ParcelPicker ile */}
+      <div className="flex items-start flex-wrap">
+        <QuickAddPanel
+          title="Yeni Görev"
+          testId="task-add"
+          fields={[
+            { name: "task_type", label: "Görev Tipi", type: "select", required: true,
+              options: TASK_TYPES.map((t) => ({ value: t, label: t })) },
+            { name: "parcel_id", label: "Parsel (il/ilçe/mahalle/ada/ad ile ara)", type: "parcel", required: true },
+            { name: "scheduled_date", label: "Planlanan Tarih", type: "date", required: true },
+            { name: "machine_id", label: "Makine (opsiyonel)", type: "select",
+              options: machines.map((m) => ({ value: m.id, label: `${m.type} — ${m.model}` })) },
+            { name: "worker_id", label: "İşçi (opsiyonel)", type: "select",
+              options: workers.map((w) => ({ value: w.id, label: w.full_name })) },
+            { name: "notes", label: "Notlar", type: "textarea", span2: true },
+          ]}
+          onSubmit={async (v) => {
+            await api.post("/operations/tasks", {
+              ...v,
+              scheduled_date: new Date(v.scheduled_date).toISOString(),
+              machine_id: v.machine_id || null,
+              worker_id: v.worker_id || null,
+            });
+            loadAll();
+          }}
+        />
+        <BulkTaskSection onCreated={loadAll} />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div className="card overflow-hidden">

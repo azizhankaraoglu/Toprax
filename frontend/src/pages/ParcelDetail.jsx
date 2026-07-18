@@ -134,7 +134,7 @@ export default function ParcelDetail() {
 
   if (!data) return <div className="p-10 text-[var(--text-dim)]">Yükleniyor…</div>;
 
-  const { parcel, farmer, plantings, soil_samples, irrigation_events, yields, tasks, iot_sensors = [], drone_missions = [] } = data;
+  const { parcel, farmer, plantings, soil_samples, irrigation_events, yields, tasks, iot_sensors = [], drone_missions = [], contracts = [] } = data;
   const centerLat = parcel.geometry?.coordinates[0][0][1] || 39.5;
   const centerLng = parcel.geometry?.coordinates[0][0][0] || 33.5;
   const riskColor = RISK_COLORS[parcel.risk_level] || "#4ade80";
@@ -539,6 +539,45 @@ export default function ParcelDetail() {
                 {irrigation_events.length === 0 && <tr><td colSpan="4" className="p-6 text-center text-[var(--text-dim)]">Sulama kaydı yok</td></tr>}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* SÖZLEŞMELER — SON HAL: parsel→sözleşme çapraz navigasyon */}
+        <div className="card overflow-hidden" data-testid="parcel-contracts-card">
+          <div className="p-4 border-b border-[var(--border)] flex items-center gap-2">
+            <Award size={16} className="text-[var(--primary)]"/>
+            <h3 className="font-display text-lg">Sözleşmeler ({contracts.length})</h3>
+          </div>
+          <div className="max-h-[280px] overflow-y-auto scrollbar">
+            {contracts.length === 0 ? (
+              <p className="p-4 text-sm text-[var(--text-dim)]">Bu parsele bağlı sözleşme yok.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-[var(--surface-2)] sticky top-0">
+                  <tr className="text-left text-[11px] text-[var(--text-dim)] uppercase tracking-wider">
+                    <th className="p-2.5">No</th><th className="p-2.5">Sezon</th>
+                    <th className="p-2.5">Kota (ton)</th><th className="p-2.5">Durum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contracts.map((c) => (
+                    <tr key={c.id}
+                        className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] cursor-pointer"
+                        onClick={() => nav(`/sozlesmeler/${c.id}`)}
+                        title="Sözleşme detayına git" data-testid="parcel-contract-row">
+                      <td className="p-2.5 font-mono text-xs">{c.contract_no}</td>
+                      <td className="p-2.5">{c.season}</td>
+                      <td className="p-2.5">{c.kota_ton}</td>
+                      <td className="p-2.5">
+                        <span className={`badge ${c.status === "imzalı" ? "badge-a" : c.status === "onay_bekliyor" ? "badge-d" : "badge-c"}`}>
+                          {c.status === "onay_bekliyor" ? "onay bekliyor" : c.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 

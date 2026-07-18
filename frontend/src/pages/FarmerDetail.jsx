@@ -174,12 +174,16 @@ export default function FarmerDetail() {
           </div>
         </div>
 
-        {/* Karne kartı */}
-        <div className="text-center bg-[var(--surface-2)] rounded-xl p-4">
+        {/* Karne kartı — SON HAL: tıklanınca "neden bu skor?" analiz sayfası */}
+        <div className="text-center bg-[var(--surface-2)] rounded-xl p-4 cursor-pointer hover:bg-[var(--surface)] transition-colors"
+             role="button" tabIndex={0} title="Karne analizini aç — neden bu skor?"
+             data-testid="farmer-karne-card"
+             onClick={() => nav(`/karne/${farmer.id}`)}
+             onKeyDown={(e) => { if (e.key === "Enter") nav(`/karne/${farmer.id}`); }}>
           <div className="text-[10px] text-[var(--text-dim)] tracking-widest uppercase mb-2">KARNE SKORU</div>
           <div className={`badge badge-${farmer.karne_score.toLowerCase()} text-base px-4 py-1`}>{farmer.karne_score}</div>
           <div className="font-display text-3xl mt-2">{farmer.karne_points}</div>
-          <div className="text-[10px] text-[var(--text-dim)]">/ 100 puan</div>
+          <div className="text-[10px] text-[var(--text-dim)]">/ 100 puan · nedenini gör →</div>
         </div>
 
         {/* Finansal bakiye */}
@@ -462,7 +466,10 @@ export default function FarmerDetail() {
               </tr></thead>
               <tbody>
                 {contracts.map((c) => (
-                  <tr key={c.id} className="border-b border-[var(--border)]">
+                  <tr key={c.id}
+                      className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] cursor-pointer"
+                      onClick={() => nav(`/sozlesmeler/${c.id}`)}
+                      title="Sözleşme detayına git" data-testid="farmer-contract-row">
                     <td className="p-3 font-mono text-xs">{c.contract_no}</td>
                     <td className="p-3">{c.season}</td>
                     <td className="p-3">{c.variety}</td>

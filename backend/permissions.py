@@ -91,6 +91,15 @@ PERMISSION_CATALOG = {
             {"key": "plantings:delete", "label": "Sil"},
         ],
     },
+    # SON HAL — Karne Puanlama Motoru (karne_engine.py). Breakdown görüntüleme
+    # farmers:view ile serbest; recompute + ağırlık değiştirme TÜM çiftçilerin
+    # görünür skorunu etkilediği için ayrı `karne:manage` iznine bağlı.
+    "karne": {
+        "label": "Karne Puanlama Motoru",
+        "permissions": [
+            {"key": "karne:manage", "label": "Yeniden hesapla / ağırlıkları yönet"},
+        ],
+    },
     # #10 — Ekim Planlama Karar Motoru (agronomy.py). `rules_manage`
     # bilgi/prompt kütüphanesini değiştirir (tüm analizlerin sonucunu
     # etkiler) — bu yüzden analizden AYRI bir izin.
@@ -367,6 +376,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "contracts:view", "contracts:create", "contracts:edit", "contracts:delete",
         "plantings:view", "plantings:create", "plantings:edit", "plantings:delete",
         "agronomy:analyze", "agronomy:rules_manage",
+        "karne:manage",
         "soil:view", "soil:create", "soil:edit", "soil:delete",
         "irrigation:view", "irrigation:create", "irrigation:edit", "irrigation:delete",
         "operations:view", "operations:machines_manage", "operations:workers_manage", "operations:tasks_manage",

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "@/api";
 import { QuickAddPanel } from "@/components/QuickAdd";
 import RowActions from "@/components/RowActions";
@@ -59,10 +60,6 @@ function SeasonParamsPanel({ season }) {
 const STATUS_OPTS = [
   { value: "taslak", label: "Taslak" }, { value: "imzalı", label: "İmzalı" }, { value: "iptal", label: "İptal" },
 ];
-const STAGE_OPTS = [
-  { value: "ekim", label: "Ekim" }, { value: "gelişim", label: "Gelişim" },
-  { value: "olgunlaşma", label: "Olgunlaşma" }, { value: "hasat", label: "Hasat" },
-];
 
 // Refactoring notu (2026-07-11): bu dosyadaki 6 bileşenin her biri ayrı
 // ayrı useState+useEffect+api.get tekrarlıyordu — useFetch hook'una
@@ -70,10 +67,12 @@ const STAGE_OPTS = [
 // fetch, mutasyon sonrası ilgili reload() çağrılır (öncekiyle birebir).
 
 export function Sozlesmeler() {
+  const nav = useNavigate();
   const contractsQ = useFetch("/contracts", { params: { season: 2025 }, initialData: [] });
   const parcelsQ = useFetch("/parcels", { params: { limit: 500 }, initialData: [] });
   const contracts = contractsQ.data;
   const parcels = parcelsQ.data;
+  const parcelsById = new Map(parcels.map((p) => [p.id, p]));
 
   return (
     <div className="p-8" data-testid="sozlesmeler-page">
@@ -114,23 +113,25 @@ export function Sozlesmeler() {
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead><tr className="text-left text-[11px] text-[var(--text-dim)] uppercase tracking-wider border-b border-[var(--border)]">
-            <th className="p-4">Sözleşme No</th><th className="p-4">Çeşit</th><th className="p-4">Kota (da)</th><th className="p-4">Kota (ton)</th><th className="p-4">Tohum Avans</th><th className="p-4">Durum</th><th className="p-4 text-right">İşlem</th>
+            <th className="p-4">Sözleşme No</th><th className="p-4">Parsel</th><th className="p-4">Çeşit</th><th className="p-4">Kota (da)</th><th className="p-4">Kota (ton)</th><th className="p-4">Durum</th><th className="p-4 text-right">İşlem</th>
           </tr></thead>
           <tbody>
             {contracts.slice(0,50).map((c) => (
-              <tr key={c.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)]">
+              <tr key={c.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)] cursor-pointer"
+                  onClick={() => nav(`/sozlesmeler/${c.id}`)}
+                  data-testid="contract-row" title="Sözleşme detayına git">
                 <td className="p-4 font-mono text-xs text-[var(--text-dim)]">{c.contract_no}</td>
+                <td className="p-4 text-[var(--text-dim)]">{parcelsById.get(c.parcel_id)?.name || "—"}</td>
                 <td className="p-4">{c.variety}</td>
                 <td className="p-4">{c.kota_dekar}</td>
                 <td className="p-4">{c.kota_ton}</td>
-                <td className="p-4">{c.advance_seed_kg} kg</td>
                 <td className="p-4">
                   <span className={`badge ${c.status==="imzalı"?"badge-a":c.status==="onay_bekliyor"?"badge-d":c.status==="iptal"?"badge-neutral":"badge-c"}`}
                         title={c.deviation?.aciklama || ""}>
                     {c.status==="onay_bekliyor" ? "onay bekliyor" : c.status}
                   </span>
                 </td>
-                <td className="p-4">
+                <td className="p-4" onClick={(e) => e.stopPropagation()}>
                   <div className="flex justify-end items-center gap-1">
                     {c.status === "onay_bekliyor" && (
                       <>
@@ -175,79 +176,8 @@ export function Sozlesmeler() {
   );
 }
 
-export function Ekim() {
-  const plantingsQ = useFetch("/plantings", { params: { season: 2025 }, initialData: [] });
-  const parcelsQ = useFetch("/parcels", { params: { limit: 500 }, initialData: [] });
-  const plantings = plantingsQ.data;
-  const parcels = parcelsQ.data;
-  const stageBadge = { ekim: "badge-b", gelişim: "badge-c", olgunlaşma: "badge-c", hasat: "badge-a" };
-  return (
-    <div className="p-8" data-testid="ekim-page">
-      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M05 · MODÜL</div>
-      <h1 className="font-display text-4xl mb-6">Ekim Planlama — 2025</h1>
-
-      <QuickAddPanel
-        title="Yeni Ekim Kaydı"
-        testId="planting-add"
-        extraModule="plantings"
-        fields={[
-          { name: "parcel_id", label: "Parsel", type: "select", required: true,
-            options: parcels.map((p) => ({ value: p.id, label: `${p.parcel_code} — ${p.name}` })) },
-          { name: "season", label: "Sezon", type: "number", required: true, default: 2025 },
-          { name: "variety", label: "Çeşit", required: true },
-          { name: "planting_date", label: "Ekim Tarihi", type: "date", required: true },
-          { name: "expected_harvest_date", label: "Beklenen Hasat", type: "date", required: true },
-          { name: "stage", label: "Aşama", type: "select", default: "ekim",
-            options: [
-              { value: "ekim", label: "Ekim" }, { value: "gelişim", label: "Gelişim" },
-              { value: "olgunlaşma", label: "Olgunlaşma" }, { value: "hasat", label: "Hasat" },
-            ] },
-        ]}
-        onSubmit={async (v) => { await api.post("/plantings", { ...v, season: Number(v.season) }); plantingsQ.reload(); }}
-      />
-
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead><tr className="text-left text-[11px] text-[var(--text-dim)] uppercase tracking-wider border-b border-[var(--border)]">
-            <th className="p-4">Çeşit</th><th className="p-4">Ekim Tarihi</th><th className="p-4">Beklenen Hasat</th><th className="p-4">Aşama</th><th className="p-4 text-right">İşlem</th>
-          </tr></thead>
-          <tbody>
-            {plantings.slice(0,80).map((p) => (
-              <tr key={p.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)]">
-                <td className="p-4">{p.variety}</td>
-                <td className="p-4 text-[var(--text-dim)]">{p.planting_date}</td>
-                <td className="p-4 text-[var(--text-dim)]">{p.expected_harvest_date}</td>
-                <td className="p-4"><span className={`badge ${stageBadge[p.stage]||"badge-neutral"}`}>{p.stage}</span></td>
-                <td className="p-4">
-                  <div className="flex justify-end">
-                    <RowActions
-                      entityLabel="ekim kaydı"
-                      values={p}
-                      fields={[
-                        { name: "stage", label: "Aşama", type: "select", options: STAGE_OPTS },
-                        { name: "expected_harvest_date", label: "Beklenen Hasat", type: "date" },
-                        { name: "actual_harvest_date", label: "Gerçek Hasat", type: "date" },
-                      ]}
-                      onSave={async (v) => {
-                        await api.put(`/plantings/${p.id}`, {
-                          stage: v.stage || null,
-                          expected_harvest_date: v.expected_harvest_date || null,
-                          actual_harvest_date: v.actual_harvest_date || null,
-                        });
-                        plantingsQ.reload();
-                      }}
-                      onDelete={async () => { await api.delete(`/plantings/${p.id}`); plantingsQ.reload(); }}
-                    />
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+// (SON HAL) Eski `Ekim` export'u kaldırıldı — /ekim rotası artık kendi
+// dosyasında yaşayan, toplu işlem destekli EkimKaydi.jsx'e gidiyor.
 
 export function Lojistik() {
   const apptsQ = useFetch("/logistics/appointments", { initialData: [] });
@@ -327,38 +257,37 @@ export function Lojistik() {
 }
 
 export function Karne() {
+  const nav = useNavigate();
   const topQ = useFetch("/karne/top", { initialData: [] });
   const bottomQ = useFetch("/karne/bottom", { initialData: [] });
   const top = topQ.data;
   const bottom = bottomQ.data;
+  // SON HAL — satıra tıklayınca "neden bu skor?" analiz sayfası (/karne/:id)
+  const Row = ({ f, i }) => (
+    <div key={f.id}
+         className="flex items-center justify-between p-3 border-b border-[var(--border)] hover:bg-[var(--surface-2)] cursor-pointer rounded-lg"
+         onClick={() => nav(`/karne/${f.id}`)}
+         title="Karne analizini aç — neden bu skor?" data-testid="karne-leaderboard-row">
+      <div className="flex items-center gap-3">
+        <div className="text-[var(--text-dim)] font-display text-xl w-6">#{i + 1}</div>
+        <div><div className="text-sm">{f.full_name}</div><div className="text-xs text-[var(--text-dim)]">{f.village}</div></div>
+      </div>
+      <span className={`badge badge-${f.karne_score.toLowerCase()}`}>{f.karne_score} · {f.karne_points}</span>
+    </div>
+  );
   return (
     <div className="p-8" data-testid="karne-page">
       <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M12 · MODÜL</div>
-      <h1 className="font-display text-4xl mb-6">Çiftçi Karne / Performans Skoru</h1>
+      <h1 className="font-display text-4xl mb-2">Çiftçi Karne / Performans Skoru</h1>
+      <p className="text-[var(--text-dim)] text-sm mb-6">İsimlere tıklayın — skorun bileşen bileşen açıklamasını görün.</p>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card p-5">
           <h3 className="font-display text-lg mb-4 text-[var(--primary)]">🏆 En Yüksek 10</h3>
-          {top.map((f, i) => (
-            <div key={f.id} className="flex items-center justify-between p-3 border-b border-[var(--border)]">
-              <div className="flex items-center gap-3">
-                <div className="text-[var(--text-dim)] font-display text-xl w-6">#{i+1}</div>
-                <div><div className="text-sm">{f.full_name}</div><div className="text-xs text-[var(--text-dim)]">{f.village}</div></div>
-              </div>
-              <span className={`badge badge-${f.karne_score.toLowerCase()}`}>{f.karne_score} · {f.karne_points}</span>
-            </div>
-          ))}
+          {top.map((f, i) => <Row key={f.id} f={f} i={i} />)}
         </div>
         <div className="card p-5">
           <h3 className="font-display text-lg mb-4 text-red-400">⚠️ Geliştirme Bekleyen 10</h3>
-          {bottom.map((f, i) => (
-            <div key={f.id} className="flex items-center justify-between p-3 border-b border-[var(--border)]">
-              <div className="flex items-center gap-3">
-                <div className="text-[var(--text-dim)] font-display text-xl w-6">#{i+1}</div>
-                <div><div className="text-sm">{f.full_name}</div><div className="text-xs text-[var(--text-dim)]">{f.village}</div></div>
-              </div>
-              <span className={`badge badge-${f.karne_score.toLowerCase()}`}>{f.karne_score} · {f.karne_points}</span>
-            </div>
-          ))}
+          {bottom.map((f, i) => <Row key={f.id} f={f} i={i} />)}
         </div>
       </div>
     </div>

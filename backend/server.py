@@ -1104,6 +1104,53 @@ async def list_parcels(
     return docs
 
 
+# SON HAL — Parseller sayfasının sabit lookup filtre çubuğu için DB'deki
+# GERÇEK distinct değerler. DİKKAT: /parcels/{parcel_id}'den ÖNCE tanımlı
+# olmalı — aksi halde Starlette "filter-options"ı bir parcel_id sanır
+# (bkz. CLAUDE.md'nin /parcels/bulk-update route-sırası tuzağı).
+@api_router.get("/parcels/filter-options")
+async def parcel_filter_options(user=Depends(require_permission("parcels:view"))):
+    base = {"is_active": {"$ne": False}}
+
+    async def _distinct(field):
+        vals = await db.parcels.distinct(field, base)
+        return sorted(str(v) for v in vals if v not in (None, ""))
+
+    il_list = await _distinct("il")
+    ilce_list = await _distinct("ilce")
+    mahalle_vals = set(await _distinct("mahalle")) | set(await _distinct("village"))
+    ada_list = await _distinct("ada_no")
+    ekim_list = await _distinct("ekim_durumu")
+
+    # il→ilçe→mahalle kaskadı için hafif eşleme (sadece dolu alanlar)
+    pairs = await db.parcels.find(
+        base, {"_id": 0, "il": 1, "ilce": 1, "mahalle": 1, "village": 1}).to_list(20000)
+    ilce_by_il, mahalle_by_ilce = {}, {}
+    for p in pairs:
+        il, ilce = p.get("il"), p.get("ilce")
+        mah = p.get("mahalle") or p.get("village")
+        if il and ilce:
+            ilce_by_il.setdefault(il, set()).add(ilce)
+        if ilce and mah:
+            mahalle_by_ilce.setdefault(ilce, set()).add(mah)
+
+    areas = [float(p["area_dekar"]) async for p in
+             db.parcels.find(base, {"_id": 0, "area_dekar": 1})
+             if p.get("area_dekar") is not None]
+
+    return {
+        "il": il_list,
+        "ilce": ilce_list,
+        "mahalle": sorted(mahalle_vals),
+        "ada": ada_list,
+        "ekim_durumu": ekim_list,
+        "ilce_by_il": {k: sorted(v) for k, v in ilce_by_il.items()},
+        "mahalle_by_ilce": {k: sorted(v) for k, v in mahalle_by_ilce.items()},
+        "area_min": round(min(areas), 1) if areas else 0,
+        "area_max": round(max(areas), 1) if areas else 0,
+    }
+
+
 @api_router.get("/parcels/{parcel_id}")
 async def get_parcel_detail(parcel_id: str, user=Depends(require_permission("parcels:view"))):
     """
@@ -1147,10 +1194,17 @@ async def get_parcel_detail(parcel_id: str, user=Depends(require_permission("par
     from admin_areas import resolve_responsible
     responsible = await resolve_responsible(db, p.get("village") or p.get("mahalle"))
 
+    # SON HAL — parsel↔sözleşme çapraz navigasyonu: parselin sözleşmeleri
+    # da detay yanıtına eklendi (ContractDetail /sozlesmeler/:id'ye link verilir).
+    contracts = await db.contracts.find(
+        {"parcel_id": parcel_id, "is_active": {"$ne": False}}, {"_id": 0}
+    ).sort([("season", -1)]).to_list(50)
+
     return {
         "parcel": p,
         "farmer": farmer,
         "responsible": responsible,
+        "contracts": contracts,
         "plantings": plantings,
         "soil_samples": soil,
         "irrigation_events": irrigation,
@@ -1773,9 +1827,11 @@ async def list_contracts(season: Optional[int] = None, status: Optional[str] = N
 # =====================================================================
 
 @api_router.get("/plantings")
-async def list_plantings(season: Optional[int] = None, user=Depends(current_user)):
+async def list_plantings(season: Optional[int] = None, parcel_id: Optional[str] = None,
+                         user=Depends(current_user)):
     filt: Dict[str, Any] = {"is_active": {"$ne": False}}   # soft-delete edilenleri gizle
     if season: filt["season"] = season
+    if parcel_id: filt["parcel_id"] = parcel_id             # SON HAL — /ekim?parcel= filtresi
     docs = await db.plantings.find(filt, {"_id": 0}).to_list(5000)
     return docs
 
@@ -2753,6 +2809,11 @@ register_group_routes(api_router, db, current_user, require_permission, log_audi
 # düzenlenebilir agronomik bilgi/prompt kütüphanesi + polar odaklı analiz.
 from agronomy import register_agronomy_routes
 register_agronomy_routes(api_router, db, current_user, require_permission, log_audit)
+
+# Karne Puanlama Motoru (SON HAL) — rastgele seed skorların yerine gerçek
+# verilerden parametrik ağırlıklı hesap + "neden bu skor?" breakdown'u.
+from karne_engine import register_karne_engine_routes
+register_karne_engine_routes(api_router, db, current_user, require_permission, log_audit)
 
 # Dosya Depolama (IT-04) — basit dosya/resim upload + field_definitions
 # file/image/multifile alan tiplerinin ve "Belgeler" sekmesinin backend'i.

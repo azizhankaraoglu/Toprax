@@ -6,7 +6,7 @@ import {
   Wheat, LayoutDashboard, Users, Map, FileText, Sprout, Droplets,
   Settings2, BarChart3, Truck, Bell, LogOut, Award, ChevronRight, FlaskConical,
   Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Settings, Sparkles,
-  UserCog, ShieldCheck, ListTree, LayoutList, Search, Landmark, Compass, Wallet, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, SlidersHorizontal, ClipboardCheck,
+  UserCog, ShieldCheck, ListTree, LayoutList, Landmark, Compass, Wallet, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, SlidersHorizontal, ClipboardCheck,
   Workflow, CheckSquare, Inbox, Code2, Radio
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
@@ -16,27 +16,30 @@ import AnnouncementPopup from "@/components/AnnouncementPopup";
 // ADMIN_TIER_ROLES ile tutarlı — config.py).
 const ADMIN_TIER_ROLES = new Set(["super_admin", "kurum_yoneticisi", "il_yoneticisi", "fabrika_muduru"]);
 
-// Sidebar menüsü gruplandırılmış halde
+// Sidebar menüsü — SON HAL yeniden sınıflandırması (kullanıcı talebi):
+// "Ana Alan" sadece 4 çekirdek varlığı taşır; Harita Paneli SAHA &
+// LOJİSTİK'e, İdari Alanlar SİSTEM'e taşındı; iletişim ekranları yeni
+// İLETİŞİM grubunda toplandı. Route'lar DEĞİŞMEDİ — sadece nav kayıtları
+// taşındı (IT-41 emsali). Global Arama nav kaydı kaldırıldı: arama artık
+// Dashboard'un üstünde gömülü (bkz. Dashboard.jsx), /arama → / yönlenir.
 const navGroups = [
   {
-    title: "ANA",
+    title: "ANA ALAN",
     items: [
       { to: "/", icon: LayoutDashboard, label: "Dashboard", end: true },
-      { to: "/arama", icon: Search, label: "Global Arama" },
       { to: "/ciftciler", icon: Users, label: "Çiftçiler" },
       { to: "/parseller", icon: Map, label: "Parseller" },
-      { to: "/harita-paneli", icon: Compass, label: "Harita Paneli" },
-      { to: "/idari-alanlar", icon: Landmark, label: "İdari Alanlar" },
+      { to: "/sozlesmeler", icon: FileText, label: "Sözleşmeler" },
     ]
   },
   {
     title: "ÜRETİM",
     items: [
-      { to: "/sozlesmeler", icon: FileText, label: "Sözleşme & Kota" },
-      { to: "/ekim", icon: Sprout, label: "Ekim Planlama" },
+      { to: "/ekim", icon: Sprout, label: "Ekim Kaydı" },
       { to: "/ekim-planlama", icon: Sparkles, label: "Ekim Karar Motoru" },
       { to: "/sulama", icon: Droplets, label: "Sulama & Kaynak" },
       { to: "/operasyon", icon: Settings2, label: "Operasyon" },
+      { to: "/toprak", icon: FlaskConical, label: "Toprak Analizleri" },
     ]
   },
   {
@@ -46,11 +49,13 @@ const navGroups = [
       { to: "/uzaktan-algilama", icon: Satellite, label: "Uzaktan Algılama" },
       { to: "/copilot", icon: Sparkles, label: "AI Copilot", featureFlag: "ai" },
       { to: "/hastalik", icon: Brain, label: "AI Hastalık", featureFlag: "ai" },
+      { to: "/ai-bilgi-kutuphanesi", icon: Brain, label: "AI Bilgi Kütüphanesi", featureFlag: "ai" },
     ]
   },
   {
     title: "SAHA & LOJİSTİK",
     items: [
+      { to: "/harita-paneli", icon: Compass, label: "Harita Paneli" },
       { to: "/saha-operasyonlari", icon: Kanban, label: "Görev Yönetimi" },
       { to: "/otomasyon-kurallari", icon: Zap, label: "Otomasyon Kuralları" },
       { to: "/saha", icon: Smartphone, label: "Saha Mobil" },
@@ -60,13 +65,10 @@ const navGroups = [
     ]
   },
   {
-    // IT-41 — tüm rapor/analiz ekranları tek menüde toplandı (önceden
-    // ÜRETİM/ANALİZ & AI/BELGE & FİNANS'a dağılmıştı). Route'lar DEĞİŞMEDİ,
-    // sadece nav kaydı taşındı — her rapor kendi filtresini/SmartDataGrid'ini
-    // korur (bkz. ROADMAP-DETAY-TAM.md FAZ 14 / IT-41).
+    // IT-41 — rapor ekranları tek menüde. Toprak Analizleri veri girişi
+    // ağırlıklı olduğu için ÜRETİM'e taşındı (son hal kararı).
     title: "RAPORLAR",
     items: [
-      { to: "/toprak", icon: FlaskConical, label: "Toprak Analizleri" },
       { to: "/saha-operasyonlari?view=raporlar", icon: ClipboardCheck, label: "Saha Raporları" },
       { to: "/verimlilik", icon: BarChart3, label: "Verimlilik" },
       { to: "/karne", icon: Award, label: "Çiftçi Karne" },
@@ -81,6 +83,16 @@ const navGroups = [
     ]
   },
   {
+    title: "İLETİŞİM",
+    items: [
+      { to: "/bildirimler", icon: Bell, label: "Bildirimler" },
+      { to: "/duyuru-yonetimi", icon: Radio, label: "Duyuru Yönetimi", adminTierOnly: true },
+      { to: "/kampanyalar", icon: Megaphone, label: "Kampanyalar" },
+      { to: "/sablon-yonetimi", icon: MessagesSquare, label: "Şablon Yönetimi", adminTierOnly: true },
+      { to: "/iletisim-politikalari", icon: ShieldOff, label: "İletişim Politikaları", adminTierOnly: true },
+    ]
+  },
+  {
     title: "EĞİTİM",
     items: [
       { to: "/egitim-yonetimi", icon: GraduationCap, label: "Eğitim Yönetimi", featureFlag: "lms" },
@@ -89,29 +101,32 @@ const navGroups = [
   {
     title: "SİSTEM",
     items: [
-      { to: "/bildirimler", icon: Bell, label: "Bildirimler" },
-      { to: "/audit", icon: Activity, label: "Audit Log", adminTierOnly: true },
       { to: "/kullanicilar", icon: UserCog, label: "Kullanıcılar", adminTierOnly: true },
       { to: "/ozel-roller", icon: ShieldCheck, label: "Özel Roller", adminTierOnly: true },
       { to: "/alan-tanimlari", icon: LayoutList, label: "Form Yönetimi", adminTierOnly: true },
       { to: "/lookup-yonetimi", icon: ListTree, label: "Lookup Yönetimi", adminTierOnly: true },
+      { to: "/idari-alanlar", icon: Landmark, label: "İdari Alanlar" },
       { to: "/destek-katalogu", icon: Wallet, label: "Destek Kataloğu", adminTierOnly: true },
-      { to: "/sablon-yonetimi", icon: MessagesSquare, label: "Şablon Yönetimi", adminTierOnly: true },
-      { to: "/duyuru-yonetimi", icon: Radio, label: "Duyuru Yönetimi", adminTierOnly: true },
-      { to: "/kampanyalar", icon: Megaphone, label: "Kampanyalar" },
-      { to: "/iletisim-politikalari", icon: ShieldOff, label: "İletişim Politikaları", adminTierOnly: true },
       { to: "/organizasyon-hiyerarsisi", icon: Workflow, label: "Organizasyon Hiyerarşisi", adminTierOnly: true },
       { to: "/onay-bekleyenlerim", icon: CheckSquare, label: "Onay Bekleyenlerim" },
       { to: "/bize-ulasin", icon: Inbox, label: "Bize Ulaşın" },
       { to: "/integration-hub", icon: Cable, label: "Integration Hub" },
       { to: "/gelistirici-portali", icon: Code2, label: "Geliştirici Portalı", adminTierOnly: true },
       { to: "/platform-core", icon: SlidersHorizontal, label: "Platform Core" },
-      { to: "/ai-bilgi-kutuphanesi", icon: Brain, label: "AI Bilgi Kütüphanesi", featureFlag: "ai" },
       { to: "/experience-profiles", icon: Smartphone, label: "Experience Profile" },
+      { to: "/audit", icon: Activity, label: "Audit Log", adminTierOnly: true },
       { to: "/ayarlar", icon: Settings, label: "Ayarlar", adminTierOnly: true },
     ]
   }
 ];
+
+// Bir nav öğesi verilen pathname'i kapsıyor mu? ("/" sadece tam eşleşme;
+// diğerleri detay rotalarını da kapsar: /ciftciler → /ciftciler/:id)
+function itemMatchesPath(item, pathname) {
+  const toPath = item.to.split("?")[0];
+  if (toPath === "/") return pathname === "/";
+  return pathname === toPath || pathname.startsWith(toPath + "/");
+}
 
 export default function Layout() {
   const nav = useNavigate();
@@ -129,6 +144,29 @@ export default function Layout() {
       setFlagsByKey(Object.fromEntries(r.data.map((f) => [f.key, f.enabled])));
     }).catch(() => {});
   }, []);
+
+  // Kapanır-açılır gruplar — {grupBaşlığı: false} = kapalı, yoksa AÇIK
+  // (varsayılan açık: mevcut davranışla aynı başlar, kullanıcı daraltır).
+  // localStorage'da saklanır; aktif rotayı içeren grup navigasyonda
+  // otomatik açılır (kullanıcı sonradan elle kapatabilir).
+  const [openGroups, setOpenGroups] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("toprax_nav_open") || "{}"); }
+    catch { return {}; }
+  });
+  function persistOpenGroups(next) {
+    setOpenGroups(next);
+    try { localStorage.setItem("toprax_nav_open", JSON.stringify(next)); } catch {}
+  }
+  function toggleGroup(title) {
+    persistOpenGroups({ ...openGroups, [title]: openGroups[title] === false });
+  }
+  useEffect(() => {
+    const active = navGroups.find((g) => g.items.some((it) => itemMatchesPath(it, location.pathname)));
+    if (active && openGroups[active.title] === false) {
+      persistOpenGroups({ ...openGroups, [active.title]: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   function logout() { localStorage.clear(); nav("/login"); }
 
@@ -162,10 +200,22 @@ export default function Layout() {
               (!item.featureFlag || flagsByKey[item.featureFlag] !== false)
             );
             if (visibleItems.length === 0) return null;
+            const isOpen = openGroups[g.title] !== false;
+            const hasActive = g.items.some((it) => itemMatchesPath(it, location.pathname));
             return (
-              <div key={g.title} className="mb-3">
-                <div className="text-[10px] text-[var(--text-dim)] tracking-widest px-3 mb-1 mt-2">{g.title}</div>
-                {visibleItems.map((item) => {
+              <div key={g.title} className="mb-1">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(g.title)}
+                  data-testid={`navgroup-${g.title.toLowerCase().replace(/[^a-z0-9ğüşıöç]+/gi, "-")}`}
+                  className={`w-full flex items-center gap-1.5 text-[10px] tracking-widest px-3 mb-1 mt-2 select-none transition-colors ${
+                    hasActive && !isOpen ? "text-[var(--primary)]" : "text-[var(--text-dim)] hover:text-white"
+                  }`}
+                >
+                  <ChevronRight size={11} className={`transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                  <span className="flex-1 text-left">{g.title}</span>
+                </button>
+                {isOpen && visibleItems.map((item) => {
                   // IT-41 — bazı rapor kayıtları ("/saha-operasyonlari?view=raporlar"
                   // gibi) bir sorgu parametresi taşır. NavLink'in isActive'i
                   // sadece pathname'e bakar (search'ü yok sayar), bu yüzden

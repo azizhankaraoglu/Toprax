@@ -10,9 +10,10 @@
  * Parsel combobox'ı BİLİNÇLİ olarak yeni bir bağımlılık (react-select vb.)
  * KULLANMAZ — debounce'lu bir input + sonuç listesi yeterli (Karar Protokolü).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "@/api";
-import { Sprout, Search, BookOpen, Plus, Trash2, Sparkles, AlertTriangle, X } from "lucide-react";
+import ParcelPicker from "@/components/ParcelPicker";
+import { Sprout, Search, BookOpen, Plus, Trash2, Sparkles, AlertTriangle } from "lucide-react";
 
 const DECISION_BADGE = {
   uygun: { cls: "badge-a", text: "UYGUN" },
@@ -28,12 +29,8 @@ const emptyRule = {
 export default function EkimPlanlama() {
   const [tab, setTab] = useState("analiz");
 
-  // --- Parsel arama (combobox) ---
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState([]);
-  const [open, setOpen] = useState(false);
+  // --- Parsel seçimi (ortak ParcelPicker bileşeniyle — SON HAL) ---
   const [parcel, setParcel] = useState(null);
-  const timer = useRef(null);
 
   // --- Analiz ---
   const [season, setSeason] = useState(new Date().getFullYear());
@@ -63,18 +60,6 @@ export default function EkimPlanlama() {
     api.get("/agronomy/prompt").then((r) => setPrompt(r.data)).catch(() => {});
     loadRules().catch(() => {});
   }, [loadRules]);
-
-  // Debounce'lu parsel arama
-  useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    if (q.trim().length < 2) { setResults([]); return; }
-    timer.current = setTimeout(() => {
-      api.get(`/ekim-planlama/parcel-search?q=${encodeURIComponent(q)}`)
-        .then((r) => { setResults(r.data); setOpen(true); })
-        .catch(() => setResults([]));
-    }, 300);
-    return () => timer.current && clearTimeout(timer.current);
-  }, [q]);
 
   async function runAnalysis() {
     if (!parcel) return;
@@ -163,53 +148,12 @@ export default function EkimPlanlama() {
         <>
           <div className="card">
             <h3>Parsel Seç</h3>
-            {!parcel && (
-              <div style={{ position: "relative" }}>
-                <input
-                  className="input" data-testid="parcel-search"
-                  placeholder="İl, ilçe, mahalle, ada, parsel no veya parsel adı ile ara…"
-                  value={q} onChange={(e) => setQ(e.target.value)}
-                  onFocus={() => results.length && setOpen(true)}
-                />
-                {open && results.length > 0 && (
-                  <div className="card" style={{
-                    position: "absolute", zIndex: 20, left: 0, right: 0, top: "100%",
-                    maxHeight: 320, overflowY: "auto", padding: 4,
-                  }}>
-                    {results.map((r) => (
-                      <div key={r.id} data-testid="parcel-option"
-                           onClick={() => { setParcel(r); setOpen(false); setQ(""); setAnalysis(null); }}
-                           style={{ padding: "8px 10px", cursor: "pointer", borderRadius: 6 }}
-                           onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(125,125,125,.12)")}
-                           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                        <div style={{ fontWeight: 600 }}>{r.display}</div>
-                        <div className="muted" style={{ fontSize: 12 }}>
-                          {r.farmer_name || "Çiftçi atanmamış"} · {r.area_dekar || "?"} dekar
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {q.trim().length >= 2 && results.length === 0 && (
-                  <p className="muted" style={{ marginTop: 8 }}>Eşleşen parsel bulunamadı.</p>
-                )}
-              </div>
-            )}
-
-            {parcel && (
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <div style={{ flex: 1, minWidth: 240 }}>
-                  <div style={{ fontWeight: 700 }}>{parcel.display}</div>
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    {parcel.farmer_name || "Çiftçi atanmamış"} · {parcel.area_dekar || "?"} dekar
-                  </div>
-                </div>
-                <button className="btn" onClick={() => { setParcel(null); setAnalysis(null); }}
-                        data-testid="parcel-clear">
-                  <X size={14} /> Değiştir
-                </button>
-              </div>
-            )}
+            {/* SON HAL — ortak ParcelPicker bileşeni (bkz. components/ParcelPicker.jsx) */}
+            <ParcelPicker
+              value={parcel}
+              onSelect={(p) => { setParcel(p); setAnalysis(null); }}
+              testId="parcel-search"
+            />
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 14, alignItems: "flex-end" }}>
               <div>

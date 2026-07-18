@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/api";
-import { MapContainer, TileLayer, Polygon, Popup, Marker, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Polygon, Popup, Marker, useMapEvents, useMap } from "react-leaflet";
 import * as turf from "@turf/turf";
 import { MapDrawTools } from "@/components/MapDrawTools";
 import { QuickAddPanel } from "@/components/QuickAdd";
@@ -9,8 +9,9 @@ import { mapTkgmProperties } from "@/lib/tkgmMapping";
 import FarmerSelect from "@/components/FarmerSelect";
 import BulkRemoteSensing from "@/components/BulkRemoteSensing";
 import ParcelsListPanel from "@/components/ParcelsListPanel";
+import AiAssistantBox from "@/components/AiAssistantBox";
 import {
-  PenLine, Scissors, Combine, Crosshair, Upload, X, Check, Layers, Plus, Satellite, List
+  PenLine, Scissors, Combine, Crosshair, Upload, X, Check, Layers, Plus, Satellite, List, ClipboardPlus
 } from "lucide-react";
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
@@ -36,6 +37,21 @@ function CoordsClickHandler({ active, onPick }) {
 }
 
 const areaFromGeoJSON = (geojson) => Math.round((turf.area(geojson) / 1000) * 10) / 10; // m² → dekar
+
+/** SON HAL — listeden seçilen parsele haritayı uçurur (liste↔harita senkronu).
+ *  Sadece useEffect kullanır — CLAUDE.md'deki useMapEvents stale-closure
+ *  tuzağı burada geçerli değil (event handler bağlanmıyor). */
+function MapFlyTo({ target }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!target?.geometry?.coordinates?.[0]?.[0]) return;
+    try {
+      const c = turf.centroid(target.geometry).geometry.coordinates;
+      map.flyTo([c[1], c[0]], Math.max(map.getZoom(), 13), { duration: 0.6 });
+    } catch { /* geometri bozuksa sessizce geç */ }
+  }, [target, map]);
+  return null;
+}
 
 export default function Parcels() {
   const nav = useNavigate();
@@ -80,6 +96,17 @@ export default function Parcels() {
   const [showAdminAreas, setShowAdminAreas] = useState(false);
   const [adminAreas, setAdminAreas] = useState([]);
 
+  // SON HAL — sabit lookup filtre çubuğu (DB'deki gerçek distinct değerler)
+  const [filterOpts, setFilterOpts] = useState(null);
+  const [lf, setLf] = useState({ il: "", ilce: "", mahalle: "", ada: "", parsel: "",
+                                 areaMin: "", areaMax: "", ekili: "" });
+  // SON HAL — AI asistanı sonucu (id kümesi; null = filtre yok)
+  const [aiIds, setAiIds] = useState(null);
+  // SON HAL — parselin en güncel sözleşmesi (popup "Sözleşme detayına git")
+  const [contractByParcel, setContractByParcel] = useState(new Map());
+  // SON HAL — popup içi "Görev ata" mini formu
+  const [taskForm, setTaskForm] = useState(null); // {parcelId, task_type, date, msg}
+
   const load = useCallback(() => {
     api.get("/parcels", { params: { limit: 1200 } }).then((r) => setParcels(r.data));
   }, []);
@@ -93,6 +120,15 @@ export default function Parcels() {
   useEffect(() => {
     load();
     api.get("/farmers", { params: { limit: 500 } }).then((r) => setFarmers(r.data));
+    api.get("/parcels/filter-options").then((r) => setFilterOpts(r.data)).catch(() => {});
+    api.get("/contracts").then((r) => {
+      const m = new Map();
+      (Array.isArray(r.data) ? r.data : []).forEach((c) => {
+        const cur = m.get(c.parcel_id);
+        if (!cur || (c.season || 0) > (cur.season || 0)) m.set(c.parcel_id, c);
+      });
+      setContractByParcel(m);
+    }).catch(() => {});
   }, [load]);
 
   function resetTool() {
@@ -314,9 +350,27 @@ export default function Parcels() {
   // KONU 3 (drill-down): Dashboard "Riskli Parsel" kartı /parseller?risk=1 ile
   // gelir; harita ve liste yalnızca riskli parselleri gösterir (CLAUDE.md Kural 5).
   const riskOnly = searchParams.get("risk") === "1";
-  const visibleParcels = riskOnly
-    ? parcels.filter((p) => p.risk_level === "turuncu" || p.risk_level === "kirmizi")
-    : parcels;
+
+  // SON HAL — görünür küme: risk drill-down ∩ sabit lookup filtreleri ∩ AI sonucu.
+  // Sayfa zaten tüm parselleri çekiyor (mevcut kalıp) — filtreleme client-side.
+  const visibleParcels = useMemo(() => {
+    let list = riskOnly
+      ? parcels.filter((p) => p.risk_level === "turuncu" || p.risk_level === "kirmizi")
+      : parcels;
+    if (lf.il) list = list.filter((p) => p.il === lf.il);
+    if (lf.ilce) list = list.filter((p) => p.ilce === lf.ilce);
+    if (lf.mahalle) list = list.filter((p) => (p.mahalle || p.village) === lf.mahalle);
+    if (lf.ada) list = list.filter((p) => String(p.ada_no || "") === lf.ada);
+    if (lf.parsel) list = list.filter((p) => String(p.parsel_no_tapu || "").includes(lf.parsel));
+    if (lf.areaMin !== "") list = list.filter((p) => (p.area_dekar || 0) >= Number(lf.areaMin));
+    if (lf.areaMax !== "") list = list.filter((p) => (p.area_dekar || 0) <= Number(lf.areaMax));
+    if (lf.ekili === "evet") list = list.filter((p) => p.ekim_durumu === "ekili");
+    if (lf.ekili === "hayir") list = list.filter((p) => p.ekim_durumu !== "ekili");
+    if (aiIds) list = list.filter((p) => aiIds.has(p.id));
+    return list;
+  }, [parcels, riskOnly, lf, aiIds]);
+
+  const lookupActive = Object.values(lf).some((v) => v !== "") || aiIds;
 
   const TOOLS = [
     { key: "manual", icon: Plus, label: "Manuel Ekle" },
@@ -354,6 +408,65 @@ export default function Parcels() {
           ))}
         </div>
       </header>
+
+      {/* SON HAL — SABİT LOOKUP FİLTRE ÇUBUĞU (DB'deki gerçek değerlerden) */}
+      <div className="card p-4 mb-3" data-testid="parcel-lookup-bar">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
+          <select className="input" value={lf.il} data-testid="lf-il"
+                  onChange={(e) => setLf({ ...lf, il: e.target.value, ilce: "", mahalle: "" })}>
+            <option value="">İl (tümü)</option>
+            {(filterOpts?.il || []).map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+          <select className="input" value={lf.ilce} data-testid="lf-ilce"
+                  onChange={(e) => setLf({ ...lf, ilce: e.target.value, mahalle: "" })}>
+            <option value="">İlçe (tümü)</option>
+            {(lf.il ? (filterOpts?.ilce_by_il?.[lf.il] || []) : (filterOpts?.ilce || []))
+              .map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+          <select className="input" value={lf.mahalle} data-testid="lf-mahalle"
+                  onChange={(e) => setLf({ ...lf, mahalle: e.target.value })}>
+            <option value="">Mahalle/Köy (tümü)</option>
+            {(lf.ilce ? (filterOpts?.mahalle_by_ilce?.[lf.ilce] || []) : (filterOpts?.mahalle || []))
+              .map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+          <select className="input" value={lf.ada} data-testid="lf-ada"
+                  onChange={(e) => setLf({ ...lf, ada: e.target.value })}>
+            <option value="">Ada (tümü)</option>
+            {(filterOpts?.ada || []).map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+          <input className="input" placeholder="Parsel no" value={lf.parsel} data-testid="lf-parsel"
+                 onChange={(e) => setLf({ ...lf, parsel: e.target.value })} />
+          <input className="input" type="number" placeholder={`Yüzölçümü min${filterOpts ? ` (${filterOpts.area_min})` : ""}`}
+                 value={lf.areaMin} data-testid="lf-area-min"
+                 onChange={(e) => setLf({ ...lf, areaMin: e.target.value })} />
+          <input className="input" type="number" placeholder={`Yüzölçümü max${filterOpts ? ` (${filterOpts.area_max})` : ""}`}
+                 value={lf.areaMax} data-testid="lf-area-max"
+                 onChange={(e) => setLf({ ...lf, areaMax: e.target.value })} />
+          <select className="input" value={lf.ekili} data-testid="lf-ekili"
+                  onChange={(e) => setLf({ ...lf, ekili: e.target.value })}>
+            <option value="">Ekili mi? (tümü)</option>
+            <option value="evet">Evet</option>
+            <option value="hayir">Hayır</option>
+          </select>
+        </div>
+        {lookupActive && (
+          <div className="mt-2 flex items-center gap-2 text-xs text-[var(--text-dim)]">
+            <span><b className="text-white">{visibleParcels.length}</b> parsel eşleşti</span>
+            <button className="underline hover:text-white" data-testid="lf-clear"
+                    onClick={() => { setLf({ il: "", ilce: "", mahalle: "", ada: "", parsel: "", areaMin: "", areaMax: "", ekili: "" }); setAiIds(null); }}>
+              Filtreleri temizle
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* SON HAL — AI asistanı (Harita Paneli'ndekiyle aynı motor) */}
+      <div className="mb-3 flex">
+        <AiAssistantBox module="parcels"
+                        onResults={(items) => setAiIds(new Set(items.map((p) => p.id)))}
+                        placeholder='Örn: "Çumra&apos;daki en riskli 20 parseli göster"'
+                        testId="parcels-ai" />
+      </div>
 
       {/* LİSTE & FİLTRE & TOPLU SİLME (#3) + TOPLU UZAKTAN ALGILAMA */}
       <div className="mb-3 flex flex-wrap gap-2">
@@ -408,6 +521,48 @@ export default function Parcels() {
         </div>
       )}
 
+      {/* SON HAL — PARSEL SATIRLARI ÜSTTE (liste↔harita çift yönlü seçim):
+          satıra tıkla → haritada vurgula + uç; haritada tıkla → satır işaretlenir. */}
+      <div className="card overflow-hidden mb-4" data-testid="parcel-rows">
+        <div className="max-h-[300px] overflow-y-auto scrollbar">
+          <table className="w-full text-sm">
+            <thead className="bg-[var(--surface-2)] sticky top-0 z-10">
+              <tr className="text-left text-[11px] text-[var(--text-dim)] uppercase tracking-wider">
+                <th className="p-3">Kod</th><th className="p-3">Ad</th><th className="p-3">İl/İlçe</th>
+                <th className="p-3">Mahalle/Köy</th><th className="p-3">Ada/Parsel</th>
+                <th className="p-3">Yüzölçümü</th><th className="p-3">Ekili</th><th className="p-3">Risk</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleParcels.slice(0, 300).map((p) => (
+                <tr key={p.id}
+                    onClick={() => setSelected(selected?.id === p.id ? null : p)}
+                    className={`border-b border-[var(--border)] cursor-pointer transition-colors ${
+                      selected?.id === p.id ? "bg-[var(--primary)]/10" : "hover:bg-[var(--surface-2)]"
+                    }`}
+                    data-testid={`parcel-row-${p.parcel_code}`}>
+                  <td className="p-3 font-mono text-xs text-[var(--text-dim)]">{p.parcel_code}</td>
+                  <td className="p-3">{p.name}</td>
+                  <td className="p-3 text-[var(--text-dim)]">{[p.il, p.ilce].filter(Boolean).join("/") || "—"}</td>
+                  <td className="p-3 text-[var(--text-dim)]">{p.mahalle || p.village || "—"}</td>
+                  <td className="p-3 text-[var(--text-dim)]">
+                    {p.ada_no || p.parsel_no_tapu ? `${p.ada_no || "?"}/${p.parsel_no_tapu || "?"}` : "—"}
+                  </td>
+                  <td className="p-3">{p.area_dekar?.toFixed(1)} da</td>
+                  <td className="p-3">{p.ekim_durumu === "ekili"
+                    ? <span className="badge badge-a">Evet</span>
+                    : <span className="badge badge-neutral">Hayır</span>}</td>
+                  <td className="p-3">{p.risk_level && <RiskBadge level={p.risk_level} label={p.risk_label} />}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {visibleParcels.length === 0 && (
+            <p className="p-5 text-sm text-[var(--text-dim)]">Filtreye uyan parsel yok.</p>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-3 card overflow-hidden relative" style={{ height: 640 }}>
           <MapContainer center={[39.0, 33.5]} zoom={7} style={{ height: "100%", width: "100%" }}>
@@ -436,21 +591,26 @@ export default function Parcels() {
               ));
             })}
 
+            {/* Listeden seçilince haritayı seçili parsele uçur (SON HAL senkron) */}
+            <MapFlyTo target={selected} />
+
             {/* Mevcut parseller */}
             {visibleParcels.map((p) => {
               if (!p.geometry) return null;
               const isMergeSelected = mergeIds.includes(p.id);
               const isEditOrSplitTarget = editTarget?.id === p.id || splitTarget?.id === p.id;
+              const isSelected = selected?.id === p.id;
               const color = isMergeSelected ? "#a78bfa" : (RISK_COLORS[p.risk_level] || "#4ade80");
+              const latestContract = contractByParcel.get(p.id);
               return (
                 <Polygon
                   key={p.id}
                   positions={p.geometry.coordinates[0].map(([lng, lat]) => [lat, lng])}
                   pathOptions={{
-                    color,
+                    color: isSelected ? "#ffffff" : color,
                     fillColor: color,
-                    fillOpacity: isEditOrSplitTarget ? 0.1 : (isMergeSelected ? 0.5 : 0.4),
-                    weight: isMergeSelected || isEditOrSplitTarget ? 3 : 1.5,
+                    fillOpacity: isEditOrSplitTarget ? 0.1 : (isMergeSelected || isSelected ? 0.55 : 0.4),
+                    weight: isSelected ? 4 : (isMergeSelected || isEditOrSplitTarget ? 3 : 1.5),
                     dashArray: isEditOrSplitTarget ? "6 4" : undefined,
                   }}
                   eventHandlers={{
@@ -463,15 +623,81 @@ export default function Parcels() {
                   }}
                 >
                   {!tool && (
-                    <Popup>
-                      <div style={{ minWidth: 180 }}>
-                        <div style={{ fontWeight: 600, marginBottom: 4 }}>{p.parcel_code}</div>
-                        <div style={{ fontSize: 12, opacity: 0.8 }}>{p.name}</div>
-                        <div style={{ fontSize: 12, marginTop: 6 }}>
-                          <strong>{p.area_dekar.toFixed(1)}</strong> dekar · {p.soil_type}
+                    /* SON HAL — zengin popup: kimlik bilgileri + 4 hızlı işlem */
+                    <Popup maxWidth={300}>
+                      <div style={{ minWidth: 220 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 2 }}>{p.name}</div>
+                        <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>{p.parcel_code}</div>
+                        <table style={{ fontSize: 12, width: "100%", lineHeight: 1.7 }}>
+                          <tbody>
+                            <tr><td style={{ opacity: 0.7 }}>İl / İlçe</td>
+                                <td>{[p.il, p.ilce].filter(Boolean).join(" / ") || "—"}</td></tr>
+                            <tr><td style={{ opacity: 0.7 }}>Mahalle</td>
+                                <td>{p.mahalle || p.village || "—"}</td></tr>
+                            <tr><td style={{ opacity: 0.7 }}>Ada / Parsel</td>
+                                <td>{p.ada_no || "—"} / {p.parsel_no_tapu || "—"}</td></tr>
+                            <tr><td style={{ opacity: 0.7 }}>Yüzölçümü</td>
+                                <td><strong>{p.area_dekar?.toFixed(1)}</strong> dekar</td></tr>
+                            <tr><td style={{ opacity: 0.7 }}>Ekili mi</td>
+                                <td>{p.ekim_durumu === "ekili" ? "Evet" : "Hayır"}</td></tr>
+                            {p.ndvi_latest && (
+                              <tr><td style={{ opacity: 0.7 }}>NDVI</td>
+                                  <td>{p.ndvi_latest} · {RISK_LABELS[p.risk_level] || ""}</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                        <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
+                          <button className="btn btn-primary text-xs" style={{ width: "100%" }}
+                                  onClick={() => nav(`/parseller/${p.id}`)} data-testid="popup-parcel-detail">
+                            Parsel detayına git
+                          </button>
+                          <button className="btn btn-ghost text-xs" style={{ width: "100%" }}
+                                  disabled={!latestContract}
+                                  title={latestContract ? `${latestContract.contract_no}` : "Bu parselin sözleşmesi yok"}
+                                  onClick={() => latestContract && nav(`/sozlesmeler/${latestContract.id}`)}
+                                  data-testid="popup-contract-detail">
+                            Sözleşme detayına git{latestContract ? "" : " (yok)"}
+                          </button>
+                          <button className="btn btn-ghost text-xs" style={{ width: "100%" }}
+                                  onClick={() => nav(`/ekim?parcel=${p.id}`)} data-testid="popup-planting-detail">
+                            Ekim detayına git
+                          </button>
+                          {taskForm?.parcelId !== p.id ? (
+                            <button className="btn btn-ghost text-xs" style={{ width: "100%" }}
+                                    onClick={() => setTaskForm({ parcelId: p.id, task_type: "toprak işleme", date: "", msg: "" })}
+                                    data-testid="popup-assign-task">
+                              <ClipboardPlus size={12} /> Görev ata
+                            </button>
+                          ) : (
+                            <div style={{ display: "grid", gap: 4, padding: 6, borderRadius: 6,
+                                          background: "rgba(125,125,125,.08)" }}>
+                              <select className="input text-xs" value={taskForm.task_type}
+                                      onChange={(e) => setTaskForm({ ...taskForm, task_type: e.target.value })}>
+                                {["toprak işleme", "ekim", "gübreleme", "ilaçlama", "sulama", "hasat", "nakliye"]
+                                  .map((t) => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                              <input className="input text-xs" type="date" value={taskForm.date}
+                                     onChange={(e) => setTaskForm({ ...taskForm, date: e.target.value })} />
+                              <button className="btn btn-primary text-xs" data-testid="popup-task-submit"
+                                      onClick={async () => {
+                                        if (!taskForm.date) { setTaskForm({ ...taskForm, msg: "Tarih seçin." }); return; }
+                                        try {
+                                          await api.post("/operations/tasks", {
+                                            task_type: taskForm.task_type, parcel_id: p.id,
+                                            scheduled_date: new Date(taskForm.date).toISOString(),
+                                            machine_id: null, worker_id: null, notes: null,
+                                          });
+                                          setTaskForm({ ...taskForm, msg: "Görev oluşturuldu ✓" });
+                                        } catch (err) {
+                                          setTaskForm({ ...taskForm, msg: err.response?.data?.detail || "Görev oluşturulamadı" });
+                                        }
+                                      }}>
+                                Görevi Oluştur
+                              </button>
+                              {taskForm.msg && <div style={{ fontSize: 11 }}>{taskForm.msg}</div>}
+                            </div>
+                          )}
                         </div>
-                        <div style={{ fontSize: 12 }}>Sulama: {p.irrigation}</div>
-                        {p.ndvi_latest && <div style={{ fontSize: 12 }}>NDVI: {p.ndvi_latest} · {RISK_LABELS[p.risk_level]}</div>}
                       </div>
                     </Popup>
                   )}
@@ -511,32 +737,44 @@ export default function Parcels() {
 
         {/* SAĞ PANEL — aktif araca göre değişir */}
         <div className="card p-4 overflow-y-auto scrollbar" style={{ maxHeight: 640 }}>
+          {/* SON HAL — parsel satırları artık ÜSTTE; bu panel araç yokken
+              seçili parselin özetini gösterir (liste↔harita senkron göstergesi) */}
           {!tool && (
-            <>
-              <h3 className="font-display text-lg mb-3">Parsel Listesi</h3>
-              <div className="space-y-2">
-                {visibleParcels.slice(0, 60).map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => nav(`/parseller/${p.id}`)}
-                    className={`p-3 rounded-lg cursor-pointer border transition-colors ${
-                      selected?.id === p.id
-                        ? "border-[var(--primary)] bg-[var(--primary)]/5"
-                        : "border-[var(--border)] hover:border-[var(--primary)]/40"
-                    }`}
-                    data-testid={`parcel-${p.parcel_code}`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="font-mono text-xs text-[var(--text-dim)]">{p.parcel_code}</div>
-                      <div className="text-xs text-[var(--primary)]">{p.area_dekar.toFixed(1)} da</div>
+            <div data-testid="selected-parcel-panel">
+              <h3 className="font-display text-lg mb-3">Seçili Parsel</h3>
+              {!selected ? (
+                <p className="text-xs text-[var(--text-dim)]">
+                  Üstteki listeden bir satıra veya haritada bir parsele tıklayın —
+                  seçim iki tarafta da vurgulanır.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-lg border border-[var(--primary)] bg-[var(--primary)]/5">
+                    <div className="font-mono text-xs text-[var(--text-dim)]">{selected.parcel_code}</div>
+                    <div className="text-sm mt-1 font-medium">{selected.name}</div>
+                    <div className="text-xs text-[var(--text-dim)] mt-1">
+                      {[selected.il, selected.ilce, selected.mahalle || selected.village].filter(Boolean).join(" / ") || "—"}
                     </div>
-                    <div className="text-sm mt-1">{p.name}</div>
-                    <div className="text-xs text-[var(--text-dim)] mt-1">{p.village} · {p.soil_type} · {p.irrigation}</div>
-                    {p.risk_level && <div className="mt-1.5"><RiskBadge level={p.risk_level} label={p.risk_label} /></div>}
+                    <div className="text-xs text-[var(--text-dim)] mt-1">
+                      Ada {selected.ada_no || "—"} / Parsel {selected.parsel_no_tapu || "—"} ·{" "}
+                      {selected.area_dekar?.toFixed(1)} dekar
+                    </div>
+                    <div className="text-xs text-[var(--text-dim)] mt-1">
+                      {selected.soil_type} · {selected.irrigation} · Ekili: {selected.ekim_durumu === "ekili" ? "Evet" : "Hayır"}
+                    </div>
+                    {selected.risk_level && <div className="mt-1.5"><RiskBadge level={selected.risk_level} label={selected.risk_label} /></div>}
                   </div>
-                ))}
-              </div>
-            </>
+                  <button className="btn btn-primary w-full justify-center text-xs"
+                          onClick={() => nav(`/parseller/${selected.id}`)} data-testid="selected-goto-detail">
+                    Parsel detayına git
+                  </button>
+                  <button className="btn btn-ghost w-full justify-center text-xs"
+                          onClick={() => setSelected(null)}>
+                    Seçimi temizle
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {tool === "manual" && (
