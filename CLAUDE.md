@@ -2079,6 +2079,73 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   (IT-36+IT-37+IT-38[4/7]+IT-39)** — 2026-07-11, kullanıcının "hepsini
   bitir" talimatıyla tek oturumda ilerletildi.
 
+- ✅ **2026-07-18 — Kullanıcının 10 maddelik listesi (B-serisi) TAMAMLANDI.**
+  Bu oturumun son iki maddesi:
+
+  **#9 — Mobil Toprak Numunesi + Lab Süreci** (`data_entry.py`,
+  `MobilDashboard.jsx`): `POST /soil-samples/field` GPS izini alır ve
+  `_evaluate_track` ile "Z deseni" sezgisini uygular (nokta sayısı ≥5 +
+  dönüş ≥2 + yayılım ≥20 m). **Değerlendirme TAVSİYE niteliğindedir,
+  kaydı BLOKLAMAZ** — saha koşulunda geçerli bir numuneyi reddetmek
+  veri kaybından daha kötüdür (bilinçli karar). `PUT /soil-samples/
+  {id}/lab` gönderim→dönüş→sonuç zincirini yürütür; `sonuclandi`
+  geçişinde `soil_analysis_completed` event'i yayınlanır (IT-24'ün
+  otomasyon motoruna DOĞRUDAN bağlanır, yeni bir tetikleyici yazılmadı).
+  Mobilde `navigator.geolocation.watchPosition` ile canlı iz kaydı.
+  **Gerçek veriyle doğrulandı:** Z izi `z_ok=True` (2 dönüş, 75.4 m),
+  düz iz uyarı verdi, pH 5.4'ten otomatik kireçleme önerisi üretildi.
+
+  **#10 — Ekim Planlama Karar Motoru** (yeni `backend/agronomy.py`,
+  yeni `pages/EkimPlanlama.jsx`, route `/ekim-planlama`): Kullanıcının
+  hedefi POLAR (şeker) ORANINI MAKSİMİZE ETMEK. 21 sinyallik bir katalog
+  (`SIGNAL_CATALOG`, kod seviyesi registry) üzerinde çalışan,
+  **DB'de yaşayan düzenlenebilir kural kütüphanesi** (`agronomy_rules`,
+  18 varsayılan kural idempotent seed) — `automation.py`'nin "admin
+  ekrandan kural tanımlar, motor DB'den okur" kalıbıyla AYNI. Sinyaller
+  GERÇEK veriden gelir: toprak analizi, NDVI/uydu ölçüm sayısı, sulama
+  tipi+kayıtları, `disease_detections`, `yields`'ten polar/verim geçmişi
+  ve **münavebe** (ardışık pancar yılı, `plantings`+`yields` birleşimi).
+  `evaluate_rules()` SAF fonksiyondur (IT-20 hakediş motoru felsefesi):
+  100 puandan başlar, eşleşen kuralların `score_delta`'sını uygular,
+  `is_blocking` bir kural tek başına "Uygun Değil" yapar.
+  **AI OPSİYONELDİR VE KARARI DEĞİŞTİRMEZ** — düzenlenebilir prompt
+  kütüphanesiyle (`agronomy_prompts`) sadece bulguları anlatır; AI
+  yoksa/hata verirse kural tabanlı metin döner (`ai_powered:false`,
+  `extras.py` fallback deseniyle AYNI dürüstlük). Aranabilir parsel ucu
+  `/ekim-planlama/parcel-search` (il/ilçe/mahalle/ada/parsel no/ad) —
+  **bilinçli olarak `/parcels/search` DEĞİL**, server.py'nin
+  `/parcels/{parcel_id}` route'u "search"i id sanardı (bkz. Bilinen
+  Tuzaklar'daki `/parcels/bulk-update` route-sırası notu). Çeşit
+  `pancar_cesidi` lookup grubundan (10 varsayılan).
+  **Gerçek veriyle uçtan uca doğrulandı:** "Kuzucu Tarlası 1" analizinde
+  motor gerçek bir agronomik bulgu çıkardı — 4 yıl ardışık pancar
+  (monokültür) tespit edilip ekim BLOKLANDI (skor 20/100); kütüphaneye
+  kural eklenince AYNI parselin skoru gerçekten değişti, kural silinince
+  eski skora döndü (kütüphanenin motoru sürdüğünün kanıtı); engelleyici
+  bayrağı kararı çevirdi; geçersiz sinyal 400 ile reddedildi; seed
+  idempotent (2. çağrıda 0/0). Gemini ile gerçek AI anlatımı üretildi.
+  **Yan düzeltme:** `ai_provider.py`'nin `generate_text` timeout'u
+  20→60 sn (uzun bağlamlı üretim Gemini'de canlı olarak 20 sn'de zaman
+  aşımına uğradı; vision timeout'u değiştirilmedi).
+
+  **Bilinçli kapsam dışı (#10):** `kantar_records` bu motora DAHİL
+  EDİLMEDİ — parsel taşımaz (farmer bazlı, bkz. IT-05 notu), polar
+  geçmişi parsel taşıyan `yields`'ten okunur. İklim/hava sinyali YOK
+  (kurulu bir hava servisi yok).
+
+  **ORTAM TUZAĞI (bu oturumda 3 saat kaybettirdi, MUTLAKA OKU):**
+  Bu makinede **İKİ ayrı Docker motoru** var — Docker Desktop ve WSL
+  Ubuntu'nun kendi `dockerd`'si. Docker Desktop kapalıyken WSL içinden
+  `docker compose up` çalıştırılırsa komut SESSİZCE WSL'in kendi
+  daemon'una düşer, **BOŞ bir volume ile sıfırdan bir mongo başlatır**
+  ve uygulama "tüm veri silinmiş" gibi görünür (backend log'unda
+  "🔑 Platform admin oluşturuldu", login 401). **VERİ SİLİNMEMİŞTİR** —
+  Docker Desktop'ı başlatıp `docker volume ls` ile bakın; gerçek veri
+  `toprax_final_12072026_00_mongo_data` volume'ünde durur. Teşhis:
+  `docker volume ls` sadece 2 volume gösteriyorsa yanlış daemon'a
+  bakıyorsunuzdur (Docker Desktop'ta ~28 volume var). Panikle
+  seed/reset ÇALIŞTIRMAYIN.
+
 ## 7. Çalıştırma
 
 ```bash
