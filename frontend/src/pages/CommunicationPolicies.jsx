@@ -10,10 +10,15 @@
 import { useState } from "react";
 import api from "@/api";
 import { useFetch } from "@/hooks/use-fetch";
-import { Zap, Plus, ShieldOff, Trash2 } from "lucide-react";
+import FarmerSelect from "@/components/FarmerSelect";
+import { Zap, Plus, ShieldOff, Trash2, Users } from "lucide-react";
 
-const emptyPolicyForm = { name: "", event_type: "", channels: [], template_ids: {} };
+const emptyPolicyForm = {
+  name: "", event_type: "", channels: [], template_ids: {},
+  group_ids: [], notify_responsible: true,   // #5 — çok-gruplu fan-out + köy sorumlusu
+};
 const emptyBlacklistForm = { contact_type: "farmer", contact_id: "", reason: "" };
+const emptyGroupForm = { name: "", description: "", member_user_ids: [], member_farmer_ids: [] };
 
 // Refactoring notu (2026-07-11): 5 bagimsiz okuma-fetch'i useFetch hook'una
 // tasindi (bkz. hooks/use-fetch.js) -- form state (policyForm/blacklistForm/
@@ -29,12 +34,51 @@ export default function CommunicationPolicies() {
   const channels = channelsQ.data;
   const templates = templatesQ.data;
   const blacklist = blacklistQ.data;
+  const groupsQ = useFetch("/groups", { initialData: [] });
+  const usersQ = useFetch("/users", { initialData: [] });
+  const groups = groupsQ.data;
+  const staffUsers = (usersQ.data || []).filter((u) => u.role !== "ciftci");
   const [policyForm, setPolicyForm] = useState(emptyPolicyForm);
   const [blacklistForm, setBlacklistForm] = useState(emptyBlacklistForm);
+  const [groupForm, setGroupForm] = useState(emptyGroupForm);
   const [error, setError] = useState("");
 
   const loadPolicies = () => policiesQ.reload();
   const loadBlacklist = () => blacklistQ.reload();
+
+  // ---- #5 Gruplar ----
+  function toggleGroupMemberUser(uid) {
+    setGroupForm((f) => ({
+      ...f,
+      member_user_ids: f.member_user_ids.includes(uid)
+        ? f.member_user_ids.filter((x) => x !== uid) : [...f.member_user_ids, uid],
+    }));
+  }
+  function addGroupFarmer(fid) {
+    if (!fid) return;
+    setGroupForm((f) => (f.member_farmer_ids.includes(fid) ? f : { ...f, member_farmer_ids: [...f.member_farmer_ids, fid] }));
+  }
+  async function submitGroup(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await api.post("/groups", groupForm);
+      setGroupForm(emptyGroupForm);
+      groupsQ.reload();
+    } catch (err) { setError(err.response?.data?.detail || "Grup oluşturulamadı"); }
+  }
+  async function deleteGroup(id) {
+    if (!window.confirm("Bu grup silinsin mi? (Arşivlenir)")) return;
+    await api.delete(`/groups/${id}`);
+    groupsQ.reload();
+  }
+  function togglePolicyGroup(gid) {
+    setPolicyForm((f) => ({
+      ...f,
+      group_ids: (f.group_ids || []).includes(gid)
+        ? f.group_ids.filter((x) => x !== gid) : [...(f.group_ids || []), gid],
+    }));
+  }
 
   const eventLabels = Object.fromEntries(eventTypes.map((e) => [e.key, e.label]));
   const channelLabel = (key) => channels.find((c) => c.key === key)?.label || key;
@@ -127,8 +171,93 @@ export default function CommunicationPolicies() {
             </div>
           ))}
         </div>
+
+        {/* #5 — çok-gruplu fan-out + köy sorumlusu */}
+        <div>
+          <div className="text-xs text-[var(--text-dim)] uppercase tracking-wider mb-2">
+            Ek Alıcılar (olayın kendi kişisine EK olarak)
+          </div>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {groups.length === 0 && <span className="text-xs text-[var(--text-dim)]">Henüz grup yok — aşağıdan oluşturun.</span>}
+            {groups.map((g) => (
+              <button key={g.id} type="button" onClick={() => togglePolicyGroup(g.id)}
+                      className={`btn text-xs ${(policyForm.group_ids || []).includes(g.id) ? "btn-primary" : "btn-ghost"}`}
+                      data-testid="policy-group-chip">
+                {g.name} ({(g.member_user_ids?.length || 0) + (g.member_farmer_ids?.length || 0)})
+              </button>
+            ))}
+          </div>
+          <label className="flex items-center gap-2 text-xs text-[var(--text-dim)]">
+            <input type="checkbox" checked={policyForm.notify_responsible !== false}
+                   onChange={(e) => setPolicyForm((f) => ({ ...f, notify_responsible: e.target.checked }))}
+                   data-testid="policy-notify-responsible" />
+            Parselin köy sorumlusuna da gönder (portföy sorumlusu — #6)
+          </label>
+        </div>
+
         <button type="submit" className="btn btn-primary" data-testid="policy-submit">Politikayı Oluştur</button>
       </form>
+
+      {/* #5 — KİŞİ GRUPLARI (personel + çiftçi karma) */}
+      <div className="card p-5 mb-8" data-testid="groups-card">
+        <h3 className="font-display text-lg flex items-center gap-2 mb-1">
+          <Users size={16} className="text-[var(--primary)]" /> Kişi Grupları
+        </h3>
+        <p className="text-[11px] text-[var(--text-dim)] mb-3">
+          Personel ve/veya çiftçilerden oluşan adlandırılmış dağıtım listeleri. Yukarıdaki politikalarda
+          "Ek Alıcılar" olarak seçilir (anomali vb. olaylarda tüm üyelere çok-kanallı bildirim gider).
+        </p>
+
+        <form onSubmit={submitGroup} className="space-y-3 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input className="input" placeholder="Grup adı (ör. Kriz Ekibi)" required
+                   value={groupForm.name} onChange={(e) => setGroupForm((f) => ({ ...f, name: e.target.value }))}
+                   data-testid="group-name" />
+            <input className="input" placeholder="Açıklama (opsiyonel)"
+                   value={groupForm.description} onChange={(e) => setGroupForm((f) => ({ ...f, description: e.target.value }))} />
+          </div>
+          <div>
+            <div className="text-xs text-[var(--text-dim)] mb-1">Personel üyeler</div>
+            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto scrollbar">
+              {staffUsers.map((u) => (
+                <button key={u.id} type="button" onClick={() => toggleGroupMemberUser(u.id)}
+                        className={`btn text-[11px] ${groupForm.member_user_ids.includes(u.id) ? "btn-primary" : "btn-ghost"}`}>
+                  {u.full_name || u.email}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-[var(--text-dim)] mb-1">Çiftçi üyeler (arayıp ekleyin)</div>
+            <FarmerSelect value="" onChange={addGroupFarmer} />
+            {groupForm.member_farmer_ids.length > 0 && (
+              <div className="text-[11px] text-[var(--text-dim)] mt-1">
+                {groupForm.member_farmer_ids.length} çiftçi eklendi
+                <button type="button" className="ml-2 text-red-400"
+                        onClick={() => setGroupForm((f) => ({ ...f, member_farmer_ids: [] }))}>temizle</button>
+              </div>
+            )}
+          </div>
+          <button type="submit" className="btn btn-primary text-xs" data-testid="group-submit">
+            <Plus size={12} /> Grup Oluştur
+          </button>
+        </form>
+
+        <div className="space-y-1">
+          {groups.map((g) => (
+            <div key={g.id} className="flex items-center justify-between text-sm p-2 bg-[var(--surface-2)] rounded">
+              <div>
+                <span className="font-medium">{g.name}</span>
+                <span className="text-[11px] text-[var(--text-dim)] ml-2">
+                  {(g.member_user_ids?.length || 0)} personel · {(g.member_farmer_ids?.length || 0)} çiftçi
+                  {g.description ? ` · ${g.description}` : ""}
+                </span>
+              </div>
+              <button onClick={() => deleteGroup(g.id)} className="text-red-400 p-1" title="Sil"><Trash2 size={14} /></button>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="card overflow-hidden mb-8">
         <table className="w-full text-sm">

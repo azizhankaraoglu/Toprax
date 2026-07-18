@@ -7,5 +7,5 @@
  * Ayarlar > Entegrasyonlar bu tek kaynaktan okur.
  */
 export const APP_VERSION = "1.0";
-export const APP_BUILD = "18072026-0920";
+export const APP_BUILD = "18072026-0945";
 export const APP_VERSION_LABEL = `v${APP_VERSION} · Build ${APP_BUILD}`;

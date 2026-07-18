@@ -65,6 +65,11 @@ class CommunicationPolicyCreate(BaseModel):
     # DOĞRUDAN gönderilmez, önce onay kuyruğuna (Seçenek A) düşer; yetkili
     # onaylayınca gönderilir. False (varsayılan) = doğrudan gönderim (Seçenek B).
     requires_approval: bool = False
+    # #5 — ÇOK-GRUPLU fan-out: olayın "doğal" kişisine (çiftçi/personel) EK olarak
+    # bu grupların TÜM üyelerine de gönderilir (groups.py, karma üyelik).
+    group_ids: List[str] = []
+    # #5 — anomalide parselin KÖY SORUMLUSUNA da gönder (#6 miras çözümleyicisi).
+    notify_responsible: bool = True
 
 
 class CommunicationPolicyUpdate(BaseModel):
@@ -73,6 +78,8 @@ class CommunicationPolicyUpdate(BaseModel):
     template_ids: Optional[Dict[str, str]] = None
     is_active: Optional[bool] = None
     requires_approval: Optional[bool] = None
+    group_ids: Optional[List[str]] = None
+    notify_responsible: Optional[bool] = None
 
 
 class BlacklistCreate(BaseModel):
@@ -90,6 +97,41 @@ class PreferenceUpdate(BaseModel):
     quiet_hours_end: Optional[str] = None
 
 
+async def _responsible_recipient(db, payload: dict):
+    """#5+#6 — olayın geçtiği parselin KÖY SORUMLUSUNU alıcı olarak çözer
+    (köy adı ile eşleştirme; bkz. admin_areas.resolve_responsible)."""
+    pid = payload.get("parcel_id")
+    if not pid:
+        return None
+    parcel = await db.parcels.find_one({"id": pid}, {"_id": 0, "village": 1, "mahalle": 1})
+    if not parcel:
+        return None
+    from admin_areas import resolve_responsible
+    r = await resolve_responsible(db, parcel.get("village") or parcel.get("mahalle"))
+    return ("personnel", r["user_id"]) if r else None
+
+
+async def _policy_recipients(db, policy: dict, primary, payload: dict):
+    """Bir politikanın TÜM alıcıları: olayın doğal kişisi + (varsa) köy sorumlusu
+    + seçili grupların üyeleri. Aynı kişi birden çok kaynaktan gelirse TEK kez
+    gönderilir (dedupe)."""
+    recipients = []
+    if primary:
+        recipients.append(primary)
+    if policy.get("notify_responsible", True):
+        extra = await _responsible_recipient(db, payload)
+        if extra:
+            recipients.append(extra)
+    from groups import resolve_group_recipients
+    recipients.extend(await resolve_group_recipients(db, policy.get("group_ids") or []))
+    seen, unique = set(), []
+    for r in recipients:
+        if r and r not in seen:
+            seen.add(r)
+            unique.append(r)
+    return unique
+
+
 async def _handle_policy_event(db, event_type: str, payload: dict) -> None:
     """`event_bus.subscribe()` ile EVENT_CONTACT_RESOLVERS'taki HER event_type'a
     bağlanan tek handler — hangi politikanın hangi event'e ait olduğu DB'den
@@ -100,34 +142,41 @@ async def _handle_policy_event(db, event_type: str, payload: dict) -> None:
         return
     contact_type, field = resolver
     contact_id = payload.get(field)
-    if not contact_id:
-        return
+    primary = (contact_type, contact_id) if contact_id else None
 
     policies = await db.communication_policies.find(
         {"event_type": event_type, "is_active": True}, {"_id": 0},
     ).to_list(100)
     for policy in policies:
+        # #5 — alıcılar: olayın doğal kişisi + köy sorumlusu + grup üyeleri (dedupe).
+        recipients = await _policy_recipients(db, policy, primary, payload)
+        if not recipients:
+            continue
         # KONU 1.4 — Seçenek A (onaylı): doğrudan göndermek yerine onay kuyruğuna
         # düşür; yetkili `/communication-policies/pending-approvals/{id}/approve`
         # ile onaylayınca gerçek gönderim yapılır. Seçenek B (onaysız) = eski akış.
         if policy.get("requires_approval"):
             await db.pending_notifications.insert_one({
                 "id": str(uuid.uuid4()), "policy_id": policy["id"], "policy_name": policy["name"],
-                "event_type": event_type, "contact_type": contact_type, "contact_id": contact_id,
+                "event_type": event_type,
+                # Geriye uyumluluk: tekil alanlar İLK alıcıyı taşır; tam liste `recipients`'ta.
+                "contact_type": recipients[0][0], "contact_id": recipients[0][1],
+                "recipients": [{"contact_type": ct, "contact_id": ci} for ct, ci in recipients],
                 "channels": policy["channels"], "template_ids": policy.get("template_ids") or {},
                 "payload": {k: str(v) for k, v in payload.items()},
                 "status": "onay_bekliyor", "created_at": datetime.now(timezone.utc).isoformat(),
             })
             continue
-        for channel in policy["channels"]:
-            template_id = (policy.get("template_ids") or {}).get(channel)
-            if not template_id:
-                continue   # bu kanal için şablon tanımlanmamış — politika o kanalı atlar
-            await send_via_channel(
-                db, channel=channel, contact_type=contact_type, contact_id=contact_id,
-                template_id=template_id, variables={k: str(v) for k, v in payload.items()},
-                sent_by=f"iletişim politikası: {policy['name']}", message_kind="operational",
-            )
+        for (r_type, r_id) in recipients:
+            for channel in policy["channels"]:
+                template_id = (policy.get("template_ids") or {}).get(channel)
+                if not template_id:
+                    continue   # bu kanal için şablon tanımlanmamış — politika o kanalı atlar
+                await send_via_channel(
+                    db, channel=channel, contact_type=r_type, contact_id=r_id,
+                    template_id=template_id, variables={k: str(v) for k, v in payload.items()},
+                    sent_by=f"iletişim politikası: {policy['name']}", message_kind="operational",
+                )
 
 
 def register_communication_policy_routes(api_router, db, current_user, require_permission, log_audit):
@@ -198,17 +247,25 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
             raise HTTPException(404, "Onay bekleyen bildirim bulunamadı")
         if item["status"] != "onay_bekliyor":
             raise HTTPException(409, "Bu bildirim zaten işlenmiş")
+        # #5 — onaylanan bildirim TÜM alıcılara gider (grup fan-out + köy sorumlusu).
+        # Eski kayıtlarda `recipients` yoksa tekil contact alanlarına düşülür.
+        recipients = [(r.get("contact_type"), r.get("contact_id")) for r in (item.get("recipients") or [])]
+        if not recipients:
+            recipients = [(item.get("contact_type"), item.get("contact_id"))]
         sent = 0
-        for channel in item["channels"]:
-            template_id = (item.get("template_ids") or {}).get(channel)
-            if not template_id:
+        for (r_type, r_id) in recipients:
+            if not r_id:
                 continue
-            await send_via_channel(
-                db, channel=channel, contact_type=item["contact_type"], contact_id=item["contact_id"],
-                template_id=template_id, variables=item.get("payload") or {},
-                sent_by=f"onaylı bildirim: {item['policy_name']} ({user.get('email')})", message_kind="operational",
-            )
-            sent += 1
+            for channel in item["channels"]:
+                template_id = (item.get("template_ids") or {}).get(channel)
+                if not template_id:
+                    continue
+                await send_via_channel(
+                    db, channel=channel, contact_type=r_type, contact_id=r_id,
+                    template_id=template_id, variables=item.get("payload") or {},
+                    sent_by=f"onaylı bildirim: {item['policy_name']} ({user.get('email')})", message_kind="operational",
+                )
+                sent += 1
         await db.pending_notifications.update_one({"id": item_id}, {"$set": {
             "status": "onaylandi", "approved_by": user.get("email"),
             "approved_at": datetime.now(timezone.utc).isoformat(), "sent_channels": sent,

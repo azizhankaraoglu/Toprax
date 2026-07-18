@@ -2745,6 +2745,10 @@ register_admin_area_routes(api_router, db, current_user, require_permission, log
 from season_parameters import register_season_parameter_routes
 register_season_parameter_routes(api_router, db, current_user, require_permission, log_audit)
 
+# Genel Kişi Grupları (B2) — #5 anomali bildirimi fan-out + #8 form atama
+from groups import register_group_routes
+register_group_routes(api_router, db, current_user, require_permission, log_audit)
+
 # Dosya Depolama (IT-04) — basit dosya/resim upload + field_definitions
 # file/image/multifile alan tiplerinin ve "Belgeler" sekmesinin backend'i.
 from storage import register_storage_routes
