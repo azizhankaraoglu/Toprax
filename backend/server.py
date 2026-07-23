@@ -1761,7 +1761,7 @@ async def import_parcels_geojson(body: GeoJSONImportRequest, request: Request,
 # =====================================================================
 
 @api_router.get("/soil-samples")
-async def list_soil_samples(user=Depends(current_user)):
+async def list_soil_samples(user=Depends(current_user), _feat=Depends(require_feature("soil"))):
     """Tüm toprak analizleri (admin)"""
     docs = await db.soil_samples.find({"is_active": {"$ne": False}}, {"_id": 0}).sort([("date", -1)]).to_list(500)
     return docs
@@ -1813,7 +1813,8 @@ async def soil_summary(user=Depends(current_user)):
 # =====================================================================
 
 @api_router.get("/contracts")
-async def list_contracts(season: Optional[int] = None, status: Optional[str] = None, user=Depends(current_user)):
+async def list_contracts(season: Optional[int] = None, status: Optional[str] = None, user=Depends(current_user),
+                          _feat=Depends(require_feature("contracts"))):
     # BULGU 1 düzeltmesi: soft-delete edilmiş sözleşmeler listelenmez.
     filt: Dict[str, Any] = {"is_active": {"$ne": False}}
     if season: filt["season"] = season
@@ -1828,7 +1829,7 @@ async def list_contracts(season: Optional[int] = None, status: Optional[str] = N
 
 @api_router.get("/plantings")
 async def list_plantings(season: Optional[int] = None, parcel_id: Optional[str] = None,
-                         user=Depends(current_user)):
+                         user=Depends(current_user), _feat=Depends(require_feature("planting"))):
     filt: Dict[str, Any] = {"is_active": {"$ne": False}}   # soft-delete edilenleri gizle
     if season: filt["season"] = season
     if parcel_id: filt["parcel_id"] = parcel_id             # SON HAL — /ekim?parcel= filtresi
@@ -1944,7 +1945,8 @@ async def operations_summary(user=Depends(current_user)):
 # =====================================================================
 
 @api_router.get("/analytics/yields")
-async def yields_analytics(season: Optional[int] = None, user=Depends(current_user)):
+async def yields_analytics(season: Optional[int] = None, user=Depends(current_user),
+                            _feat=Depends(require_feature("reports"))):
     filt: Dict[str, Any] = {}
     if season: filt["season"] = season
     yields = await db.yields.find(filt, {"_id": 0}).to_list(10000)
@@ -2034,7 +2036,8 @@ async def list_regions(user=Depends(current_user)):
 
 
 @api_router.get("/logistics/appointments")
-async def list_appointments(farmer_id: Optional[str] = None, user=Depends(current_user)):
+async def list_appointments(farmer_id: Optional[str] = None, user=Depends(current_user),
+                             _feat=Depends(require_feature("logistics"))):
     filt: Dict[str, Any] = {"is_active": {"$ne": False}}   # soft-delete edilenleri gizle
     if farmer_id: filt["farmer_id"] = farmer_id
     return await db.appointments.find(filt, {"_id": 0}).sort([("scheduled_at", 1)]).to_list(500)
@@ -2085,7 +2088,7 @@ async def get_notification(notification_id: str, user=Depends(current_user)):
 
 
 @api_router.get("/karne/top")
-async def karne_top(limit: int = 10, user=Depends(current_user)):
+async def karne_top(limit: int = 10, user=Depends(current_user), _feat=Depends(require_feature("reports"))):
     return await db.farmers.find({}, {"_id": 0}).sort([("karne_points", -1)]).limit(limit).to_list(limit)
 
 
@@ -2753,10 +2756,10 @@ register_satellite_routes(api_router, db, current_user, require_permission, log_
 
 # Saha veri toplama (form builder) modülü
 from forms_module import register_form_routes
-register_form_routes(api_router, db, current_user, is_admin, security)
+register_form_routes(api_router, db, current_user, is_admin, security, require_feature)
 
 # Audit log görüntüleme
-register_audit_routes(api_router, db, current_user, is_admin, require_permission=require_permission)
+register_audit_routes(api_router, db, current_user, is_admin, require_permission=require_permission, require_feature=require_feature)
 
 # Ayarlar / Entegrasyonlar modülü (SMS, Email, Planet Labs, AI Servisi)
 register_integration_routes(api_router, db, current_user, is_admin, log_audit=log_audit, require_permission=require_permission)
@@ -2810,7 +2813,7 @@ register_geo_import_routes(api_router, db, current_user, require_permission, log
 # İdari Alanlar + Demografi + Layer v1 (IT-13.6) — il/ilçe/mahalle sınır
 # geometrileri, IT-13.5 ile içe aktarılır (sistemde hazır sınır YOK).
 from admin_areas import register_admin_area_routes
-register_admin_area_routes(api_router, db, current_user, require_permission, log_audit)
+register_admin_area_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Sezon Parametreleri (B3) — #7 kota→alan kuralı + #2 NDVI eşikleri için parametrik katsayılar
 from season_parameters import register_season_parameter_routes
@@ -2856,12 +2859,12 @@ register_ledger_routes(api_router, db, current_user, require_permission, log_aud
 # Organizasyon Hiyerarşisi (IT-07b / FAZ 3 devam) — OrganizationUnit/Position/
 # UserPosition + org-chart + manager-chain resolver. approval.py bunu tüketir.
 from organization import register_organization_routes
-register_organization_routes(api_router, db, current_user, require_permission, log_audit)
+register_organization_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Onay Zinciri Motoru (IT-07b / FAZ 3 devam) — TEK ortak onay servisi;
 # support.py/campaigns.py bunu import edip kullanır, kendi onay mantığını YAZMAZ.
 from approval import register_approval_routes
-register_approval_routes(api_router, db, current_user, require_permission, log_audit)
+register_approval_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Destek Kataloğu + Destek Talep Süreci (IT-18 / FAZ 7 — UFYD başlangıcı) —
 # SupportType katalog CRUD + 9 durumlu SupportRequest akışı + çiftçi
@@ -2883,20 +2886,20 @@ register_reconciliation_routes(api_router, db, current_user, require_permission,
 # Saha Operasyonları: İş Emri / Görev / Ziyaret Üçlü Modeli
 # (IT-22 / FAZ 8 — Sprint 8 başlangıcı).
 from field_ops import register_field_ops_routes
-register_field_ops_routes(api_router, db, current_user, require_permission, log_audit)
+register_field_ops_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Kural Tabanlı Otomatik Görev Oluşturma (event_bus.py'nin TEMEL kullanımı)
 # + Saha Raporları (query_engine.py'ye field_tasks/visits modülleri) +
 # Modül Dashboard'u (field_ops.py'deki GET /field-ops/dashboard)
 # (IT-24 / FAZ 8 TAMAMLANDI).
 from automation import register_automation_routes
-register_automation_routes(api_router, db, current_user, require_permission, log_audit)
+register_automation_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Inbound Case Yönetimi (IT-28 / FAZ 9 devam) — genel "Konu/Case" modeli +
 # iki yönlü mesajlaşma + field_ops.py'ye (Task) otomatik köprü. communications.py
 # kişi kartı timeline'ına bu modülün case kayıtlarını AYRICA okur (tek yönlü).
 from case_management import register_case_routes
-register_case_routes(api_router, db, current_user, require_permission, log_audit)
+register_case_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # PR-04 (ROADMAP-URUNLESTIRME.md): Migration Runner + Surum Yukseltme/Geri
 # Alma. raw_db kullanir (tenant filtresiz) -- migration'lar sema seviyesinde
@@ -2915,7 +2918,7 @@ register_setup_wizard_routes(api_router, raw_db, current_user, log_audit)
 # (yukarida) zaten entegre edildi -- burada sadece yonetim uclari (olustur/
 # listele/iptal et) eklenir.
 from api_keys import register_api_key_routes
-register_api_key_routes(api_router, raw_db, require_permission, log_audit)
+register_api_key_routes(api_router, raw_db, require_permission, log_audit, require_feature)
 
 # PR-26 (ROADMAP-URUNLESTIRME.md): Gelistirici Portali backend destegi --
 # Swagger (/docs) FastAPI varsayilaniyla zaten acik, burada sadece Postman
@@ -2949,7 +2952,7 @@ register_lms_routes(api_router, db, current_user, require_permission, log_audit,
 
 # Integration Hub Formalizasyonu + Webhook Engine (IT-32 / FAZ 11).
 from integration_hub import register_integration_hub_routes
-register_integration_hub_routes(api_router, db, current_user, require_permission, log_audit)
+register_integration_hub_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Platform Core — Feature Flags + Module Manifest + Licensing İskeleti +
 # Health Center (IT-33 / FAZ 11 TAMAMLANDI).
@@ -2958,7 +2961,7 @@ register_platform_core_routes(api_router, db, current_user, require_permission, 
 
 # Experience Profile Modeli (IT-34 / FAZ 12 — Mobil başlangıç).
 from experience_profile import register_experience_profile_routes
-register_experience_profile_routes(api_router, db, current_user, require_permission, log_audit)
+register_experience_profile_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # FAZ 18 / IT-47..53 — Agricultural Intelligence Engine (AI Vision).
 # Knowledge Library + Confidence Engine + Cloud Escalation + Tenant Kota +
@@ -2974,7 +2977,7 @@ register_ai_engine_routes(api_router, db, raw_db, current_user, require_permissi
 # Karar 1). Tarama Politikası (Karar 2) + Integration Center EOSDA tipi
 # (Karar 3) + Monitoring + Task yönetimi + Communication Policy köprüsü.
 from remote_sensing import register_remote_sensing_routes
-register_remote_sensing_routes(api_router, db, current_user, require_permission, log_audit)
+register_remote_sensing_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Duyurular — açılışta popup + Bildirimler çekmecesinde okundu-takipli yayın.
 from announcements import register_announcement_routes

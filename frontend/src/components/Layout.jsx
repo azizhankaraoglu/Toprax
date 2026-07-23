@@ -5,9 +5,9 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import {
   Wheat, LayoutDashboard, Users, Map, FileText, Sprout, Droplets,
   Settings2, BarChart3, Truck, Bell, LogOut, Award, ChevronRight, FlaskConical,
-  Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Settings, Sparkles,
-  UserCog, ShieldCheck, LayoutList, Landmark, Compass, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, SlidersHorizontal, ClipboardCheck,
-  Workflow, CheckSquare, Inbox, Code2, Radio
+  Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Sparkles,
+  UserCog, ShieldCheck, LayoutList, Landmark, Compass, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, ClipboardCheck,
+  Workflow, CheckSquare, Inbox, Radio
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
 import AnnouncementPopup from "@/components/AnnouncementPopup";
@@ -113,11 +113,14 @@ const navGroups = [
       { to: "/onay-bekleyenlerim", icon: CheckSquare, label: "Onay Bekleyenlerim" },
       { to: "/bize-ulasin", icon: Inbox, label: "Bize Ulaşın" },
       { to: "/integration-hub", icon: Cable, label: "Integration Hub" },
-      { to: "/gelistirici-portali", icon: Code2, label: "Geliştirici Portalı", adminTierOnly: true },
-      { to: "/platform-core", icon: SlidersHorizontal, label: "Platform Core" },
-      { to: "/experience-profiles", icon: Smartphone, label: "Experience Profile" },
       { to: "/audit", icon: Activity, label: "Audit Log", adminTierOnly: true },
-      { to: "/ayarlar", icon: Settings, label: "Ayarlar", adminTierOnly: true },
+      // SON HAL (2026-07-23) — Geliştirici Portalı / Platform Core /
+      // Experience Profile / Ayarlar buradan KALDIRILDI: kullanıcı isteği
+      // üzerine bunlar artık kooperatifin kendi Sistem menüsünden değil,
+      // God Mode > Tenant Yönetimi > "Sistem Ekranları" üzerinden (var olan
+      // "Bu Kooperatif Olarak Gir" impersonation mekanizmasıyla) yönetiliyor
+      // — bkz. PlatformAdmin.jsx. Route'lar App.js'te DURUYOR (impersonation
+      // sonrası doğrudan o sayfaya yönlendirilir), sadece bu menüden kalktı.
     ]
   }
 ];

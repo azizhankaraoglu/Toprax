@@ -148,7 +148,9 @@ async def get_instance_for_entity(db, process: str, entity_id: str) -> Optional[
         {"process": process, "entity_id": entity_id}, {"_id": 0}, sort=[("created_at", -1)])
 
 
-def register_approval_routes(api_router, db, current_user, require_permission, log_audit):
+def register_approval_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "approvals" flag'i kapatılınca liste 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     # ---------------- Onay Kuralı Tanımı (Ayarlar) ----------------
     @api_router.get("/approval-chains")
@@ -191,7 +193,8 @@ def register_approval_routes(api_router, db, current_user, require_permission, l
 
     # ---------------- Onay Bekleyenlerim (modül-bağımsız) ----------------
     @api_router.get("/approvals/pending")
-    async def pending_for_me(user=Depends(require_permission("approvals:view_pending"))):
+    async def pending_for_me(user=Depends(require_permission("approvals:view_pending")),
+                              _feat=Depends(require_feature("approvals"))):
         docs = await db.approval_instances.find(
             {"status": "bekliyor", "current_approvers": user["id"]}, {"_id": 0}
         ).sort("created_at", -1).to_list(200)

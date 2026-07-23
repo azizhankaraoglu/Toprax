@@ -84,10 +84,13 @@ class ProfileAssignRequest(BaseModel):
     experience_profile_id: Optional[str] = None   # None = atamayı kaldır
 
 
-def register_experience_profile_routes(api_router, db, current_user, require_permission, log_audit):
+def register_experience_profile_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "experience_profiles" flag'i kapatılınca liste 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     @api_router.get("/experience-profiles")
-    async def list_experience_profiles(user=Depends(require_permission("experience_profiles:view"))):
+    async def list_experience_profiles(user=Depends(require_permission("experience_profiles:view")),
+                                        _feat=Depends(require_feature("experience_profiles"))):
         return await db.experience_profiles.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
     @api_router.get("/experience-profiles/{profile_id}")

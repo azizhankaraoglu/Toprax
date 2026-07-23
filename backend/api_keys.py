@@ -96,13 +96,16 @@ async def resolve_api_key_user(raw_db, plaintext_key: str) -> Optional[dict]:
     }
 
 
-def register_api_key_routes(api_router, raw_db, require_permission, log_audit):
+def register_api_key_routes(api_router, raw_db, require_permission, log_audit, require_feature=None):
     """Entegrasyon Merkezi'nin (Ayarlar > Entegrasyonlar) 'API Anahtarlarım'
     ekranı bu uçları kullanır (bkz. PR-26 Geliştirici Portalı)."""
+    # God Mode Modül Yönetimi — "developer_portal" flag'i kapatılınca 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     @api_router.post("/api-keys")
     async def create_api_key(body: ApiKeyCreate, request: Request,
-                               user=Depends(require_permission(MANAGE_PERMISSION))):
+                               user=Depends(require_permission(MANAGE_PERMISSION)),
+                               _feat=Depends(require_feature("developer_portal"))):
         plaintext = _generate_key()
         doc = {
             "id": str(uuid.uuid4()),

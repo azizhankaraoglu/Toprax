@@ -70,16 +70,22 @@ class TenantLicenseCreate(BaseModel):
 # BİLİNÇLİ OLARAK dışarıda bırakıldı — bunlar "kapatılabilir modül" değil,
 # çekirdek hesap yönetimi).
 #
-# ÖNEMLİ SINIR (kapsam notu): yeni 20 anahtarın toggle'ı bu ekranda
-# ÇALIŞIR ve `feature_flags` koleksiyonuna yazılır, ANCAK ilk 9 anahtarın
-# aksine (farmer/parcel/production/factory/ufyd/lms/ai/whatsapp/
-# communication — bunlar server.py/production_cycles.py/ledger.py/lms.py/
-# extras.py/communications.py içinde `require_feature()` ile GERÇEKTEN
-# backend'de zorlanıyor) yeni eklenenler için backend route'larına henüz
-# `require_feature()` bağlanmadı — yani şu an SADECE görünürlük/kayıt
-# amaçlı (kapatılsa bile ilgili API'ler 403 dönmez). Tüm modüllere gerçek
-# erişim kısıtlaması eklemek ayrı, daha büyük bir iterasyon — istenirse
-# takip talebi olarak açılabilir.
+# GÜNCELLEME (2026-07-23, aynı gün ikinci geçiş): yukarıdaki "yeni 20
+# anahtar sadece görünürlük amaçlı" notu artık GEÇERSİZ — kullanıcı
+# "tabiki yapmalıyız" dedi ve hepsine gerçek `require_feature()` zorlaması
+# eklendi. Her modülün ANA liste/oluşturma endpoint'i artık ilgili flag
+# kapatıldığında 403 döner (server.py: contracts/planting/soil/logistics/
+# reports[x2]; data_entry.py: irrigation/operations — zaten require_feature
+# alıyordu; extras.py: invoicing — zaten alıyordu; admin_areas.py,
+# organization.py, approval.py, case_management.py, integration_hub.py,
+# experience_profile.py, audit.py, field_ops.py, automation.py,
+# forms_module.py, remote_sensing/services.py, api_keys.py (developer_portal)
+# — bu 12 dosyaya register_*_routes(..., require_feature=None) parametresi
+# YENİ eklendi, server.py'deki çağrı yerleri güncellendi). Diğer/ikincil
+# endpoint'ler (ör. organization.py'nin update/delete uçları) BİLİNÇLİ
+# OLARAK gate'lenmedi — production/ufyd/lms/ai'daki mevcut kalıpla AYNI:
+# tek bir ana giriş noktası yeterli, her CRUD ucunu tekrar tekrar
+# kontrol etmek gereksiz karmaşıklık.
 MODULE_TOGGLE_LABELS = {
     "farmer": "Çiftçi Yönetimi",
     "parcel": "Parsel / GIS Veri Girişi",

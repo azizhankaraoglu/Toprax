@@ -747,7 +747,8 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/irrigation/events")
     async def create_irrigation_event(body: IrrigationEventAdminCreate, request: Request,
-                                       user=Depends(require_permission("irrigation:create"))):
+                                       user=Depends(require_permission("irrigation:create")),
+                                       _feat=Depends(require_feature("irrigation"))):
         parcel = await db.parcels.find_one({"id": body.parcel_id}, {"_id": 0})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")
@@ -970,7 +971,8 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/operations/tasks")
     async def create_task(body: TaskCreate, request: Request,
-                           user=Depends(require_permission("operations:tasks_manage"))):
+                           user=Depends(require_permission("operations:tasks_manage")),
+                           _feat=Depends(require_feature("operations"))):
         parcel = await db.parcels.find_one({"id": body.parcel_id}, {"_id": 0})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")

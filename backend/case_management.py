@@ -114,7 +114,9 @@ class CaseTaskCreate(BaseModel):
     planned_date: Optional[str] = None
 
 
-def register_case_routes(api_router, db, current_user, require_permission, log_audit):
+def register_case_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "case_management" flag'i kapatılınca liste 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     # ---------------- Kategori Yönetimi ----------------
     @api_router.get("/case-categories")
@@ -149,6 +151,7 @@ def register_case_routes(api_router, db, current_user, require_permission, log_a
         status: Optional[str] = None, category_id: Optional[str] = None,
         assigned_to: Optional[str] = None, farmer_id: Optional[str] = None,
         user=Depends(require_permission("cases:view")),
+        _feat=Depends(require_feature("case_management")),
     ):
         filt = {}
         if status: filt["status"] = status

@@ -39,8 +39,10 @@ async def log_audit(db, user: dict, action: str, entity: str, entity_id: str = N
     await db.audit_logs.insert_one(record)
 
 
-def register_audit_routes(api_router, db, current_user, is_admin, require_permission=None):
+def register_audit_routes(api_router, db, current_user, is_admin, require_permission=None, require_feature=None):
     """server.py içindeki register_* pattern'iyle tutarlı: audit endpoint'lerini bağlar."""
+    # God Mode Modül Yönetimi — "audit" flag'i kapatılınca liste 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     @api_router.get("/audit/logs")
     async def list_audit_logs(
@@ -48,6 +50,7 @@ def register_audit_routes(api_router, db, current_user, is_admin, require_permis
         user_id: str = Query(None),
         limit: int = Query(100, le=500),
         user=Depends(current_user),
+        _feat=Depends(require_feature("audit")),
     ):
         allowed = user.get("role") in ADMIN_TIER_ROLES
         if not allowed and require_permission:

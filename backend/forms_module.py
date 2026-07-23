@@ -26,8 +26,10 @@ from tenant_context import current_tenant_id
 from config_service import ALLOW_DATA_SEEDING
 
 
-def register_form_routes(api_router, db, current_user, is_admin, security):
+def register_form_routes(api_router, db, current_user, is_admin, security, require_feature=None):
     """Form modülü endpoint'lerini kaydet"""
+    # God Mode Modül Yönetimi — "forms" flag'i kapatılınca liste 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
     
     # =====================================================================
     # MODELLER
@@ -104,7 +106,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security):
         return doc
 
     @api_router.get("/forms")
-    async def list_forms(user=Depends(current_user)):
+    async def list_forms(user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """Form listesi"""
         if is_admin(user):
             docs = await db.forms.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(500)

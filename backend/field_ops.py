@@ -196,7 +196,9 @@ async def create_field_task_from_rule(
     return doc
 
 
-def register_field_ops_routes(api_router, db, current_user, require_permission, log_audit):
+def register_field_ops_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "field_ops" flag'i kapatılınca liste 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     async def _check_task_access(user: dict, task: dict, require_manage: bool = False):
         """Görevi ÜSTLENEN kullanıcı kendi görevini yönetebilir (permission gerekmez);
@@ -349,6 +351,7 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         farmer_id: Optional[str] = None, parcel_id: Optional[str] = None,
         production_cycle_id: Optional[str] = None, work_order_id: Optional[str] = None,
         user=Depends(require_permission("field_ops:view")),
+        _feat=Depends(require_feature("field_ops")),
     ):
         filt = {}
         if assigned_to: filt["assigned_to"] = assigned_to

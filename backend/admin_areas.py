@@ -151,7 +151,9 @@ class BulkDeleteRequest(BaseModel):
     area_ids: List[str]
 
 
-def register_admin_area_routes(api_router, db, current_user, require_permission, log_audit):
+def register_admin_area_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "admin_areas" flag'i kapatılınca liste 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     @api_router.get("/admin-areas/meta")
     async def admin_area_meta(user=Depends(current_user)):
@@ -161,6 +163,7 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
     async def list_admin_areas(
         area_type: Optional[str] = None, parent_id: Optional[str] = None,
         user=Depends(require_permission("admin_areas:view")),
+        _feat=Depends(require_feature("admin_areas")),
     ):
         """Liste/harita katmanı yanıtı — geometri Layer v1 performansı için sadeleştirilir."""
         query: Dict[str, Any] = {"is_active": {"$ne": False}}

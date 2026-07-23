@@ -87,7 +87,9 @@ def _rs_ai_prompt(parcel, m, series):
     )
 
 
-def register_remote_sensing_routes(api_router, db, current_user, require_permission, log_audit):
+def register_remote_sensing_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "remote_sensing" flag'i kapatılınca 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     async def _provider_factory(provider_override=None):
         return await get_remote_sensing_provider(db, provider_override=provider_override)
@@ -97,7 +99,8 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
 
     # ---- Sağlayıcı durumu ----------------------------------------------------
     @api_router.get("/remote-sensing/providers/status")
-    async def rs_provider_status(user=Depends(require_permission("remote_sensing:view"))):
+    async def rs_provider_status(user=Depends(require_permission("remote_sensing:view")),
+                                  _feat=Depends(require_feature("remote_sensing"))):
         provider = await get_remote_sensing_provider(db)
         integ = await db.integrations.find_one({"type": "eosda"}, {"_id": 0}) or {}
         return {

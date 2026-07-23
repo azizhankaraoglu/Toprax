@@ -611,7 +611,7 @@ Sadece anlamlı alanları dahil et.
     # =====================================================================
     
     @api_router.get("/e-belge/invoices")
-    async def list_einvoices(user=Depends(current_user)):
+    async def list_einvoices(user=Depends(current_user), _feat=Depends(require_feature("invoicing"))):
         """E-fatura listesi (demo data)"""
         docs = await db.einvoices.find({}, {"_id": 0}).sort([("date", -1)]).to_list(200)
         return docs

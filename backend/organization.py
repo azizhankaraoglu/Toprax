@@ -123,11 +123,14 @@ async def get_direct_reports(db, manager_user_id: str) -> List[str]:
     return [d["user_id"] async for d in cursor]
 
 
-def register_organization_routes(api_router, db, current_user, require_permission, log_audit):
+def register_organization_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "organization" flag'i kapatılınca liste 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     # ---------------- Organization Units ----------------
     @api_router.get("/organization-units")
-    async def list_org_units(user=Depends(require_permission("organization:view"))):
+    async def list_org_units(user=Depends(require_permission("organization:view")),
+                              _feat=Depends(require_feature("organization"))):
         return await db.organization_units.find({"is_active": {"$ne": False}}, {"_id": 0}).sort("name", 1).to_list(500)
 
     @api_router.post("/organization-units")

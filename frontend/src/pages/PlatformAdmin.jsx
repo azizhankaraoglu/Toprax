@@ -5,6 +5,7 @@ import Drawer from "@/components/Drawer";
 import {
   Building2, LogOut, Users, Sprout, LayoutGrid, BarChart3, HeartPulse,
   LogIn, Trash2, Puzzle, KeyRound, AlertTriangle, CheckCircle2,
+  SlidersHorizontal, Code2, Smartphone, Settings,
 } from "lucide-react";
 
 const TABS = [
@@ -25,6 +26,19 @@ const MODULE_ORDER = [
   "lms",
   "admin_areas", "organization", "approvals", "case_management",
   "integration_hub", "developer_portal", "experience_profiles", "audit",
+];
+
+// SON HAL (2026-07-23) — kullanıcı isteği: Deneyim Profili / Platform Core /
+// Geliştirici Portalı / Ayarlar artık kooperatifin KENDİ Sistem menüsünde
+// DEĞİL (bkz. Layout.jsx'ten kaldırıldığı yer) — sadece buradan, mevcut
+// "Bu Kooperatif Olarak Gir" impersonation akışı üzerinden erişilir. Route'lar
+// App.js'te hâlâ duruyor (impersonation sonrası tam sayfa yönlendirme onlara
+// gider), sadece tenant'ın kendi navigasyonundan çıkarıldı.
+const SYSTEM_SCREENS = [
+  { path: "/experience-profiles", label: "Experience Profile", icon: Smartphone },
+  { path: "/platform-core", label: "Platform Core", icon: SlidersHorizontal },
+  { path: "/gelistirici-portali", label: "Geliştirici Portalı", icon: Code2 },
+  { path: "/ayarlar", label: "Ayarlar", icon: Settings },
 ];
 
 const LICENSE_FIELDS = [
@@ -106,6 +120,23 @@ export default function PlatformAdmin() {
       // kullandığı AYNI karar): tüm component state'i, feature-flag
       // önbelleği vb. sıfırdan, doğru kimlikle yüklenir.
       window.location.href = "/";
+    } catch (e) {
+      alert(e.response?.data?.detail || "Girilemedi");
+    }
+  }
+
+  // SON HAL (2026-07-23) — enterTenant ile AYNI impersonation ucu, tek fark
+  // yönlendirme hedefi: dashboard yerine doğrudan istenen "Sistem Ekranı"na
+  // gider (Experience Profile / Platform Core / Geliştirici Portalı / Ayarlar
+  // — bkz. SYSTEM_SCREENS). Bu 4 ekran artık tenant'ın kendi menüsünde
+  // olmadığı için buradan başka bir giriş yolu yok.
+  async function enterTenantAt(t, path) {
+    try {
+      const { data } = await api.post(`/god-mode/tenants/${t.id}/enter`);
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("refresh_token", "");
+      localStorage.setItem("user", JSON.stringify(data.user));
+      window.location.href = path;
     } catch (e) {
       alert(e.response?.data?.detail || "Girilemedi");
     }
@@ -254,6 +285,17 @@ export default function PlatformAdmin() {
                     )}
                     <button onClick={() => openModules(t)} className="btn btn-ghost text-xs"><Puzzle size={13}/> Modüller</button>
                     <button onClick={() => openLicense(t)} className="btn btn-ghost text-xs"><KeyRound size={13}/> Lisans</button>
+                    {t.user_count > 0 && SYSTEM_SCREENS.map((s) => (
+                      <button
+                        key={s.path}
+                        onClick={() => enterTenantAt(t, s.path)}
+                        className="btn btn-ghost text-xs"
+                        title={`${s.label} (bu kooperatif olarak girip doğrudan aç)`}
+                        data-testid={`system-screen-${s.path.replace("/", "")}-${t.id}`}
+                      >
+                        <s.icon size={13}/> {s.label}
+                      </button>
+                    ))}
                     {t.status !== "aktif" && (
                       <button onClick={() => updateStatus(t.id, "aktif")} className="btn btn-ghost text-xs">Aktifleştir</button>
                     )}

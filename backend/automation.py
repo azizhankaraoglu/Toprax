@@ -95,7 +95,9 @@ async def _handle_automation_event(db, event_type: str, payload: dict) -> None:
         await db.automation_rule_runs.insert_one(run_doc)
 
 
-def register_automation_routes(api_router, db, current_user, require_permission, log_audit):
+def register_automation_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "automation" flag'i kapatılınca liste 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
     # server.py başlangıcında BİR KEZ çağrılır (register_* çağrı kalıbıyla
     # aynı yerde) — her bilinen event_type için AYNI handler'ı bağlar,
     # hangi kuralın hangi event'e ait olduğu handler İÇİNDE (DB'den) çözülür.
@@ -107,7 +109,8 @@ def register_automation_routes(api_router, db, current_user, require_permission,
         return [{"key": k, "label": v} for k, v in EVENT_TYPES.items()]
 
     @api_router.get("/automation/rules")
-    async def list_rules(user=Depends(require_permission("automation:view"))):
+    async def list_rules(user=Depends(require_permission("automation:view")),
+                          _feat=Depends(require_feature("automation"))):
         return await db.automation_rules.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
     @api_router.post("/automation/rules")

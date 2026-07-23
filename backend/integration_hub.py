@@ -99,14 +99,17 @@ async def _handle_webhook_event(db, event_type: str, payload: dict) -> None:
         await db.webhook_deliveries.insert_one(delivery)
 
 
-def register_integration_hub_routes(api_router, db, current_user, require_permission, log_audit):
+def register_integration_hub_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # God Mode Modül Yönetimi — "integration_hub" flag'i kapatılınca liste 403 döner.
+    require_feature = require_feature or (lambda key: (lambda: True))
     # server.py başlangıcında BİR KEZ çağrılır (automation.py'nin register_*
     # çağrı yeriyle AYNI kalıp) — her bilinen event_type için AYNI handler'ı bağlar.
     for event_type in EVENT_TYPES:
         subscribe(event_type, _handle_webhook_event)
 
     @api_router.get("/integration-hub/registry")
-    async def get_registry(user=Depends(require_permission("integration_hub:view"))):
+    async def get_registry(user=Depends(require_permission("integration_hub:view")),
+                            _feat=Depends(require_feature("integration_hub"))):
         return INTEGRATION_REGISTRY
 
     @api_router.get("/integration-hub/event-types")
