@@ -61,7 +61,7 @@ export default function ParcelPicker({ value, onSelect, placeholder, testId = "p
       />
       {open && results.length > 0 && (
         <div className="card" style={{
-          position: "absolute", zIndex: 30, left: 0, right: 0, top: "100%",
+          position: "absolute", zIndex: 45, left: 0, right: 0, top: "100%",
           maxHeight: 300, overflowY: "auto", padding: 4,
         }}>
           {results.map((r) => (

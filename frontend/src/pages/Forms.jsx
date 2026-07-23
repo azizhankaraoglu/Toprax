@@ -66,7 +66,7 @@ export function FormListesi() {
     <div className="p-8 max-w-[1600px]" data-testid="form-list-page">
       <header className="mb-6 flex items-end justify-between">
         <div>
-          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M18 · SAHA VERİ TOPLAMA</div>
+          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">SAHA VERİ TOPLAMA</div>
           <h1 className="font-display text-4xl">Formlar & Anketler</h1>
           <p className="text-[var(--text-dim)] text-sm mt-1">{forms.length} aktif form</p>
         </div>

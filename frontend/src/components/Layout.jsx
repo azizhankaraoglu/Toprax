@@ -6,7 +6,7 @@ import {
   Wheat, LayoutDashboard, Users, Map, FileText, Sprout, Droplets,
   Settings2, BarChart3, Truck, Bell, LogOut, Award, ChevronRight, FlaskConical,
   Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Settings, Sparkles,
-  UserCog, ShieldCheck, ListTree, LayoutList, Landmark, Compass, Wallet, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, SlidersHorizontal, ClipboardCheck,
+  UserCog, ShieldCheck, LayoutList, Landmark, Compass, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, SlidersHorizontal, ClipboardCheck,
   Workflow, CheckSquare, Inbox, Code2, Radio
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
@@ -105,10 +105,10 @@ const navGroups = [
     items: [
       { to: "/kullanicilar", icon: UserCog, label: "Kullanıcılar", adminTierOnly: true },
       { to: "/ozel-roller", icon: ShieldCheck, label: "Özel Roller", adminTierOnly: true },
+      // SON HAL #6 — Lookup Yönetimi + Destek Kataloğu, Form Yönetimi'nin
+      // sekmelerine taşındı (aynı ekran ailesi); nav'da tek giriş kalır.
       { to: "/alan-tanimlari", icon: LayoutList, label: "Form Yönetimi", adminTierOnly: true },
-      { to: "/lookup-yonetimi", icon: ListTree, label: "Lookup Yönetimi", adminTierOnly: true },
       { to: "/idari-alanlar", icon: Landmark, label: "İdari Alanlar" },
-      { to: "/destek-katalogu", icon: Wallet, label: "Destek Kataloğu", adminTierOnly: true },
       { to: "/organizasyon-hiyerarsisi", icon: Workflow, label: "Organizasyon Hiyerarşisi", adminTierOnly: true },
       { to: "/onay-bekleyenlerim", icon: CheckSquare, label: "Onay Bekleyenlerim" },
       { to: "/bize-ulasin", icon: Inbox, label: "Bize Ulaşın" },
@@ -147,8 +147,9 @@ export default function Layout() {
     }).catch(() => {});
   }, []);
 
-  // Kapanır-açılır gruplar — {grupBaşlığı: false} = kapalı, yoksa AÇIK
-  // (varsayılan açık: mevcut davranışla aynı başlar, kullanıcı daraltır).
+  // Kapanır-açılır gruplar — SON HAL #8: varsayılan artık KAPALI (kullanıcı
+  // talebi: "Menülerde default kapalı gelsin"). {grupBaşlığı: true} = açık,
+  // yoksa/false = kapalı — önceki tersti (varsayılan açık, false=kapalı).
   // localStorage'da saklanır; aktif rotayı içeren grup navigasyonda
   // otomatik açılır (kullanıcı sonradan elle kapatabilir).
   const [openGroups, setOpenGroups] = useState(() => {
@@ -160,15 +161,42 @@ export default function Layout() {
     try { localStorage.setItem("toprax_nav_open", JSON.stringify(next)); } catch {}
   }
   function toggleGroup(title) {
-    persistOpenGroups({ ...openGroups, [title]: openGroups[title] === false });
+    persistOpenGroups({ ...openGroups, [title]: openGroups[title] !== true });
   }
   useEffect(() => {
     const active = navGroups.find((g) => g.items.some((it) => itemMatchesPath(it, location.pathname)));
-    if (active && openGroups[active.title] === false) {
+    if (active && openGroups[active.title] !== true) {
       persistOpenGroups({ ...openGroups, [active.title]: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
+
+  // Sayfa değişince mobil çekmece (sol menü overlay'i) HER ZAMAN kapanır —
+  // sadece sidebar'daki NavLink'e tıklanınca değil (ör. bir sayfadan
+  // "Ekim Karar Motoru"na programatik yönlendirme geldiğinde mobileOpen
+  // takılı kalıp yeni sayfanın içeriğini menünün altında bırakıyordu).
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  // SON HAL #8 — "Sol panel yana doğru genişleyip daraltılabilir yapı
+  // olmalı": sidebar artık daraltılabilir (ikon-rayı, 68px) / genişletilebilir
+  // (tam, 256px) — tercih localStorage'da kalıcı. Sadece masaüstünde
+  // (md+) anlamlı; mobil çekmece davranışı DEĞİŞMEDİ.
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("toprax_nav_collapsed") === "1");
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      const next = !c;
+      try { localStorage.setItem("toprax_nav_collapsed", next ? "1" : "0"); } catch {}
+      return next;
+    });
+  }
+  // Mobil çekmece açıkken masaüstü "daralt" tercihi YOK SAYILIR — dar bir
+  // ikon rayı, tüm ekranı kaplayan mobil menüde anlamsız olurdu (etiketler
+  // görünmeli). Sadece masaüstünde (mobileOpen=false, md+) daralma etkilidir.
+  const effectiveCollapsed = collapsed && !mobileOpen;
+  const sidebarWidthClass = effectiveCollapsed ? "w-[68px]" : "w-64";
+  const mainMarginClass = collapsed ? "md:ml-[68px]" : "md:ml-64";
 
   function logout() { localStorage.clear(); nav("/login"); }
 
@@ -182,41 +210,55 @@ export default function Layout() {
         <span className="text-xl">☰</span>
       </button>
 
-      <aside className={`w-64 bg-[var(--bg)] border-r border-[var(--border)] flex flex-col fixed h-screen z-40 transition-transform ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
-        <div className="p-5 border-b border-[var(--border)]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-[var(--primary)] flex items-center justify-center">
+      <aside className={`${sidebarWidthClass} bg-[var(--bg)] border-r border-[var(--border)] flex flex-col fixed h-screen z-40 transition-[width,transform] duration-200 ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+        <div className="p-5 border-b border-[var(--border)] flex items-center gap-2">
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-[var(--primary)] flex items-center justify-center shrink-0">
               <Wheat size={18} className="text-white"/>
             </div>
-            <div>
-              <div className="font-display text-lg leading-none">Toprax</div>
-              <div className="text-[10px] text-[var(--text-dim)] tracking-widest mt-0.5">KOOPERATİF EDİSYONU</div>
-            </div>
+            {!effectiveCollapsed && (
+              <div className="min-w-0">
+                <div className="font-display text-lg leading-none truncate">Toprax</div>
+                <div className="text-[10px] text-[var(--text-dim)] tracking-widest mt-0.5 truncate">KOOPERATİF EDİSYONU</div>
+              </div>
+            )}
           </div>
+          {/* SON HAL #8 — sol paneli daralt/genişlet düğmesi (sadece masaüstü;
+              mobil zaten hamburger ile aç/kapa). Tercih kalıcıdır. */}
+          <button
+            onClick={toggleCollapsed}
+            data-testid="sidebar-collapse-toggle"
+            title={collapsed ? "Menüyü genişlet" : "Menüyü daralt"}
+            className="hidden md:flex text-[var(--text-dim)] hover:text-[var(--primary)] shrink-0"
+          >
+            <ChevronRight size={15} className={`transition-transform ${collapsed ? "" : "rotate-180"}`} />
+          </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto scrollbar p-3">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar p-3">
           {navGroups.map((g) => {
             const visibleItems = g.items.filter((item) =>
               (!item.adminTierOnly || ADMIN_TIER_ROLES.has(user.role)) &&
               (!item.featureFlag || flagsByKey[item.featureFlag] !== false)
             );
             if (visibleItems.length === 0) return null;
-            const isOpen = openGroups[g.title] !== false;
+            const isOpen = effectiveCollapsed ? true : openGroups[g.title] === true;
             const hasActive = g.items.some((it) => itemMatchesPath(it, location.pathname));
             return (
               <div key={g.title} className="mb-1">
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(g.title)}
-                  data-testid={`navgroup-${g.title.toLowerCase().replace(/[^a-z0-9ğüşıöç]+/gi, "-")}`}
-                  className={`w-full flex items-center gap-1.5 text-[10px] tracking-widest px-3 mb-1 mt-2 select-none transition-colors ${
-                    hasActive && !isOpen ? "text-[var(--primary)]" : "text-[var(--text-dim)] hover:text-white"
-                  }`}
-                >
-                  <ChevronRight size={11} className={`transition-transform ${isOpen ? "rotate-90" : ""}`} />
-                  <span className="flex-1 text-left">{g.title}</span>
-                </button>
+                {!effectiveCollapsed && (
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(g.title)}
+                    data-testid={`navgroup-${g.title.toLowerCase().replace(/[^a-z0-9ğüşıöç]+/gi, "-")}`}
+                    className={`w-full flex items-center gap-1.5 text-[10px] tracking-widest px-3 mb-1 mt-2 select-none transition-colors ${
+                      hasActive && !isOpen ? "text-[var(--primary)]" : "text-[var(--text-dim)] hover:text-white"
+                    }`}
+                  >
+                    <ChevronRight size={11} className={`transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                    <span className="flex-1 text-left truncate">{g.title}</span>
+                  </button>
+                )}
                 {isOpen && visibleItems.map((item) => {
                   // IT-41 — bazı rapor kayıtları ("/saha-operasyonlari?view=raporlar"
                   // gibi) bir sorgu parametresi taşır. NavLink'in isActive'i
@@ -228,15 +270,16 @@ export default function Layout() {
                   return (
                     <NavLink key={item.to} to={item.to} end={item.end}
                              onClick={() => setMobileOpen(false)}
+                             title={effectiveCollapsed ? item.label : undefined}
                              data-testid={`nav-${toPath.replace("/", "") || "home"}`}
                              className={({ isActive }) => {
                                const active = isActive && (!toQuery || window.location.search.includes(toQuery));
-                               return `group flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                               return `group flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${effectiveCollapsed ? "justify-center" : ""} ${
                                  active ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--text-dim)] hover:bg-[var(--surface)] hover:text-white"
                                }`;
                              }}>
-                      <item.icon size={15}/>
-                      <span>{item.label}</span>
+                      <item.icon size={15} className="shrink-0"/>
+                      {!effectiveCollapsed && <span className="truncate">{item.label}</span>}
                     </NavLink>
                   );
                 })}
@@ -246,10 +289,10 @@ export default function Layout() {
         </nav>
 
         <div className="border-t border-[var(--border)] p-3">
-          <div className="flex items-center gap-3 px-3 py-2">
+          <div className={`flex items-center gap-3 px-3 py-2 ${effectiveCollapsed ? "flex-col" : ""}`}>
             {/* SON HAL — ada tıklayınca Profil sayfası açılır */}
             <div
-              className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer rounded-lg -mx-1 px-1 py-0.5 hover:bg-[var(--surface)] transition-colors"
+              className={`flex items-center gap-3 cursor-pointer rounded-lg -mx-1 px-1 py-0.5 hover:bg-[var(--surface)] transition-colors ${effectiveCollapsed ? "" : "flex-1 min-w-0"}`}
               role="button" tabIndex={0} title="Profilim"
               data-testid="profile-link"
               onClick={() => { nav("/profil"); setMobileOpen(false); }}
@@ -258,27 +301,31 @@ export default function Layout() {
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--primary-dark)] flex items-center justify-center text-white font-bold text-sm shrink-0">
                 {(user.full_name || "?").charAt(0)}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm truncate">{user.full_name || "Kullanıcı"}</div>
-                <div className="text-[10px] text-[var(--text-dim)] uppercase tracking-wider">{user.role || ""}</div>
-              </div>
+              {!effectiveCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm truncate">{user.full_name || "Kullanıcı"}</div>
+                  <div className="text-[10px] text-[var(--text-dim)] uppercase tracking-wider">{user.role || ""}</div>
+                </div>
+              )}
             </div>
-            {/* SON HAL — tema düğmesi (aydınlık varsayılan, tercih kalıcı) */}
-            <button
-              data-testid="theme-toggle"
-              onClick={() => setTheme(getTheme() === "dark" ? "light" : "dark")}
-              className="text-[var(--text-dim)] hover:text-[var(--primary)]"
-              title={getTheme() === "dark" ? "Aydınlık temaya geç" : "Koyu temaya geç"}
-            >
-              {getTheme() === "dark" ? <Sun size={16}/> : <Moon size={16}/>}
-            </button>
-            <WorkspaceDrawer />
-            <button data-testid="logout-button" onClick={logout} className="text-[var(--text-dim)] hover:text-[var(--danger)]"><LogOut size={16}/></button>
+            <div className="flex items-center gap-3">
+              {/* SON HAL — tema düğmesi (aydınlık varsayılan, tercih kalıcı) */}
+              <button
+                data-testid="theme-toggle"
+                onClick={() => setTheme(getTheme() === "dark" ? "light" : "dark")}
+                className="text-[var(--text-dim)] hover:text-[var(--primary)]"
+                title={getTheme() === "dark" ? "Aydınlık temaya geç" : "Koyu temaya geç"}
+              >
+                {getTheme() === "dark" ? <Sun size={16}/> : <Moon size={16}/>}
+              </button>
+              <WorkspaceDrawer />
+              <button data-testid="logout-button" onClick={logout} className="text-[var(--text-dim)] hover:text-[var(--danger)]"><LogOut size={16}/></button>
+            </div>
           </div>
         </div>
       </aside>
 
-      <main className="flex-1 md:ml-64 min-h-screen pt-14 md:pt-0">
+      <main className={`flex-1 min-w-0 ${mainMarginClass} min-h-screen pt-14 md:pt-0 overflow-x-hidden transition-[margin] duration-200`}>
         <ErrorBoundary resetKey={location.pathname}><Outlet /></ErrorBoundary>
       </main>
       <AnnouncementPopup />

@@ -43,6 +43,11 @@ class UserStatusUpdate(BaseModel):
 class MyProfileUpdate(BaseModel):
     full_name: Optional[str] = None
     phone: Optional[str] = None
+    # SON HAL #10 — kullanıcının seçtiği renk bloğu (frontend/src/lib/theme.js
+    # ACCENT_PRESETS anahtarlarından biri, örn. "mavi"). Sunucuda saklanır ki
+    # "her girişte kendi seçtiği renk bloğu gelsin" gereksinimi karşılansın
+    # (sadece localStorage değil — başka bir cihazda giriş yapınca da uygulanır).
+    accent_color: Optional[str] = None
 
 
 class MyPasswordUpdate(BaseModel):
@@ -78,6 +83,8 @@ def register_user_routes(api_router, db, current_user, require_permission, hash_
             updates["full_name"] = body.full_name.strip()
         if body.phone is not None:
             updates["phone"] = body.phone.strip() or None
+        if body.accent_color is not None:
+            updates["accent_color"] = body.accent_color.strip()[:30] or None
         if updates:
             await db.users.update_one({"id": user["id"]}, {"$set": updates})
         new = await db.users.find_one(

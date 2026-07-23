@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import api from "@/api";
 import Breadcrumb from "@/components/Breadcrumb";
-import { getTheme, setTheme } from "@/lib/theme";
+import { getTheme, setTheme, ACCENT_PRESETS, getAccent, setAccent } from "@/lib/theme";
 import { UserCircle, KeyRound, Sun, Moon, Check } from "lucide-react";
 
 const ROLE_LABELS = {
@@ -27,13 +27,34 @@ export default function Profil() {
   const [pw, setPw] = useState({ current_password: "", new_password: "", new_password2: "" });
   const [pwMsg, setPwMsg] = useState(null);        // {ok, text}
   const [busy, setBusy] = useState(false);
+  const [accent, setAccentState] = useState(getAccent());
+  const [accentMsg, setAccentMsg] = useState("");
 
   useEffect(() => {
     api.get("/me/profile").then((r) => {
       setMe(r.data);
       setForm({ full_name: r.data.full_name || "", phone: r.data.phone || "" });
+      if (r.data.accent_color) setAccentState(r.data.accent_color);
     });
   }, []);
+
+  // SON HAL #10 — renk bloğu seçilince ANINDA uygulanır (tema gibi tam
+  // sayfa yenileme GEREKMEZ — sadece CSS değişkeni, harita tile'ı yok)
+  // ve sunucuya kaydedilir ki başka bir cihazda girişte de aynı blok gelsin.
+  async function chooseAccent(key) {
+    setAccentState(key);
+    setAccent(key);
+    setAccentMsg("");
+    try {
+      const { data } = await api.put("/me/profile", { accent_color: key });
+      setMe(data);
+      const u = JSON.parse(localStorage.getItem("user") || "{}");
+      localStorage.setItem("user", JSON.stringify({ ...u, accent_color: key }));
+      setAccentMsg("Kaydedildi.");
+    } catch (err) {
+      setAccentMsg(err.response?.data?.detail || "Kaydedilemedi.");
+    }
+  }
 
   async function saveProfile(e) {
     e.preventDefault();
@@ -163,6 +184,29 @@ export default function Profil() {
           >
             <Moon size={15}/> Koyu {theme === "dark" && <Check size={14}/>}
           </button>
+        </div>
+      </div>
+
+      {/* Renk teması (SON HAL #10) */}
+      <div className="card p-5 mt-4" data-testid="accent-panel">
+        <h3 className="font-display text-lg mb-1">Renk Teması</h3>
+        <p className="text-xs text-[var(--text-dim)] mb-4">
+          Seçtiğiniz renk bloğu tüm arayüze uygulanır, hesabınıza kaydedilir ve her girişinizde otomatik gelir.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          {Object.entries(ACCENT_PRESETS).map(([key, p]) => (
+            <button
+              key={key}
+              onClick={() => chooseAccent(key)}
+              title={p.label}
+              data-testid={`accent-${key}`}
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-transform hover:scale-110"
+              style={{ background: p.swatch, border: accent === key ? "2px solid var(--text)" : "2px solid transparent" }}
+            >
+              {accent === key && <Check size={16} color="#fff" />}
+            </button>
+          ))}
+          {accentMsg && <span className="text-sm text-[var(--primary)] ml-2">{accentMsg}</span>}
         </div>
       </div>
     </div>

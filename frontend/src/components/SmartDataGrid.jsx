@@ -25,7 +25,7 @@ import { ArrowUp, ArrowDown, Pin, Eye, EyeOff, Download, Columns3, ChevronLeft, 
  * indirir (Query Engine'in page_size tavanı) — arka planda tam veri seti
  * dışa aktarımı (streaming export) v1 kapsamı dışıdır.
  */
-export default function SmartDataGrid({ module, columns, defaultSort = [], pageSizeOptions = [25, 50, 100], onRowClick, initialFilters = null, rowActions = null }) {
+export default function SmartDataGrid({ module, columns, defaultSort = [], pageSizeOptions = [25, 50, 100], onRowClick, initialFilters = null, rowActions = null, extraFilters = [], bulkActions = null }) {
   const [colOrder, setColOrder] = useState(columns.map((c) => c.key));
   const [hidden, setHidden] = useState(new Set());
   const [pinned, setPinned] = useState(new Set());
@@ -56,12 +56,16 @@ export default function SmartDataGrid({ module, columns, defaultSort = [], pageS
   }, [colOrder, hidden, pinned]);
 
   function buildFilters() {
-    return Object.entries(quickFilters)
+    const quick = Object.entries(quickFilters)
       .filter(([, v]) => v !== "" && v != null)
       .map(([key, value]) => {
         const type = colByKey[key]?.type;
         return { field: key, operator: type === "number" || type === "date" ? "eq" : "contains", value: type === "number" ? Number(value) : value };
       });
+    // SON HAL #3 — FilterPanel.jsx (Gelişmiş Filtre) aynı ekranda birlikte
+    // kullanılabilsin diye (bkz. Toprak.jsx) — onFiltersChange ile dışarıdan
+    // gelen koşullar, kolon bazlı hızlı filtrelerle AND'lenir.
+    return [...quick, ...extraFilters];
   }
 
   function load() {
@@ -80,8 +84,8 @@ export default function SmartDataGrid({ module, columns, defaultSort = [], pageS
       .finally(() => setLoading(false));
   }
 
-  useEffect(load, [module, JSON.stringify(quickFilters), JSON.stringify(sortState), page, pageSize, JSON.stringify(visibleOrderedKeys)]);
-  useEffect(() => { setPage(1); }, [JSON.stringify(quickFilters), JSON.stringify(sortState)]);
+  useEffect(load, [module, JSON.stringify(quickFilters), JSON.stringify(sortState), page, pageSize, JSON.stringify(visibleOrderedKeys), JSON.stringify(extraFilters)]);
+  useEffect(() => { setPage(1); }, [JSON.stringify(quickFilters), JSON.stringify(sortState), JSON.stringify(extraFilters)]);
 
   function toggleSort(key) {
     setSortState((prev) => {
@@ -171,8 +175,16 @@ export default function SmartDataGrid({ module, columns, defaultSort = [], pageS
   return (
     <div className="card overflow-hidden" data-testid={`smart-grid-${module}`}>
       <div className="p-3 border-b border-[var(--border)] flex items-center justify-between gap-2 flex-wrap">
-        <div className="text-xs text-[var(--text-dim)]">
+        <div className="text-xs text-[var(--text-dim)] flex items-center gap-2">
           {selected.size > 0 ? `${selected.size} satır seçili · ` : ""}{total} kayıt
+          {/* SON HAL #7 — çoklu seçim toplu işlem slotu (ör. "Seçilenleri Sil").
+              Grid kendi silme mantığını bilmez, sadece seçili id'leri ve
+              işlem bittiğinde temizleme/yeniden-yükleme yardımcıları verir. */}
+          {selected.size > 0 && bulkActions && (
+            <span className="flex items-center gap-2">
+              {bulkActions([...selected], { clearSelection: () => setSelected(new Set()), reload: load })}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">

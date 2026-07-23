@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "@/api";
 import ParcelPicker from "@/components/ParcelPicker";
+import FilterPanel from "@/components/FilterPanel";
 import { Sprout, Search, BookOpen, Plus, Trash2, Sparkles, AlertTriangle } from "lucide-react";
 
 const DECISION_BADGE = {
@@ -295,6 +296,9 @@ export default function EkimPlanlama() {
               </button>
             </div>
             {libMsg && <p className="muted" style={{ marginTop: 10 }}>{libMsg}</p>}
+
+            {/* SON HAL #3 — gelişmiş arama (Query Engine, module="agronomy_rules") */}
+            <FilterPanel module="agronomy_rules" onResults={(items) => setRules(items)} />
 
             <table className="table" style={{ marginTop: 12 }}>
               <thead>

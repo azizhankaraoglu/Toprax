@@ -38,7 +38,7 @@ function emptyRow(fields) {
   return { field: first?.key || "", operator: "eq", value: "" };
 }
 
-export default function FilterPanel({ module, onResults, pageSize = 50 }) {
+export default function FilterPanel({ module, onResults, pageSize = 50, onFiltersChange }) {
   const [open, setOpen] = useState(false);
   const [fields, setFields] = useState([]);
   const [rows, setRows] = useState([]);
@@ -50,6 +50,14 @@ export default function FilterPanel({ module, onResults, pageSize = 50 }) {
   const [saveName, setSaveName] = useState("");
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [shareOnSave, setShareOnSave] = useState(false);
+  // SON HAL #2 — alanın lookup_group_id (dinamik alan) VEYA lookup_key (kod
+  // seviyesi CORE alan, bkz. query_engine.py) taşıması durumunda değer
+  // kutusu yerine DB'deki gerçek lookup değerlerinden bir seçim listesi
+  // gösterilir. group key -> id eşlemesi (lookup_key'li alanlar için) ve
+  // group id -> değerler listesi ayrı ayrı önbelleklenir (her alan için
+  // tekrar tekrar aynı istek atılmasın diye).
+  const [lookupGroupsByKey, setLookupGroupsByKey] = useState(null);
+  const [lookupValuesByGroupId, setLookupValuesByGroupId] = useState({});
 
   useEffect(() => {
     api.get(`/query/${module}/filterable-fields`).then((r) => {
@@ -58,6 +66,31 @@ export default function FilterPanel({ module, onResults, pageSize = 50 }) {
     });
     loadSavedQueries();
   }, [module]);
+
+  // Grup key->id eşlemesi bir kez çekilir (herhangi bir alan lookup_key
+  // taşıyorsa gerekir).
+  useEffect(() => {
+    if (fields.some((f) => f.lookup_key) && !lookupGroupsByKey) {
+      api.get("/lookups/groups").then((r) => {
+        setLookupGroupsByKey(Object.fromEntries(r.data.map((g) => [g.key, g.id])));
+      }).catch(() => setLookupGroupsByKey({}));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fields]);
+
+  function lookupGroupIdFor(field) {
+    if (!field) return null;
+    if (field.lookup_group_id) return field.lookup_group_id;
+    if (field.lookup_key) return lookupGroupsByKey?.[field.lookup_key] || null;
+    return null;
+  }
+
+  function ensureLookupValuesLoaded(groupId) {
+    if (!groupId || lookupValuesByGroupId[groupId]) return;
+    api.get(`/lookups/groups/${groupId}/values`).then((r) => {
+      setLookupValuesByGroupId((prev) => ({ ...prev, [groupId]: r.data }));
+    }).catch(() => setLookupValuesByGroupId((prev) => ({ ...prev, [groupId]: [] })));
+  }
 
   function loadSavedQueries() {
     api.get("/saved-queries", { params: { module } }).then((r) => setSavedQueries(r.data));
@@ -87,10 +120,15 @@ export default function FilterPanel({ module, onResults, pageSize = 50 }) {
     setLoading(true);
     setError("");
     try {
+      // SmartDataGrid entegrasyonu (ör. Toprak.jsx) — grid kendi sayfalama/
+      // sıralamasıyla sunucudan çekmeye devam eder, bu panel sadece KOŞULLARI
+      // dışarı verir (onFiltersChange varsa); onResults hâlâ çağrılır (panelin
+      // kendi başına, bir liste state'ine bağlı kullanımı BOZULMAZ).
+      if (onFiltersChange) onFiltersChange(buildFilters(), logic);
       const { data } = await api.post(`/query/${module}`, {
         filters: buildFilters(), logic, page: 1, page_size: pageSize,
       });
-      onResults(data.items, data.total);
+      onResults?.(data.items, data.total);
     } catch (err) {
       setError(err.response?.data?.detail || "Sorgu çalıştırılamadı.");
     } finally {
@@ -164,7 +202,12 @@ export default function FilterPanel({ module, onResults, pageSize = 50 }) {
             </div>
           )}
 
-          {rows.map((row, idx) => (
+          {rows.map((row, idx) => {
+            const fieldDef = fields.find((f) => f.key === row.field);
+            const groupId = lookupGroupIdFor(fieldDef);
+            if (groupId) ensureLookupValuesLoaded(groupId);
+            const lookupOptions = groupId ? lookupValuesByGroupId[groupId] : null;
+            return (
             <div key={idx} className="flex items-center gap-2">
               {idx > 0 && (
                 <select className="input w-20 text-xs" value={logic} onChange={(e) => setLogic(e.target.value)}>
@@ -176,7 +219,14 @@ export default function FilterPanel({ module, onResults, pageSize = 50 }) {
               <select className="input flex-1" value={row.field} onChange={(e) => set(idx, { field: e.target.value, operator: "eq", value: "" })}>
                 {fields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
               </select>
-              <select className="input w-44" value={row.operator} onChange={(e) => set(idx, { operator: e.target.value, value: "" })}>
+              {/* SON HAL — operatör kutusu küçültüldü (metin boyu 12px, dar
+                  genişlik); önceden .input sınıfının tam boyu (14px/geniş
+                  padding) kullanılıyordu, satır gereksiz büyük görünüyordu. */}
+              <select
+                className="input w-32 !py-1.5 !text-xs shrink-0"
+                value={row.operator}
+                onChange={(e) => set(idx, { operator: e.target.value, value: "" })}
+              >
                 {opsFor(fieldType(row.field)).map((op) => <option key={op.v} value={op.v}>{op.l}</option>)}
               </select>
               {row.operator === "between" ? (
@@ -185,12 +235,24 @@ export default function FilterPanel({ module, onResults, pageSize = 50 }) {
                   <input className="input w-24" type="number" placeholder="max" value={row.valueMax ?? ""} onChange={(e) => set(idx, { valueMax: e.target.value })} />
                 </>
               ) : !NO_VALUE_OPS.has(row.operator) ? (
-                <input
-                  className="input flex-1"
-                  type={NUMERIC_TYPES.has(fieldType(row.field)) ? "number" : fieldType(row.field) === "date" ? "date" : "text"}
-                  value={row.value ?? ""}
-                  onChange={(e) => set(idx, { value: e.target.value })}
-                />
+                lookupOptions ? (
+                  // SON HAL #2 — bu alan bir lookup grubuna bağlı: serbest
+                  // metin yerine DB'de kayıtlı gerçek değerlerden seçilir
+                  // (yazım hatası/typo riski olmadan, tutarlı filtreleme).
+                  <select className="input flex-1" value={row.value ?? ""} onChange={(e) => set(idx, { value: e.target.value })}>
+                    <option value="">— değer seçin —</option>
+                    {lookupOptions.filter((o) => o.is_active !== false).map((o) => (
+                      <option key={o.id} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    className="input flex-1"
+                    type={NUMERIC_TYPES.has(fieldType(row.field)) ? "number" : fieldType(row.field) === "date" ? "date" : "text"}
+                    value={row.value ?? ""}
+                    onChange={(e) => set(idx, { value: e.target.value })}
+                  />
+                )
               ) : (
                 <div className="flex-1" />
               )}
@@ -198,7 +260,7 @@ export default function FilterPanel({ module, onResults, pageSize = 50 }) {
                 <X size={14} />
               </button>
             </div>
-          ))}
+          );})}
 
           {error && <div className="text-xs text-red-400">{error}</div>}
 

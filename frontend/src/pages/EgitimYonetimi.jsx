@@ -165,7 +165,7 @@ export default function EgitimYonetimi() {
     <div className="p-8 max-w-[1400px]" data-testid="lms-management-page">
       <header className="mb-6 flex items-end justify-between">
         <div>
-          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">FAZ 10 — FARMER LMS</div>
+          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">EĞİTİM YÖNETİMİ</div>
           <h1 className="font-display text-4xl flex items-center gap-2"><GraduationCap size={28}/> Eğitim Yönetimi</h1>
           <p className="text-[var(--text-dim)] text-sm mt-1">
             Eğitim kataloğu, içerik yönetimi, kullanıcı/rol/segment bazlı atama ve durum takibi.

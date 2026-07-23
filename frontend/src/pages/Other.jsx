@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api from "@/api";
 import { QuickAddPanel } from "@/components/QuickAdd";
 import RowActions from "@/components/RowActions";
+import FilterPanel from "@/components/FilterPanel";
 import { useFetch } from "@/hooks/use-fetch";
 
 // #7 — Sezon kota→alan kuralı parametreleri (ton/dekar + sapma%). Pancara özel.
@@ -76,7 +77,7 @@ export function Sozlesmeler() {
 
   return (
     <div className="p-8" data-testid="sozlesmeler-page">
-      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M04 · MODÜL</div>
+      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">SÖZLEŞME YÖNETİMİ</div>
       <h1 className="font-display text-4xl mb-6">Sözleşme & Kota — 2025</h1>
 
       <SeasonParamsPanel season={2025} />
@@ -109,6 +110,9 @@ export function Sozlesmeler() {
           contractsQ.reload();
         }}
       />
+
+      {/* SON HAL #3 — gelişmiş arama (Query Engine, module="contracts") */}
+      <FilterPanel module="contracts" onResults={(items) => contractsQ.setData(items)} />
 
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
@@ -186,7 +190,7 @@ export function Lojistik() {
   const farmers = farmersQ.data;
   return (
     <div className="p-8" data-testid="lojistik-page">
-      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M08 · MODÜL</div>
+      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">LOJİSTİK & KANTAR</div>
       <h1 className="font-display text-4xl mb-6">Lojistik & Kantar</h1>
 
       <QuickAddPanel
@@ -277,7 +281,7 @@ export function Karne() {
   );
   return (
     <div className="p-8" data-testid="karne-page">
-      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M12 · MODÜL</div>
+      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">ÇİFTÇİ KARNESİ</div>
       <h1 className="font-display text-4xl mb-2">Çiftçi Karne / Performans Skoru</h1>
       <p className="text-[var(--text-dim)] text-sm mb-6">İsimlere tıklayın — skorun bileşen bileşen açıklamasını görün.</p>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -298,6 +302,9 @@ export function Bildirimler() {
   // SON HAL — sayfa TÜM bildirimleri limitsiz basıyordu ("ekrana sığmıyor"):
   // artık 30'ar gösterir ("Daha fazla" ile açılır), okunmamış filtresi ve
   // tek tık / toplu okundu işaretleme eklendi.
+  // SON HAL #8 — bir satıra tıklamak artık sadece okundu işaretlemiyor,
+  // detay sayfasına da götürüyor (/bildirimler/:id, NotificationDetail.jsx).
+  const nav = useNavigate();
   const notifsQ = useFetch("/notifications", { initialData: [] });
   const notifs = notifsQ.data;
   const [shown, setShown] = useState(30);
@@ -308,10 +315,9 @@ export function Bildirimler() {
   const visible = filtered.slice(0, shown);
   const unreadCount = notifs.filter((n) => n.status !== "okundu").length;
 
-  async function markRead(n) {
-    if (n.status === "okundu") return;
-    await api.put(`/notifications/${n.id}/read`);
-    notifsQ.reload();
+  async function openNotification(n) {
+    if (n.status !== "okundu") await api.put(`/notifications/${n.id}/read`);
+    nav(`/bildirimler/${n.id}`);
   }
   async function markAllRead() {
     await api.post("/notifications/mark-all-read");
@@ -320,7 +326,7 @@ export function Bildirimler() {
 
   return (
     <div className="p-8 max-w-[1000px]" data-testid="bildirimler-page">
-      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M11 · MODÜL</div>
+      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">BİLDİRİMLER</div>
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <h1 className="font-display text-4xl">Bildirim Merkezi</h1>
         <div className="flex items-center gap-2">
@@ -345,9 +351,10 @@ export function Bildirimler() {
         )}
         {visible.map((n) => (
           <div key={n.id}
-               className={`p-4 border-b border-[var(--border)] flex items-start gap-4 ${n.status !== "okundu" ? "bg-[var(--primary)]/5 cursor-pointer hover:bg-[var(--primary)]/10" : ""}`}
-               onClick={() => markRead(n)}
-               title={n.status !== "okundu" ? "Okundu işaretlemek için tıklayın" : undefined}>
+               className={`p-4 border-b border-[var(--border)] flex items-start gap-4 cursor-pointer hover:bg-[var(--surface-2)] ${n.status !== "okundu" ? "bg-[var(--primary)]/5" : ""}`}
+               onClick={() => openNotification(n)}
+               data-testid={`notif-row-${n.id}`}
+               title="Detayları görmek için tıklayın">
             <span className={`badge ${chBadge[n.channel]||"badge-neutral"}`}>{n.channel}</span>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium">{n.title}</div>

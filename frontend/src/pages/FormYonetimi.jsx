@@ -1,10 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/api";
 import { QuickAddPanel } from "@/components/QuickAdd";
+import { DestekKatalogu } from "@/pages/SupportCatalog";
 import {
   Layers, Plus, X, Check, Pencil, EyeOff, Eye, ArrowUp, ArrowDown,
-  ListTree, ChevronRight, Trash2,
+  ListTree, ChevronRight, Trash2, LayoutList, Wallet, ClipboardCheck,
 } from "lucide-react";
+
+// backend/field_ops.py'deki CHECKLIST_CATALOG ile BİREBİR AYNI (kod
+// seviyesinde sabit — yeni bir kalem eklemek istenirse iki tarafta da
+// güncellenmesi gerekir, bilinçli basit tercih — LookupYonetimi'ne
+// taşınmadı çünkü checklist kalemleri bir "seçim listesi" değil, bir
+// FieldTask'ın sabit checklist kataloğudur).
+const CHECKLIST_CATALOG = [
+  "Form Dolduruldu", "Fotoğraf Çekildi", "GPS Kaydedildi", "Çiftçi Onayı Alındı",
+  "Numune Alındı", "Drone Görüntüsü Yüklendi", "Evrak Teslim Edildi",
+];
 
 // =====================================================================
 // ALAN TANIMLARI (Form Yönetimi)
@@ -335,6 +346,8 @@ export function LookupYonetimi() {
   const [bulkParentId, setBulkParentId] = useState("");
   const [bulkResult, setBulkResult] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [seedingCommon, setSeedingCommon] = useState(false);
+  const [seedMsg, setSeedMsg] = useState("");
 
   const loadGroups = () => api.get("/lookups/groups").then((r) => {
     setGroups(r.data);
@@ -342,6 +355,24 @@ export function LookupYonetimi() {
   });
 
   useEffect(() => { loadGroups(); /* eslint-disable-next-line */ }, []);
+
+  // SON HAL #6 — "sadece pancar/çeşit var" şikayeti: Sulama Tipi, Ürün,
+  // Risk Seviyesi grupları henüz seed edilmemiş demektir (hiç kod
+  // gerektirmez, mevcut idempotent seed deseniyle AYNI — bkz. diğer
+  // "Varsayılanları Yükle" düğmeleri, ör. EkimPlanlama.jsx).
+  async function seedCommonLookups() {
+    setSeedingCommon(true);
+    setSeedMsg("");
+    try {
+      await api.post("/field-definitions/seed-common-select-lookups");
+      setSeedMsg("Sulama Tipi, Ürün ve Risk Seviyesi grupları yüklendi.");
+      loadGroups();
+    } catch (err) {
+      setSeedMsg(err.response?.data?.detail || "Yüklenemedi.");
+    } finally {
+      setSeedingCommon(false);
+    }
+  }
 
   const groupsById = useMemo(() => Object.fromEntries(groups.map((g) => [g.id, g])), [groups]);
 
@@ -394,13 +425,21 @@ export function LookupYonetimi() {
 
   return (
     <div className="p-8 max-w-[1400px]" data-testid="lookup-management-page">
-      <header className="mb-6">
-        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">SİSTEM AYARLARI</div>
-        <h1 className="font-display text-4xl">Lookup Yönetimi</h1>
-        <p className="text-[var(--text-dim)] text-sm mt-1">
-          Sulama Tipi, Ürün, Risk Seviyesi gibi seçim listelerini burada yönetin.
-          Form Yönetimi'nde bir alanı buradaki gruplardan birine bağlayabilirsiniz.
-        </p>
+      <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">SİSTEM AYARLARI</div>
+          <h1 className="font-display text-4xl">Lookup Yönetimi</h1>
+          <p className="text-[var(--text-dim)] text-sm mt-1">
+            Sulama Tipi, Ürün, Risk Seviyesi gibi seçim listelerini burada yönetin.
+            Form Yönetimi'nde bir alanı buradaki gruplardan birine bağlayabilirsiniz.
+          </p>
+        </div>
+        <div className="text-right">
+          <button onClick={seedCommonLookups} disabled={seedingCommon} className="btn text-xs" data-testid="seed-common-lookups-btn">
+            {seedingCommon ? "Yükleniyor…" : "Sulama Tipi / Ürün / Risk Seviyesi Yükle"}
+          </button>
+          {seedMsg && <div className="text-[11px] text-[var(--text-dim)] mt-1 max-w-[280px]">{seedMsg}</div>}
+        </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-5">
@@ -554,6 +593,172 @@ export function LookupYonetimi() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// GÖREV TİPLERİ (SON HAL #5) — Görev Yönetimi'nin (SahaOperasyonlari.jsx)
+// "Yeni Görev" formu bir task_type_id SEÇTİRİYOR ama bu tipleri yönetecek
+// hiçbir ekran yoktu (backend field_ops.py'de task_types CRUD'u ZATEN
+// vardı — sadece admin UI eksikti, bkz. field_ops.py'nin CHECKLIST_CATALOG
+// yorumu: "admin Form Yönetimi benzeri bir ekranda değiştirebilir"). Boş
+// katalogla kullanıcı görev tipi seçemiyor, formu gönderemiyordu.
+// DestekKatalogu (support_types) ile AYNI CRUD şekli — seed-defaults +
+// toggle-active — SADECE default_checklist çoklu seçimi ekstra.
+export function GorevTipleri() {
+  const [types, setTypes] = useState([]);
+  const [seeding, setSeeding] = useState(false);
+  const [form, setForm] = useState({ name: "", default_checklist: [] });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = () => api.get("/task-types", { params: { include_inactive: true } }).then((r) => setTypes(r.data));
+  useEffect(() => { load(); }, []);
+
+  async function seedDefaults() {
+    setSeeding(true);
+    try { await api.post("/task-types/seed-defaults"); load(); } finally { setSeeding(false); }
+  }
+
+  async function toggleActive(t) {
+    await api.put(`/task-types/${t.id}`, { is_active: !(t.is_active !== false) });
+    load();
+  }
+
+  function toggleChecklistItem(item) {
+    setForm((f) => ({
+      ...f,
+      default_checklist: f.default_checklist.includes(item)
+        ? f.default_checklist.filter((c) => c !== item)
+        : [...f.default_checklist, item],
+    }));
+  }
+
+  async function createType() {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      await api.post("/task-types", form);
+      setForm({ name: "", default_checklist: [] });
+      load();
+    } catch (err) {
+      setMsg(err.response?.data?.detail || "Görev tipi oluşturulamadı.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="p-8 max-w-[1400px]" data-testid="task-types-page">
+      <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">SİSTEM AYARLARI</div>
+          <h1 className="font-display text-4xl">Görev Tipleri</h1>
+          <p className="text-[var(--text-dim)] text-sm mt-1">
+            Görev Yönetimi'ndeki (Kanban) "Yeni Görev" formunda seçilebilecek görev tiplerini
+            burada tanımlayın. Her tip, göreve varsayılan bir checklist taşır.
+          </p>
+        </div>
+        {types.length === 0 && (
+          <button onClick={seedDefaults} disabled={seeding} className="btn btn-ghost text-sm" data-testid="task-types-seed-btn">
+            {seeding ? "Yükleniyor…" : "Varsayılanları Yükle (12 tip)"}
+          </button>
+        )}
+      </header>
+
+      <div className="card p-4 mb-4">
+        <div className="text-sm font-medium mb-3">Yeni Görev Tipi</div>
+        {msg && <div className="text-xs text-red-400 mb-2">{msg}</div>}
+        <div className="flex items-center gap-2 mb-3">
+          <input className="input flex-1" placeholder="Ad (ör. Toprak Numunesi)" value={form.name}
+                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} data-testid="task-type-name-input" />
+          <button onClick={createType} disabled={saving || !form.name.trim()} className="btn btn-primary text-sm shrink-0" data-testid="task-type-save-btn">
+            <Plus size={14} /> {saving ? "Kaydediliyor…" : "Ekle"}
+          </button>
+        </div>
+        <div className="text-[11px] text-[var(--text-dim)] uppercase tracking-wider mb-2">Varsayılan Checklist</div>
+        <div className="flex flex-wrap gap-2">
+          {CHECKLIST_CATALOG.map((item) => (
+            <label key={item} className={`badge cursor-pointer ${form.default_checklist.includes(item) ? "badge-a" : "badge-neutral"}`}>
+              <input type="checkbox" className="hidden" checked={form.default_checklist.includes(item)}
+                     onChange={() => toggleChecklistItem(item)} />
+              <ClipboardCheck size={11} className="mr-1" /> {item}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead><tr className="text-left text-[11px] text-[var(--text-dim)] uppercase tracking-wider border-b border-[var(--border)]">
+            <th className="p-4">Ad</th><th className="p-4">Varsayılan Checklist</th><th className="p-4">Durum</th>
+          </tr></thead>
+          <tbody>
+            {types.map((t) => (
+              <tr key={t.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)]">
+                <td className="p-4">{t.name}</td>
+                <td className="p-4 text-xs text-[var(--text-dim)]">{(t.default_checklist || []).join(", ") || "—"}</td>
+                <td className="p-4">
+                  <button onClick={() => toggleActive(t)} className={`badge ${t.is_active === false ? "badge-d" : "badge-a"}`}>
+                    {t.is_active === false ? "Pasif" : "Aktif"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {types.length === 0 && (
+              <tr><td colSpan={3} className="p-6 text-center text-[var(--text-dim)]">Henüz görev tipi yok — yukarıdan ekleyin veya varsayılanları yükleyin.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// SON HAL #6 — Form Yönetimi / Lookup Yönetimi / Destek Kataloğu birleşimi
+// =====================================================================
+// Kullanıcı talebi: "form yönetimi, lookup yönetimi, destek kataloğu aynı
+// mantıkda olan şeyler [...] hepsini form yönetimi altında toplayalım" —
+// üç ekran da temelde aynı şeyi yapıyor (bir modülün seçim/alan şemasını
+// yönetmek). Ayrı ayrı sayfalar/route'lar SİLİNMEDİ (geriye dönük link
+// uyumluluğu — /arama -> / deseniyle AYNI, App.js'te redirect edilir),
+// sadece nav'da TEK giriş kalır ve bu üçü burada sekme olarak birleşir.
+// Her sekme kendi başlığını/açıklamasını koruyor (ayrı bileşenler
+// bozulmadan — sadece dıştan bir sekme çubuğu eklendi).
+const HUB_TABS = [
+  { key: "alanlar", label: "Alan Tanımları", icon: LayoutList },
+  { key: "lookup", label: "Lookup Yönetimi", icon: ListTree },
+  { key: "gorev-tipleri", label: "Görev Tipleri", icon: ClipboardCheck },
+  { key: "destek", label: "Destek Kataloğu", icon: Wallet },
+];
+
+export function FormYonetimiHub() {
+  const [tab, setTab] = useState("alanlar");
+  return (
+    <div>
+      <div className="flex gap-1 px-8 pt-6 border-b border-[var(--border)]" data-testid="form-yonetimi-hub-tabs">
+        {HUB_TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            data-testid={`hub-tab-${t.key}`}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${
+              tab === t.key
+                ? "border-[var(--primary)] text-[var(--primary)]"
+                : "border-transparent text-[var(--text-dim)] hover:text-white"
+            }`}
+          >
+            <t.icon size={14} /> {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "alanlar" && <AlanTanimlari />}
+      {tab === "lookup" && <LookupYonetimi />}
+      {tab === "gorev-tipleri" && <GorevTipleri />}
+      {tab === "destek" && <DestekKatalogu />}
     </div>
   );
 }

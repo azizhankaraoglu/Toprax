@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api from "@/api";
 import { Wheat, Lock, Mail, Loader2, MessageCircleQuestion, Send, CheckCircle2, X, KeyRound } from "lucide-react";
 import { APP_VERSION_LABEL } from "@/version";
+import { setAccent } from "@/lib/theme";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -63,6 +64,10 @@ export default function Login() {
       localStorage.setItem("token", data.token);
       localStorage.setItem("refresh_token", data.refresh_token || "");
       localStorage.setItem("user", JSON.stringify(data.user));
+      // SON HAL #10 — kullanıcının sunucuda kayıtlı renk bloğu HER girişte
+      // bu cihaza uygulanır (farklı bir cihazda/tarayıcıda giriş yapılsa
+      // bile aynı blok gelir — sadece localStorage'a güvenilmez).
+      setAccent(data.user.accent_color);
       // Role'e göre doğru panele yönlendir
       if (data.user.role === "platform_admin") {
         nav("/platform");

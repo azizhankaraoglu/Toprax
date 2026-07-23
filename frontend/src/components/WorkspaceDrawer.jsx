@@ -57,11 +57,16 @@ export default function WorkspaceDrawer() {
     loadAnnUnreadCount();
   }
 
-  async function markRead(n) {
-    if (n.status === "okundu") return;
-    await api.put(`/notifications/${n.id}/read`);
-    setNotifs((list) => list.map((x) => (x.id === n.id ? { ...x, status: "okundu" } : x)));
-    loadUnreadCount();
+  // SON HAL #8 — bir bildirime tıklamak artık sadece "okundu" işaretlemiyor,
+  // detaylarını gösteren sayfaya da GÖTÜRÜYOR (/bildirimler/:id).
+  async function openNotification(n) {
+    if (n.status !== "okundu") {
+      await api.put(`/notifications/${n.id}/read`);
+      setNotifs((list) => list.map((x) => (x.id === n.id ? { ...x, status: "okundu" } : x)));
+      loadUnreadCount();
+    }
+    setOpen(false);
+    nav(`/bildirimler/${n.id}`);
   }
 
   async function markAllRead() {
@@ -130,20 +135,29 @@ export default function WorkspaceDrawer() {
             )}
             {notifs.length === 0 ? (
               <div className="p-6 text-center text-[var(--text-dim)] text-sm">Bildirim yok.</div>
-            ) : notifs.map((n) => (
+            ) : notifs.slice(0, 30).map((n) => (
               <button
                 key={n.id}
-                onClick={() => markRead(n)}
-                className={`w-full text-left p-3 border-b border-[var(--border)] hover:bg-[var(--surface-2)] ${n.status !== "okundu" ? "bg-[var(--primary)]/5" : ""}`}
+                onClick={() => openNotification(n)}
+                data-testid={`notif-row-${n.id}`}
+                className={`w-full text-left p-3 border-b border-[var(--border)] hover:bg-[var(--surface-2)] min-w-0 ${n.status !== "okundu" ? "bg-[var(--primary)]/5" : ""}`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="text-sm font-medium">{n.title}</div>
+                <div className="flex items-start justify-between gap-2 min-w-0">
+                  <div className="text-sm font-medium truncate min-w-0">{n.title}</div>
                   {n.status !== "okundu" && <span className="w-2 h-2 rounded-full bg-[var(--primary)] mt-1.5 shrink-0" />}
                 </div>
-                <div className="text-xs text-[var(--text-dim)] mt-0.5">{n.message}</div>
+                {/* break-words — uzun/boşluksuz mesajlar (URL vb.) 420px'lik
+                    çekmeceyi yatay taşırıp "ekrana sığmıyor" görünümü
+                    yaratıyordu (Bildirimler sayfasındaki AYNI düzeltme). */}
+                <div className="text-xs text-[var(--text-dim)] mt-0.5 break-words">{n.message}</div>
                 <div className="text-[10px] text-[var(--text-dim)] mt-1">{new Date(n.created_at).toLocaleString("tr-TR")}</div>
               </button>
             ))}
+            {notifs.length > 30 && (
+              <button onClick={() => { setOpen(false); nav("/bildirimler"); }} className="w-full text-center p-3 text-xs text-[var(--primary)] hover:underline">
+                Tümünü gör ({notifs.length})
+              </button>
+            )}
           </div>
         )}
 

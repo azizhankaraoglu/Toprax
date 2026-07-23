@@ -147,6 +147,10 @@ class BulkImportRequest(BaseModel):
     features: List[Dict[str, Any]] = []                 # geo_import.py'nin /geo-import/parse çıktısı (features listesi)
 
 
+class BulkDeleteRequest(BaseModel):
+    area_ids: List[str]
+
+
 def register_admin_area_routes(api_router, db, current_user, require_permission, log_audit):
 
     @api_router.get("/admin-areas/meta")
@@ -222,6 +226,22 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
         await db.admin_areas.update_one({"id": area_id}, {"$set": {"is_active": False}})
         await log_audit(db, user, action="delete", entity="admin_area", entity_id=area_id, old_value=old, request=request)
         return {"status": "deactivated"}
+
+    # SON HAL #7 — toplu silme (grid'de çoklu seçim + tek çağrı). Tekli
+    # DELETE ile AYNI soft-delete davranışı; bulunamayan id'ler sessizce
+    # atlanır (kullanıcı zaten seçtiği satırların var olduğunu bilir).
+    @api_router.post("/admin-areas/bulk-delete")
+    async def bulk_delete_admin_areas(body: BulkDeleteRequest, request: Request,
+                                       user=Depends(require_permission("admin_areas:manage"))):
+        deleted = 0
+        for area_id in body.area_ids:
+            old = await db.admin_areas.find_one({"id": area_id}, {"_id": 0})
+            if not old:
+                continue
+            await db.admin_areas.update_one({"id": area_id}, {"$set": {"is_active": False}})
+            await log_audit(db, user, action="delete", entity="admin_area", entity_id=area_id, old_value=old, request=request)
+            deleted += 1
+        return {"status": "deactivated", "deleted_count": deleted}
 
     @api_router.get("/portfolio/{user_id}")
     async def user_portfolio(user_id: str, user=Depends(require_permission("admin_areas:view"))):

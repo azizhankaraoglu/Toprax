@@ -96,7 +96,10 @@ export default function SahaOperasyonlari() {
   // IT-41 — Raporlar menüsünden "?view=raporlar" ile doğrudan Raporlar
   // sekmesine açılabilir (?task= ile AYNI window.location.search kalıbı,
   // bkz. aşağıdaki selectedTaskId) — parametre yoksa eskisi gibi "kanban".
-  const [view, setView] = useState(() => new URLSearchParams(window.location.search).get("view") || "kanban"); // "kanban" | "takvim" | "dashboard" | "raporlar"
+  // SON HAL #5 — varsayılan görünüm artık "dashboard" (kanban 9 sütunuyla
+  // ekrana sığmıyordu, kullanıcı her girişte önce dashboard'u görmek istedi;
+  // ?view= parametresi hâlâ her görünüme doğrudan bağlanabilir).
+  const [view, setView] = useState(() => new URLSearchParams(window.location.search).get("view") || "dashboard"); // "kanban" | "takvim" | "dashboard" | "raporlar"
   const [dashboard, setDashboard] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [taskTypes, setTaskTypes] = useState([]);
@@ -261,21 +264,32 @@ export default function SahaOperasyonlari() {
           <SmartDataGrid module="field_tasks" columns={FIELD_TASKS_GRID_COLUMNS} defaultSort={[{ field: "planned_date", dir: "desc" }]} onRowClick={(row) => setSelectedTaskId(row.id)} />
         </div>
       ) : view === "kanban" ? (
-        <div className="flex gap-3 overflow-x-auto pb-4" data-testid="kanban-board">
+        // SON HAL #5 — 9 sütun sabit genişlikte (220px) yatay kaydırma
+        // gerektiriyordu ve ekrana sığmıyordu ("kanban ekrana sığmıyor"
+        // şikayeti). Grid'e çevrildi: dar ekranlarda 2-3 sütun alt alta
+        // sarar, geniş ekranda (2xl+) 9'u da tek satıra sığar — yatay
+        // kaydırma sadece orta genişliklerde (fazla sütun sığmadığında)
+        // gerekir, artık ZORUNLU değil.
+        <div
+          className="grid gap-3 pb-4"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}
+          data-testid="kanban-board"
+        >
           {KANBAN_COLUMNS.map((col) => {
             const colTasks = tasks.filter((t) => col.statuses.includes(t.status));
             return (
               <div
                 key={col.key}
-                className="card p-3 min-w-[220px] w-[220px] shrink-0"
+                className="card p-2.5 min-w-0"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => onDrop(col)}
                 data-testid={`kanban-col-${col.key}`}
               >
-                <div className="text-xs font-medium text-[var(--text-dim)] uppercase tracking-wider mb-2 flex items-center justify-between">
-                  {col.label} <span className="badge badge-neutral text-[10px]">{colTasks.length}</span>
+                <div className="text-[11px] font-medium text-[var(--text-dim)] uppercase tracking-wider mb-2 flex items-center justify-between gap-1">
+                  <span className="truncate">{col.label}</span>
+                  <span className="badge badge-neutral text-[10px] shrink-0">{colTasks.length}</span>
                 </div>
-                <div className="space-y-2 min-h-[60px]">
+                <div className="space-y-1.5 min-h-[50px] max-h-[70vh] overflow-y-auto scrollbar">
                   {colTasks.map((t) => {
                     const parcel = parcelsById.get(t.parcel_id);
                     const person = staffById.get(t.assigned_to);
@@ -288,9 +302,9 @@ export default function SahaOperasyonlari() {
                         className="p-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] cursor-pointer hover:border-[var(--primary)] text-xs"
                         data-testid={`kanban-card-${t.id}`}
                       >
-                        <div className="font-medium">{taskTypesById.get(t.task_type_id)?.name || t.task_type_id}</div>
-                        {parcel && <div className="text-[var(--text-dim)] flex items-center gap-1 mt-1"><MapPin size={10}/>{parcel.parcel_code}</div>}
-                        {person && <div className="text-[var(--text-dim)] flex items-center gap-1 mt-0.5"><User size={10}/>{person.full_name}</div>}
+                        <div className="font-medium truncate">{taskTypesById.get(t.task_type_id)?.name || t.task_type_id}</div>
+                        {parcel && <div className="text-[var(--text-dim)] flex items-center gap-1 mt-1 truncate"><MapPin size={10} className="shrink-0"/>{parcel.parcel_code}</div>}
+                        {person && <div className="text-[var(--text-dim)] flex items-center gap-1 mt-0.5 truncate"><User size={10} className="shrink-0"/>{person.full_name}</div>}
                       </div>
                     );
                   })}

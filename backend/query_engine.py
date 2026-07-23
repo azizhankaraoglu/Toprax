@@ -59,6 +59,13 @@ MODULE_COLLECTIONS = {
     # IT-47 — AI Bilgi Kütüphanesi araması KENDİ motorunu yazmaz; Query
     # Engine'in genişletilmiş MODULE_COLLECTIONS'ına girer.
     "ai_knowledge_records": "ai_knowledge_records",
+    # SON HAL #3 — gelişmiş arama Sulama/Operasyon/Ekim Karar Motoru
+    # ekranlarına da eklendi; bu üç modül daha önce Query Engine'e hiç
+    # bağlı değildi (kendi basit list uçlarını kullanıyorlardı, o uçlar
+    # DEĞİŞMEDİ — FilterPanel sadece yanlarına eklendi).
+    "irrigation_events": "irrigation_events",
+    "operations_tasks": "tasks",
+    "agronomy_rules": "agronomy_rules",
 }
 
 MODULE_PERMISSIONS = {
@@ -75,6 +82,9 @@ MODULE_PERMISSIONS = {
     "visits": "field_ops:view",
     "users": "settings:users_view",
     "ai_knowledge_records": "ai_knowledge:view",
+    "irrigation_events": "irrigation:view",
+    "operations_tasks": "operations:view",
+    "agronomy_rules": "plantings:view",
 }
 # (FAZ 18 IT-47 kaydı — ai_knowledge_records Query Engine'e bağlandı)
 
@@ -111,14 +121,14 @@ CORE_FILTERABLE_FIELDS = {
         {"key": "region_id", "label": "Bölge", "type": "text"},
         {"key": "area_dekar", "label": "Alan (dekar)", "type": "number"},
         {"key": "soil_type", "label": "Toprak Tipi", "type": "text"},
-        {"key": "irrigation", "label": "Sulama", "type": "text"},
+        {"key": "irrigation", "label": "Sulama", "type": "text", "lookup_key": "sulama_tipi"},
         # IT-10 — AI Copilot köprüsü (extras.py) bu üç alanı da sorgular;
         # ParcelCreate Pydantic modelinde YOK (extras.py'nin simüle uydu/AI
         # özelliği parsel dokümanına doğrudan yazıyor, bkz. CLAUDE.md
         # "extras.py'deki AI/uydu/IoT verileri SİMÜLEDİR") — yine de gerçek
         # doküman alanları oldukları için burada filtrelenebilir/sıralanabilir.
         {"key": "ndvi_latest", "label": "NDVI (son ölçüm)", "type": "number"},
-        {"key": "risk_level", "label": "Risk Seviyesi", "type": "text"},
+        {"key": "risk_level", "label": "Risk Seviyesi", "type": "text", "lookup_key": "risk_seviyesi"},
         {"key": "expected_yield_ton", "label": "Beklenen Verim (ton)", "type": "number"},
         # #2 — ekili/söküm durumu (uydu+manuel) + ekilebilir alan
         {"key": "ekim_durumu", "label": "Ekim Durumu (ekili/sokuldu/ekili_degil)", "type": "text"},
@@ -128,7 +138,7 @@ CORE_FILTERABLE_FIELDS = {
         # (kadastro/coğrafi/sahiplik/altyapı) + uzaktan algılama son NDVI'si.
         # Bunlar doğrudan doküman alanı olduğundan filtre/sıralamada güvenli.
         {"key": "parcel_code", "label": "Parsel Kodu", "type": "text"},
-        {"key": "current_crop", "label": "Mevcut Ürün", "type": "text"},
+        {"key": "current_crop", "label": "Mevcut Ürün", "type": "text", "lookup_key": "urun"},
         {"key": "active_season", "label": "Aktif Sezon (Yıl)", "type": "number"},
         {"key": "ada_no", "label": "Ada No", "type": "text"},
         {"key": "parsel_no_tapu", "label": "Parsel No (Tapu)", "type": "text"},
@@ -148,8 +158,8 @@ CORE_FILTERABLE_FIELDS = {
         {"key": "farmer_id", "label": "Çiftçi", "type": "text"},
         {"key": "parcel_id", "label": "Parsel", "type": "text"},
         {"key": "season", "label": "Sezon (Yıl)", "type": "number"},
-        {"key": "crop", "label": "Ürün", "type": "text"},
-        {"key": "variety", "label": "Çeşit", "type": "text"},
+        {"key": "crop", "label": "Ürün", "type": "text", "lookup_key": "urun"},
+        {"key": "variety", "label": "Çeşit", "type": "text", "lookup_key": "pancar_cesidi"},
         {"key": "status", "label": "Durum", "type": "text"},
         {"key": "kota_ton", "label": "Kota (ton)", "type": "number"},
     ],
@@ -157,8 +167,8 @@ CORE_FILTERABLE_FIELDS = {
         {"key": "farmer_id", "label": "Çiftçi", "type": "text"},
         {"key": "parcel_id", "label": "Parsel", "type": "text"},
         {"key": "season", "label": "Sezon (Yıl)", "type": "number"},
-        {"key": "crop", "label": "Ürün", "type": "text"},
-        {"key": "variety", "label": "Çeşit", "type": "text"},
+        {"key": "crop", "label": "Ürün", "type": "text", "lookup_key": "urun"},
+        {"key": "variety", "label": "Çeşit", "type": "text", "lookup_key": "pancar_cesidi"},
         {"key": "stage", "label": "Aşama", "type": "text"},
     ],
     "soil": [
@@ -233,6 +243,37 @@ CORE_FILTERABLE_FIELDS = {
         {"key": "farmer_id", "label": "Çiftçi", "type": "text"},
         {"key": "quality_score", "label": "Kalite Skoru", "type": "number"},
         {"key": "version", "label": "Versiyon", "type": "number"},
+    ],
+    # SON HAL #3 — Sulama & Kaynak (irrigation_events).
+    "irrigation_events": [
+        {"key": "parcel_id", "label": "Parsel", "type": "text"},
+        {"key": "farmer_id", "label": "Çiftçi", "type": "text"},
+        {"key": "date", "label": "Tarih", "type": "date"},
+        {"key": "method", "label": "Yöntem", "type": "text"},
+        {"key": "water_m3", "label": "Su Miktarı (m³)", "type": "number"},
+        {"key": "moisture_before", "label": "Nem (öncesi %)", "type": "number"},
+        {"key": "moisture_after", "label": "Nem (sonrası %)", "type": "number"},
+    ],
+    # SON HAL #3 — Operasyon (db.tasks — "operations_tasks" modül adı,
+    # field_tasks/visits'ten [IT-24 Saha Operasyonları] AYRI bir koleksiyon).
+    "operations_tasks": [
+        {"key": "task_type", "label": "Görev Tipi", "type": "text"},
+        {"key": "status", "label": "Durum", "type": "text"},
+        {"key": "scheduled_date", "label": "Planlanan Tarih", "type": "date"},
+        {"key": "parcel_id", "label": "Parsel", "type": "text"},
+        {"key": "machine_id", "label": "Makine", "type": "text"},
+        {"key": "worker_id", "label": "İşçi", "type": "text"},
+        {"key": "notes", "label": "Notlar", "type": "text"},
+    ],
+    # SON HAL #3 — Ekim Karar Motoru'nun Bilgi Kütüphanesi (agronomy_rules).
+    "agronomy_rules": [
+        {"key": "name", "label": "Kural Adı", "type": "text"},
+        {"key": "category", "label": "Kategori", "type": "text"},
+        {"key": "signal", "label": "Sinyal", "type": "text"},
+        {"key": "operator", "label": "Operatör", "type": "text"},
+        {"key": "score_delta", "label": "Skor Etkisi", "type": "number"},
+        {"key": "is_blocking", "label": "Engelleyici mi", "type": "text"},
+        {"key": "advice", "label": "Öneri", "type": "text"},
     ],
 }
 

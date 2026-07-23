@@ -10,6 +10,26 @@ import { useEffect, useState } from "react";
 import api from "@/api";
 import { Brain, Database, CheckSquare, Boxes, Activity, Play, RefreshCw } from "lucide-react";
 
+// SON HAL #4 — "Eğit" tıklanınca patlıyor şikayeti: /ai/models/{id}/train
+// gövdesiz (body'siz) çağrılıyordu, backend'in Dict[str, Any] parametresinin
+// varsayılanı yoktu -> FastAPI 422 döndürüyordu ve o 422'nin `detail`'i STRING
+// değil, bir DİZİ hata nesnesiydi ({loc, msg, type, ...}). setMsg(dizi) sonra
+// `{msg}` olarak DOĞRUDAN render edilince React "objeler geçerli bir React
+// child değil" hatasıyla çöküyordu (üretim/minify derlemesinde "l is not a
+// function" gibi anlamsız bir isimle görünür). Backend'de body artık
+// opsiyonel (varsayılan {}); burada da her ihtimale karşı `detail` STRING'e
+// çevrilip render edilir — bir daha asla ham hata objesi/dizisi ekrana
+// verilmez.
+function errText(e, fallback) {
+  const detail = e?.response?.data?.detail;
+  if (!detail) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((d) => (typeof d === "string" ? d : d?.msg || JSON.stringify(d))).join("; ") || fallback;
+  }
+  return typeof detail === "object" ? (detail.msg || JSON.stringify(detail)) : String(detail);
+}
+
 const STATUS_BADGE = { onayli: "badge-a", incelemede: "badge-b", taslak: "badge-neutral", reddedildi: "badge-d",
   saglikli: "badge-a", uyari: "badge-b", hata: "badge-d",
   production: "badge-a", staging: "badge-b", validation: "badge-b", training: "badge-neutral",
@@ -28,7 +48,7 @@ export default function AiKnowledgeLibrary() {
     <div className="p-8 max-w-[1400px]">
       <div className="mb-6 flex items-end justify-between">
         <div>
-          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">FAZ 18 · IT-47..53</div>
+          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">AI BİLGİ KÜTÜPHANESİ</div>
           <h1 className="font-display text-4xl flex items-center gap-2">
             <Brain className="text-[var(--primary)]" /> AI Bilgi Kütüphanesi
           </h1>
@@ -78,16 +98,16 @@ function LibraryTab() {
   async function seedTaxonomy() {
     setBusy(true);
     try { const r = await api.post("/ai/seed-taxonomy"); setMsg(`Taksonomi seed: ${r.data.created} yeni kayıt`); load(); }
-    catch (e) { setMsg("Yetki yok veya hata (ai_knowledge:manage gerekir)"); } finally { setBusy(false); }
+    catch (e) { setMsg(errText(e, "Yetki yok veya hata (ai_knowledge:manage gerekir)")); } finally { setBusy(false); }
   }
   async function createDataset() {
     if (!newDs.name) return;
     try { await api.post("/ai/datasets", newDs); setNewDs({ name: "", source_type: "mobil" }); load(); }
-    catch (e) { setMsg("Dataset oluşturulamadı (yetki?)"); }
+    catch (e) { setMsg(errText(e, "Dataset oluşturulamadı (yetki?)")); }
   }
   async function runPredict(rec) {
     try { const r = await api.post("/ai/predict", { record_id: rec.id }); setMsg(`Tahmin: ${r.data.decision} (güven ${r.data.confidence})`); }
-    catch (e) { setMsg("Tahmin başarısız"); }
+    catch (e) { setMsg(errText(e, "Tahmin başarısız")); }
   }
 
   return (
@@ -161,7 +181,7 @@ function ValidationTab() {
 
   async function decide(item, decision) {
     try { await api.post(`/ai/validation-queue/${item.id}/decide`, { decision }); setMsg(`Karar: ${decision}`); load(); }
-    catch (e) { setMsg("Karar verilemedi (ai_prediction:validate gerekir)"); }
+    catch (e) { setMsg(errText(e, "Karar verilemedi (ai_prediction:validate gerekir)")); }
   }
 
   return (
@@ -205,11 +225,16 @@ function ModelsTab() {
   async function create() {
     if (!nm.name) return;
     try { await api.post("/ai/models", { ...nm, metrics: { f1: 0.8, precision: 0.8, recall: 0.8, iou: 0.7, drift_score: 0.02 } }); setNm({ name: "", task_type: "classification" }); load(); }
-    catch (e) { setMsg("Model oluşturulamadı (ai_model:deploy gerekir)"); }
+    catch (e) { setMsg(errText(e, "Model oluşturulamadı (ai_model:deploy gerekir)")); }
   }
   async function act(m, action) {
-    try { const r = await api.post(`/ai/models/${m.id}/${action}`); setMsg(`${action}: ${r.data.status || "ok"}`); load(); }
-    catch (e) { setMsg(e?.response?.data?.detail || `${action} başarısız`); }
+    try {
+      // "train" body BEKLER (backend artık opsiyonel default {} veriyor,
+      // ama burada da açıkça boş obje gönderilir — 422'ye asla düşmesin).
+      const r = await api.post(`/ai/models/${m.id}/${action}`, {});
+      setMsg(`${action}: ${r.data.status || r.data.detail || "ok"}`);
+      load();
+    } catch (e) { setMsg(errText(e, `${action} başarısız`)); }
   }
 
   return (

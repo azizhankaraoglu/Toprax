@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { QuickAddPanel } from "@/components/QuickAdd";
 import RowActions from "@/components/RowActions";
 import BulkParcelSelect from "@/components/BulkParcelSelect";
+import FilterPanel from "@/components/FilterPanel";
 import { useFetch } from "@/hooks/use-fetch";
 
 const TASK_STATUS_OPTS = [
@@ -132,7 +133,7 @@ export default function Operasyon() {
   return (
     <div className="p-8 max-w-[1600px]" data-testid="operasyon-page">
       <header className="mb-6">
-        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M16 · MODÜL</div>
+        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">OPERASYON YÖNETİMİ</div>
         <h1 className="font-display text-4xl">Operasyon Yönetimi</h1>
         <p className="text-[var(--text-dim)] text-sm mt-1">Görev planlama, makine takibi, işçi vardiya</p>
       </header>
@@ -216,6 +217,9 @@ export default function Operasyon() {
         />
         <BulkTaskSection onCreated={loadAll} />
       </div>
+
+      {/* SON HAL #3 — gelişmiş arama (Query Engine, module="operations_tasks") */}
+      <FilterPanel module="operations_tasks" onResults={(items) => tasksQ.setData(items)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div className="card overflow-hidden">

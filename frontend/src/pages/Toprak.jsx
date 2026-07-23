@@ -14,6 +14,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recha
 import { QuickAddPanel } from "@/components/QuickAdd";
 import SmartDataGrid from "@/components/SmartDataGrid";
 import RowActions from "@/components/RowActions";
+import FilterPanel from "@/components/FilterPanel";
 
 const SOIL_GRID_COLUMNS = [
   { key: "date", label: "Tarih", type: "date" },
@@ -33,6 +34,7 @@ export default function ToprakBilgisi() {
   const [summary, setSummary] = useState(null);
   const [parcels, setParcels] = useState([]);
   const [gridRefreshKey, setGridRefreshKey] = useState(0);
+  const [advancedFilters, setAdvancedFilters] = useState([]);
 
   const load = () => {
     api.get("/soil-samples/summary").then((r) => setSummary(r.data));
@@ -49,7 +51,7 @@ export default function ToprakBilgisi() {
   return (
     <div className="p-8 max-w-[1600px]" data-testid="toprak-page">
       <header className="mb-6">
-        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M06 · MODÜL</div>
+        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">TOPRAK ANALİZİ</div>
         <h1 className="font-display text-4xl">Toprak Bilgisi</h1>
         <p className="text-[var(--text-dim)] text-sm mt-1">Tüm parsellerin toprak analiz verileri ve gübre önerileri</p>
       </header>
@@ -148,11 +150,16 @@ export default function ToprakBilgisi() {
           load();
         }}
       />
+      {/* SON HAL #3 — gelişmiş arama (Query Engine, module="soil"). Koşullar
+          SmartDataGrid'in kendi hızlı filtrelerine AND'lenir (extraFilters). */}
+      <FilterPanel module="soil" onFiltersChange={(filters) => setAdvancedFilters(filters)} />
+
       <div className="mb-4">
         <h3 className="font-display text-lg mb-3">Tüm Analizler</h3>
         <SmartDataGrid
           key={gridRefreshKey}
           module="soil"
+          extraFilters={advancedFilters}
           columns={SOIL_GRID_COLUMNS}
           defaultSort={[{ field: "date", dir: "desc" }]}
           rowActions={(row, reload) => (

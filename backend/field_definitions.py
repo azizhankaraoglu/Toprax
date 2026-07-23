@@ -162,11 +162,18 @@ async def get_filterable_field_defs(db, module: str) -> List[dict]:
     """IT-08 — Query Engine'in field_definitions tarafını besler: bir modülde
     yönetici tarafından filterable=True işaretlenmiş (dinamik/ek) alanların
     {key, label, type} listesini döner. query_engine.py bunu modülün
-    CORE_FILTERABLE_FIELDS (temel/kod-seviyesi) listesiyle birleştirir."""
+    CORE_FILTERABLE_FIELDS (temel/kod-seviyesi) listesiyle birleştirir.
+    `lookup_group_id` de dahil edilir (varsa) — FilterPanel.jsx (gelişmiş
+    filtre) bu alan için serbest metin yerine DB'deki lookup değerlerinden
+    bir seçim listesi göstermek için kullanır (bkz. SON HAL #2)."""
     rows = await db.field_definitions.find(
         {"module": module, "filterable": True, "is_active": True}, {"_id": 0}
     ).to_list(500)
-    return [{"key": r["field_key"], "label": r["label"], "type": r["field_type"]} for r in rows]
+    return [
+        {"key": r["field_key"], "label": r["label"], "type": r["field_type"],
+         "lookup_group_id": r.get("lookup_group_id")}
+        for r in rows
+    ]
 
 
 async def mask_sensitive_fields_many(db, module: str, docs: List[dict], user: dict) -> List[dict]:
@@ -1017,3 +1024,45 @@ def register_field_definition_routes(api_router, db, current_user, require_permi
                 created += 1
 
         return {"status": "seeded", "new_field_definitions": created}
+
+    # -----------------------------------------------------------------
+    # PİLOT SEED — Ortak seçim listeleri (Sulama Tipi / Ürün / Risk Seviyesi)
+    # -----------------------------------------------------------------
+    # Bu üç liste kod-seviyesi (CORE) Pydantic alanlarına (parcels.irrigation,
+    # parcels.risk_level, parcels.current_crop, contracts.crop, plantings.crop)
+    # karşılık gelir — field_definitions kaydı AÇILMAZ (o alanlar zaten gerçek
+    # model kolonu, dinamik alan sistemine taşınmadı), SADECE lookup_groups/
+    # lookup_values oluşturulur. query_engine.py'deki CORE_FILTERABLE_FIELDS
+    # bu grupları `lookup_key` (grup KEY'i, id değil — CORE alanlar bir
+    # field_definitions satırına sahip olmadığı için lookup_group_id'yi kod
+    # seviyesinde bilemez) ile referanslar; FilterPanel.jsx önce
+    # GET /lookups/groups'tan key->id eşler, sonra değerleri çeker.
+    @api_router.post("/field-definitions/seed-common-select-lookups")
+    async def seed_common_select_lookups(user=Depends(require_permission("settings:fields_manage"))):
+        """Sulama Tipi / Ürün / Risk Seviyesi lookup gruplarını (ve varsayılan
+        değerlerini) oluşturur. Idempotent: tekrar çağrılabilir."""
+        sulama_id = await _ensure_lookup_group("sulama_tipi", "Sulama Tipi", 20)
+        for i, (v, l) in enumerate([
+            ("damla", "Damla Sulama"), ("yagmurlama", "Yağmurlama"),
+            ("salma", "Salma (Yüzey)"), ("karik", "Karık"), ("yok", "Sulama Yok"),
+        ]):
+            await _ensure_lookup_value(sulama_id, v, l, i)
+
+        urun_id = await _ensure_lookup_group("urun", "Ürün", 21)
+        for i, (v, l) in enumerate([
+            ("seker_pancari", "Şeker Pancarı"), ("bugday", "Buğday"), ("arpa", "Arpa"),
+            ("misir", "Mısır"), ("aycicegi", "Ayçiçeği"), ("patates", "Patates"),
+            ("sogan", "Soğan"), ("nohut", "Nohut"), ("fasulye", "Fasulye"), ("diger", "Diğer"),
+        ]):
+            await _ensure_lookup_value(urun_id, v, l, i)
+
+        risk_id = await _ensure_lookup_group("risk_seviyesi", "Risk Seviyesi", 22)
+        for i, (v, l) in enumerate([
+            ("dusuk", "Düşük"), ("orta", "Orta"), ("yuksek", "Yüksek"), ("kritik", "Kritik"),
+        ]):
+            await _ensure_lookup_value(risk_id, v, l, i)
+
+        return {
+            "status": "seeded",
+            "lookup_groups": ["sulama_tipi", "urun", "risk_seviyesi"],
+        }

@@ -889,7 +889,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
         return {"status": "rolled_back", "restored_model_id": prev_id}
 
     @api_router.post("/ai/models/{model_id}/train")
-    async def train_model(model_id: str, body: Dict[str, Any], request: Request,
+    async def train_model(model_id: str, request: Request, body: Dict[str, Any] = {},
                           user=Depends(require_permission("ai_model:deploy"))):
         """Eğitim tetikleyici — golden dataset (approval_status=onayli) sayısını
         kaydeder (gerçek eğitim CPU/GPU worker'a düşer, bu ortamda simüle)."""

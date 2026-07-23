@@ -88,7 +88,7 @@ export default function RemoteSensing() {
     <div className="p-8 max-w-[1600px]" data-testid="remote-sensing-page">
       <header className="mb-6 flex items-end justify-between">
         <div>
-          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">FAZ 9.5 · IT-28.1</div>
+          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">UZAKTAN ALGILAMA</div>
           <h1 className="font-display text-4xl">Uzaktan Algılama</h1>
           <p className="text-[var(--text-dim)] text-sm mt-1">EOSDA entegrasyonu · Tarama Politikaları · İzleme</p>
         </div>

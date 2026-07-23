@@ -1221,7 +1221,7 @@ export function SahaPWA() {
   return (
     <div className="p-4 md:p-8 max-w-[1200px]" data-testid="saha-page">
       <header className="mb-4">
-        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M07 · SAHA MOBİL</div>
+        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">SAHA MOBİL</div>
         <h1 className="font-display text-3xl md:text-4xl">Saha Ziyaret Raporu</h1>
         <p className="text-[var(--text-dim)] text-sm mt-1 flex items-center gap-3 flex-wrap">
           {gps ? <span className="text-[var(--primary)]">📍 GPS: {gps.lat.toFixed(4)}, {gps.lng.toFixed(4)}</span> : "📍 GPS alınıyor..."}

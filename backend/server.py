@@ -2069,6 +2069,21 @@ async def mark_all_notifications_read(user=Depends(current_user)):
     return {"status": "ok", "updated": result.modified_count}
 
 
+# SON HAL #8 — bildirim çekmecesinde (WorkspaceDrawer) tıklanan bildirimin
+# yönlendirileceği detay sayfası (NotificationDetail.jsx) için. BİLİNÇLİ
+# OLARAK yukarıdaki /notifications/unread-count ve /notifications/mark-all-
+# read'DEN SONRA tanımlı — route sırası tuzağı (bkz. CLAUDE.md
+# "/parcels/bulk-update" notu): {notification_id} önce tanımlansaydı bu iki
+# sabit path'i id sanırdı. Bildirimler tenant genelidir (unread-count ile
+# AYNI varsayım) — sahiplik kontrolü yok.
+@api_router.get("/notifications/{notification_id}")
+async def get_notification(notification_id: str, user=Depends(current_user)):
+    doc = await db.notifications.find_one({"id": notification_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Bildirim bulunamadı")
+    return doc
+
+
 @api_router.get("/karne/top")
 async def karne_top(limit: int = 10, user=Depends(current_user)):
     return await db.farmers.find({}, {"_id": 0}).sort([("karne_points", -1)]).limit(limit).to_list(limit)

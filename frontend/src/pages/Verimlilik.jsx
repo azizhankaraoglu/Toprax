@@ -23,7 +23,7 @@ export default function Verimlilik() {
   return (
     <div className="p-8 max-w-[1600px]" data-testid="verimlilik-page">
       <header className="mb-6">
-        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M17 · MODÜL</div>
+        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">VERİMLİLİK ANALİZİ</div>
         <h1 className="font-display text-4xl">Verimlilik & Analitik</h1>
         <p className="text-[var(--text-dim)] text-sm mt-1">Veriden içgörü — karar destek motoru</p>
       </header>

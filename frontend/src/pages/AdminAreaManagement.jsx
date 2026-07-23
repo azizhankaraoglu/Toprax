@@ -36,35 +36,80 @@ function centerOf(geometry) {
   return [lat, lng];
 }
 
+// SON HAL #7 — "toplu idari alan yüklerken isimleri verinin içinden ayırıp
+// yaz" talebi: kullanıcı artık dosyadaki attribute adını KÖR yazmıyor
+// (önceden "ad"/"ILCE_ADI" gibi tahminle elle girilirdi). Akış ikiye
+// bölündü: 1) Ayrıştır — dosya PARSE edilir, gerçek property anahtarları
+// çıkarılır ve en olası "ad" alanı otomatik tahmin edilip seçili gelir;
+// 2) kullanıcı önizlemede ADLARI GÖRÜR, gerekirse dropdown'dan doğru
+// alanı seçer, sonra İçe Aktar eder. /geo-import/parse HÂLÂ hiçbir şey
+// yazmıyor (mevcut "önizle→onayla" ilkesi korunur).
+const NAME_FIELD_GUESSES = [
+  "ad", "isim", "name", "ADI", "AD", "NAME", "ILCE_ADI", "IL_ADI", "MAH_ADI",
+  "mahalle_adi", "ilce_adi", "il_adi", "NAME_1", "NAME_2", "label",
+];
+
+function guessNameField(keys) {
+  const lower = keys.map((k) => k.toLowerCase());
+  for (const guess of NAME_FIELD_GUESSES) {
+    const idx = lower.indexOf(guess.toLowerCase());
+    if (idx !== -1) return keys[idx];
+  }
+  // Tam eşleşme yoksa "ad"/"isim"/"name" geçen ilk anahtar.
+  const partial = keys.find((k) => /ad|isim|name/i.test(k));
+  return partial || keys[0] || "";
+}
+
 function BulkImport({ onDone }) {
   const [file, setFile] = useState(null);
   const [areaType, setAreaType] = useState("mahalle");
-  const [nameField, setNameField] = useState("ad");
+  const [nameField, setNameField] = useState("");
   const [sourceEpsg, setSourceEpsg] = useState("");
   const [epsgCodes, setEpsgCodes] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [parsed, setParsed] = useState(null);      // {features} — ayrıştırılmış ama henüz kaydedilmemiş
+  const [propKeys, setPropKeys] = useState([]);     // dosyadaki gerçek attribute anahtarları
 
   useEffect(() => { api.get("/geo-import/epsg-codes").then((r) => setEpsgCodes(r.data)); }, []);
 
   const ext = file?.name.split(".").pop()?.toLowerCase() || "";
   const needsEpsg = ext === "zip" || ext === "dxf";
 
-  async function run() {
+  async function parseFile() {
     if (!file) return;
     setBusy(true);
     setError("");
     setResult(null);
+    setParsed(null);
     try {
       const form = new FormData();
       form.append("file", file);
       if (sourceEpsg) form.append("source_epsg", sourceEpsg);
-      const { data: parsed } = await api.post("/geo-import/parse", form, { headers: { "Content-Type": "multipart/form-data" } });
+      const { data } = await api.post("/geo-import/parse", form, { headers: { "Content-Type": "multipart/form-data" } });
+      setParsed(data);
+      const keys = [...new Set((data.features || []).flatMap((f) => Object.keys(f.properties || {})))];
+      setPropKeys(keys);
+      setNameField(guessNameField(keys));
+    } catch (err) {
+      setError(err.response?.data?.detail || "Dosya ayrıştırılamadı.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runImport() {
+    if (!parsed || !nameField) return;
+    setBusy(true);
+    setError("");
+    try {
       const { data: imported } = await api.post("/admin-areas/bulk-import", {
         area_type: areaType, name_field: nameField, features: parsed.features,
       });
       setResult(imported);
+      setParsed(null);
+      setFile(null);
       onDone();
     } catch (err) {
       setError(err.response?.data?.detail || "İçe aktarılamadı.");
@@ -72,6 +117,11 @@ function BulkImport({ onDone }) {
       setBusy(false);
     }
   }
+
+  // Önizleme: seçili ad alanına göre ilk 5 kaydın gerçek adları (kullanıcı
+  // doğru alanı seçtiğini görsün diye — "verinin içinden ayırıp yaz" tam
+  // olarak budur).
+  const namePreview = parsed ? (parsed.features || []).slice(0, 5).map((f) => f.properties?.[nameField]) : [];
 
   return (
     <div className="card p-5 mb-4">
@@ -82,17 +132,14 @@ function BulkImport({ onDone }) {
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label className="text-xs text-[var(--text-dim)] mb-1 block">Dosya</label>
-          <input type="file" accept=".geojson,.json,.kml,.dxf,.zip" onChange={(e) => setFile(e.target.files[0] || null)} className="text-xs" />
+          <input type="file" accept=".geojson,.json,.kml,.dxf,.zip"
+                 onChange={(e) => { setFile(e.target.files[0] || null); setParsed(null); setResult(null); }} className="text-xs" />
         </div>
         <div>
           <label className="text-xs text-[var(--text-dim)] mb-1 block">Alan Tipi</label>
           <select className="input text-xs" value={areaType} onChange={(e) => setAreaType(e.target.value)}>
             <option value="il">İl</option><option value="ilce">İlçe</option><option value="mahalle">Mahalle</option>
           </select>
-        </div>
-        <div>
-          <label className="text-xs text-[var(--text-dim)] mb-1 block">Ad Alanı (dosyadaki attribute adı)</label>
-          <input className="input text-xs" value={nameField} onChange={(e) => setNameField(e.target.value)} placeholder="örn. ad, ILCE_ADI" />
         </div>
         {needsEpsg && (
           <div>
@@ -103,10 +150,40 @@ function BulkImport({ onDone }) {
             </select>
           </div>
         )}
-        <button onClick={run} disabled={!file || busy} className="btn btn-primary text-xs">
-          {busy ? "İçe aktarılıyor…" : "Ayrıştır ve İçe Aktar"}
-        </button>
+        {!parsed && (
+          <button onClick={parseFile} disabled={!file || busy} className="btn btn-primary text-xs" data-testid="admin-area-bulk-parse">
+            {busy ? "Ayrıştırılıyor…" : "Dosyayı Ayrıştır"}
+          </button>
+        )}
       </div>
+
+      {parsed && (
+        <div className="mt-4 p-3 bg-[var(--surface-2)] rounded-lg" data-testid="admin-area-bulk-preview">
+          <div className="text-xs text-[var(--text-dim)] mb-2">
+            {parsed.features?.length || 0} kayıt ayrıştırıldı. Dosyadaki gerçek alanlardan hangisi "ad" ise seçin —
+            aşağıda o alana göre ilk kayıtların adları önizlenir.
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="text-xs text-[var(--text-dim)] mb-1 block">Ad Alanı (dosyadan otomatik tespit edildi)</label>
+              <select className="input text-xs" value={nameField} onChange={(e) => setNameField(e.target.value)} data-testid="admin-area-bulk-namefield">
+                {propKeys.length === 0 && <option value="">— dosyada attribute bulunamadı —</option>}
+                {propKeys.map((k) => <option key={k} value={k}>{k}</option>)}
+              </select>
+            </div>
+            <button onClick={runImport} disabled={busy || !nameField} className="btn btn-primary text-xs" data-testid="admin-area-bulk-import">
+              {busy ? "İçe aktarılıyor…" : `${parsed.features?.length || 0} Alanı İçe Aktar`}
+            </button>
+            <button onClick={() => { setParsed(null); setFile(null); }} className="btn text-xs">Vazgeç</button>
+          </div>
+          {namePreview.length > 0 && (
+            <div className="text-[11px] text-[var(--text-dim)] mt-2">
+              Önizleme: {namePreview.map((n) => n ?? "—").join(", ")}{parsed.features.length > 5 ? "…" : ""}
+            </div>
+          )}
+        </div>
+      )}
+
       {error && <div className="text-xs text-red-400 p-2 bg-red-500/10 rounded mt-3">{error}</div>}
       {result && <div className="text-xs text-[var(--primary)] mt-3">{result.count} idari alan oluşturuldu.</div>}
     </div>
@@ -287,7 +364,7 @@ export default function AdminAreaManagement() {
     <div className="p-8 max-w-[1400px]" data-testid="admin-area-management-page">
       <header className="mb-6 flex items-end justify-between">
         <div>
-          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">IT-13.6</div>
+          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">İDARİ ALANLAR</div>
           <h1 className="font-display text-4xl">İdari Alan Yönetimi</h1>
           <p className="text-[var(--text-dim)] text-sm mt-1">İl / İlçe / Mahalle sınırları ve demografi — sınır verisi sisteme gömülü değildir, dosyadan içe aktarılır.</p>
         </div>
@@ -311,7 +388,27 @@ export default function AdminAreaManagement() {
 
       <BulkImport onDone={refresh} />
 
-      <SmartDataGrid key={gridKey} module="admin_areas" columns={GRID_COLUMNS} onRowClick={setSelectedArea} />
+      {/* SON HAL #7 — toplu silme (grid çoklu seçim + POST /admin-areas/bulk-delete) */}
+      <SmartDataGrid
+        key={gridKey}
+        module="admin_areas"
+        columns={GRID_COLUMNS}
+        onRowClick={setSelectedArea}
+        bulkActions={(ids, { clearSelection, reload }) => (
+          <button
+            className="text-red-400 hover:underline"
+            data-testid="admin-area-bulk-delete"
+            onClick={async () => {
+              if (!window.confirm(`${ids.length} idari alan silinsin mi?\n(Kayıtlar arşivlenir — geri alınabilir.)`)) return;
+              await api.post("/admin-areas/bulk-delete", { area_ids: ids });
+              clearSelection();
+              reload();
+            }}
+          >
+            Seçilenleri Sil ({ids.length})
+          </button>
+        )}
+      />
 
       <AreaDrawer area={selectedArea} onClose={() => setSelectedArea(null)} onChanged={refresh} />
     </div>

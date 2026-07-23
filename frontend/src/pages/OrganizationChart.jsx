@@ -8,33 +8,57 @@
  */
 import { useEffect, useState } from "react";
 import api from "@/api";
-import { Landmark, Plus, Users, ChevronRight, ChevronDown } from "lucide-react";
+import { Landmark, Plus, Users, ChevronRight, ChevronDown, Trash2 } from "lucide-react";
 
-function UnitNode({ node, depth = 0 }) {
+// SON HAL #7 — "idari alanlara ve organizasyon hiyerarşisine silme/toplu
+// silme fonksiyonu ekle". Ağaç yapısı bir SmartDataGrid değil, bu yüzden
+// çoklu seçim burada kendi checkbox'larıyla (birim + pozisyon, iki AYRI
+// Set) yönetilir; tekli silme her satırda bir çöp kutusu ikonu, toplu
+// silme üstteki "Seçilenleri Sil" çubuğuyla.
+function UnitNode({ node, depth = 0, selectedUnits, selectedPositions, onToggleUnit, onTogglePosition, onDeleteUnit, onDeletePosition }) {
   const [open, setOpen] = useState(true);
   return (
     <div style={{ marginLeft: depth * 18 }} className="mb-1">
-      <div className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-[var(--surface-2)]">
+      <div className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-[var(--surface-2)] group">
         {node.children?.length > 0 ? (
           <button onClick={() => setOpen((o) => !o)} className="text-[var(--text-dim)]">
             {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </button>
         ) : <span className="w-[14px]" />}
+        <input type="checkbox" checked={selectedUnits.has(node.id)} onChange={() => onToggleUnit(node.id)}
+               data-testid={`unit-select-${node.id}`} />
         <Landmark size={14} className="text-[var(--primary)]" />
         <span className="font-medium text-sm">{node.name}</span>
         <span className="text-[10px] text-[var(--text-dim)]">({node.positions?.length || 0} pozisyon)</span>
+        <button onClick={() => onDeleteUnit(node)} title="Birimi sil"
+                className="ml-1 text-[var(--text-dim)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                data-testid={`unit-delete-${node.id}`}>
+          <Trash2 size={12} />
+        </button>
       </div>
       {node.positions?.map((p) => (
-        <div key={p.id} style={{ marginLeft: (depth + 1) * 18 }} className="text-xs py-1 px-2 flex items-center gap-2">
+        <div key={p.id} style={{ marginLeft: (depth + 1) * 18 }} className="text-xs py-1 px-2 flex items-center gap-2 group">
+          <input type="checkbox" checked={selectedPositions.has(p.id)} onChange={() => onTogglePosition(p.id)}
+                 data-testid={`position-select-${p.id}`} />
           <Users size={12} className="text-[var(--text-dim)]" />
           <span>{p.title}</span>
           {p.occupants?.map((o) => (
             <span key={o.id} className="badge badge-neutral">{o.full_name || o.email || o.id}</span>
           ))}
           {(!p.occupants || p.occupants.length === 0) && <span className="text-[var(--text-dim)]">— boş —</span>}
+          <button onClick={() => onDeletePosition(p)} title="Pozisyonu sil"
+                  className="text-[var(--text-dim)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                  data-testid={`position-delete-${p.id}`}>
+            <Trash2 size={11} />
+          </button>
         </div>
       ))}
-      {open && node.children?.map((c) => <UnitNode key={c.id} node={c} depth={depth + 1} />)}
+      {open && node.children?.map((c) => (
+        <UnitNode key={c.id} node={c} depth={depth + 1}
+                  selectedUnits={selectedUnits} selectedPositions={selectedPositions}
+                  onToggleUnit={onToggleUnit} onTogglePosition={onTogglePosition}
+                  onDeleteUnit={onDeleteUnit} onDeletePosition={onDeletePosition} />
+      ))}
     </div>
   );
 }
@@ -48,6 +72,44 @@ export default function OrganizationChart() {
   const [positionForm, setPositionForm] = useState({ title: "", organization_unit_id: "", level: 0 });
   const [assignForm, setAssignForm] = useState({ user_id: "", position_id: "", manager_user_id: "" });
   const [error, setError] = useState("");
+
+  // SON HAL #7 — silme / toplu silme
+  const [selectedUnits, setSelectedUnits] = useState(new Set());
+  const [selectedPositions, setSelectedPositions] = useState(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  function toggleUnit(id) {
+    setSelectedUnits((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function togglePosition(id) {
+    setSelectedPositions((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  async function deleteUnit(node) {
+    if (!window.confirm(`"${node.name}" birimi silinsin mi?\n(Alt birimler/pozisyonlar etkilenmez, kayıt arşivlenir.)`)) return;
+    try { await api.delete(`/organization-units/${node.id}`); loadAll(); }
+    catch (err) { setError(err.response?.data?.detail || "Birim silinemedi"); }
+  }
+  async function deletePosition(p) {
+    if (!window.confirm(`"${p.title}" pozisyonu silinsin mi?\n(Kayıt arşivlenir — geri alınabilir.)`)) return;
+    try { await api.delete(`/positions/${p.id}`); loadAll(); }
+    catch (err) { setError(err.response?.data?.detail || "Pozisyon silinemedi"); }
+  }
+  async function bulkDeleteSelected() {
+    if (selectedUnits.size === 0 && selectedPositions.size === 0) return;
+    if (!window.confirm(`${selectedUnits.size} birim ve ${selectedPositions.size} pozisyon silinsin mi?\n(Kayıtlar arşivlenir — geri alınabilir.)`)) return;
+    setBulkBusy(true);
+    try {
+      if (selectedUnits.size > 0) await api.post("/organization-units/bulk-delete", { unit_ids: [...selectedUnits] });
+      if (selectedPositions.size > 0) await api.post("/positions/bulk-delete", { position_ids: [...selectedPositions] });
+      setSelectedUnits(new Set()); setSelectedPositions(new Set());
+      loadAll();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Toplu silme başarısız");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   // #6 — Portföy: bir personelin sorumlu olduğu köyler + oradaki çiftçi/parseller
   const [portfolioUser, setPortfolioUser] = useState("");
@@ -223,9 +285,23 @@ export default function OrganizationChart() {
       </div>
 
       <div className="card p-5">
-        <h3 className="font-display text-lg mb-3">Org Şeması</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-display text-lg">Org Şeması</h3>
+          {(selectedUnits.size > 0 || selectedPositions.size > 0) && (
+            <button onClick={bulkDeleteSelected} disabled={bulkBusy} className="btn btn-ghost text-xs text-red-400"
+                    data-testid="org-bulk-delete-btn">
+              <Trash2 size={12} /> {bulkBusy ? "Siliniyor…" : `Seçilenleri Sil (${selectedUnits.size + selectedPositions.size})`}
+            </button>
+          )}
+        </div>
+        <div className="text-[10px] text-[var(--text-dim)] mb-2">Satırların solundaki kutucukla çoklu seçim yapabilir, üzerine gelip çöp kutusuyla tekli silebilirsiniz.</div>
         {tree.length === 0 && <div className="text-xs text-[var(--text-dim)] p-4 text-center">Henüz birim tanımlı değil — yukarıdan başlayın.</div>}
-        {tree.map((n) => <UnitNode key={n.id} node={n} />)}
+        {tree.map((n) => (
+          <UnitNode key={n.id} node={n}
+                    selectedUnits={selectedUnits} selectedPositions={selectedPositions}
+                    onToggleUnit={toggleUnit} onTogglePosition={togglePosition}
+                    onDeleteUnit={deleteUnit} onDeletePosition={deletePosition} />
+        ))}
       </div>
     </div>
   );

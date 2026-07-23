@@ -25,13 +25,13 @@ import EkimKaydi from "@/pages/EkimKaydi";
 import KarneDetail from "@/pages/KarneDetail";
 import Profil from "@/pages/Profil";
 import { FormListesi, FormBuilder, FormDoldur, FormDashboard } from "@/pages/Forms";
-import { AlanTanimlari, LookupYonetimi } from "@/pages/FormYonetimi";
+import { FormYonetimiHub } from "@/pages/FormYonetimi";
 import AdminAreaManagement from "@/pages/AdminAreaManagement";
-import { DestekKatalogu } from "@/pages/SupportCatalog";
 import UfydDashboard from "@/pages/UfydDashboard";
 import SahaOperasyonlari from "@/pages/SahaOperasyonlari";
 import AutomationRules from "@/pages/AutomationRules";
 import EkimPlanlama from "@/pages/EkimPlanlama";
+import NotificationDetail from "@/pages/NotificationDetail";
 import { SablonYonetimi } from "@/pages/TemplateManagement";
 import AnnouncementManagement from "@/pages/AnnouncementManagement";
 import CampaignManagement from "@/pages/CampaignManagement";
@@ -102,6 +102,7 @@ function App() {
             <Route path="/karne" element={<Karne />} />
             <Route path="/karne/:farmerId" element={<KarneDetail />} />
             <Route path="/bildirimler" element={<Bildirimler />} />
+            <Route path="/bildirimler/:id" element={<NotificationDetail />} />
             <Route path="/profil" element={<Profil />} />
             <Route path="/uydu" element={<UyduGorunutu />} />
             <Route path="/uzaktan-algilama" element={<RemoteSensing />} />
@@ -115,10 +116,13 @@ function App() {
             <Route path="/ayarlar" element={<AyarlarEntegrasyon />} />
             <Route path="/kullanicilar" element={<KullaniciYonetimi />} />
             <Route path="/ozel-roller" element={<OzelRoller />} />
-            <Route path="/alan-tanimlari" element={<AlanTanimlari />} />
-            <Route path="/lookup-yonetimi" element={<LookupYonetimi />} />
+            {/* SON HAL #6 — Form Yönetimi / Lookup Yönetimi / Destek Kataloğu
+                tek sayfada (sekmeli) birleştirildi; eski route'lar geriye
+                dönük uyumluluk için yönlendirilir (/arama -> / deseniyle AYNI). */}
+            <Route path="/alan-tanimlari" element={<FormYonetimiHub />} />
+            <Route path="/lookup-yonetimi" element={<Navigate to="/alan-tanimlari" replace />} />
             <Route path="/idari-alanlar" element={<AdminAreaManagement />} />
-            <Route path="/destek-katalogu" element={<DestekKatalogu />} />
+            <Route path="/destek-katalogu" element={<Navigate to="/alan-tanimlari" replace />} />
             <Route path="/sablon-yonetimi" element={<SablonYonetimi />} />
             <Route path="/duyuru-yonetimi" element={<AnnouncementManagement />} />
             <Route path="/kampanyalar" element={<CampaignManagement />} />

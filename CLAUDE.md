@@ -4,6 +4,7 @@
 > projeyi sıfırdan keşfetmeden doğru kararlar verebilmesi.
 > Son güncelleme: 2026-07-11 (güvenlik denetimi + FAZ 13-17 (IT-36..46) roadmap'e eklendi + FAZ 13 (IT-36..39) TAMAMLANDI — bkz. dosya sonu "Mevcut Durum")
 > Son güncelleme (devam): 2026-07-11 — ROADMAP-URUNLESTIRME.md (on-premise urunlestirme, PR-01..PR-26 + P1-P4) TAMAMLANDI; FAZ 18 (Agricultural Intelligence Engine, IT-47..53) PLANLANDI (`AI-VIZYON-PLATFORMU-MIMARI.md` + ROADMAP-DETAY-TAM.md) ama HENUZ KOD YAZILMADI — bkz. memory/CLAUDE.md Bolum 11-12.
+> Son güncelleme (devam): 2026-07-23 — kullanıcı geri bildirimindeki 10 madde (layout/z-index düzeltmesi, gelişmiş filtre lookup entegrasyonu + 6 sayfaya yayılımı, AI Eğit çökmesi, Görev Yönetimi dashboard+task-type, Lookup/Form/Destek konsolidasyonu, toplu silme, sol menü daralt/genişlet + bildirim detay sayfası, sayfa başlıklarındaki iç kod adlarının temizlenmesi, kullanıcı renk teması) TAMAMLANDI — bkz. dosya sonu "Mevcut Durum" (2026-07-23 oturumu).
 
 ---
 
@@ -2212,6 +2213,71 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   `docker volume ls` sadece 2 volume gösteriyorsa yanlış daemon'a
   bakıyorsunuzdur (Docker Desktop'ta ~28 volume var). Panikle
   seed/reset ÇALIŞTIRMAYIN.
+
+- ✅ **2026-07-23 oturumu — 10 maddelik kullanıcı geri bildirimi (kod
+  taramasıyla, canlı tarayıcı erişimi olmadan çözüldü):**
+  1. Ekim Karar Motoru'nun sol menü altında kalması: `ParcelPicker.jsx`
+     dropdown z-index'i 30→45 (sidebar z-40'ın üstüne çıkarıldı);
+     `Layout.jsx`'te route değişince `mobileOpen` sıfırlanmıyordu, düzeltildi.
+  2. `FilterPanel.jsx`: operatör `<select>` küçültüldü (`w-32 text-xs`);
+     değer alanı artık `lookup_group_id` varsa serbest metin yerine
+     DB'deki lookup değerlerinden `<select>` gösteriyor.
+  3. Gelişmiş arama (FilterPanel) Sözleşmeler/Ekim Kaydı/Ekim Karar
+     Motoru/Sulama/Operasyon/Toprak sayfalarına eklendi; `query_engine.py`'ye
+     3 yeni modül (`irrigation_events`, `operations_tasks`, `agronomy_rules`).
+  4. AI Bilgi Kütüphanesi "Eğit" çökmesi: `ai_engine.py`'de `train_model`
+     body parametresine varsayılan `{}` verildi (422→React render crash
+     zinciri kırıldı); `AiKnowledgeLibrary.jsx`'e güvenli `errText()` helper'ı.
+  5. Görev Yönetimi: varsayılan görünüm `dashboard` oldu; kanban CSS grid'e
+     çevrilip taşma engellendi; `task-types` CRUD'u (`GorevTipleri` bileşeni,
+     Form Yönetimi altında) eklendi.
+  6. Lookup Yönetimi'ne Sulama Tipi/Ürün/Risk Seviyesi grupları (seed
+     endpoint'i: `POST /field-definitions/seed-common-select-lookups`);
+     Lookup Yönetimi + Destek Kataloğu, Form Yönetimi sekmelerine taşındı
+     (`FormYonetimiHub`), eski route'lar `/alan-tanimlari`'na yönlendiriyor.
+  7. İdari alanlar + organizasyon hiyerarşisine toplu silme (`POST
+     /admin-areas/bulk-delete`, `/organization-units/bulk-delete`,
+     `/positions/bulk-delete` + eksik olan tekil `DELETE /positions/{id}`);
+     toplu idari alan yüklemede isim alanı artık dosyadaki gerçek property
+     anahtarlarından otomatik tahmin ediliyor (`guessNameField`) + canlı önizleme.
+  8. Sol menü daralt/genişlet (`Layout.jsx` — `collapsed`/`effectiveCollapsed`,
+     localStorage kalıcı); menü grupları artık VARSAYILAN KAPALI; bildirim
+     mesajları `break-words` ile taşmıyor; bildirime tıklayınca yeni
+     `/bildirimler/:id` (`NotificationDetail.jsx`) detay sayfasına gidiyor.
+  9. Sayfa üstündeki "kicker" etiketlerinde kalan iç geliştirme kod adları
+     (M04/M06/M07/M08/M11/M12/M15/M16/M17/M18, FAZ 9.5/10/11/12/18,
+     IT-13.6/28.1 vb. — ör. Sözleşmeler'de "M04 · MODÜL", Uzaktan
+     Algılama'da "FAZ 9.5 · IT-28.1") 17 sayfada anlamlı, kullanıcıya
+     dönük başlıklarla değiştirildi (ör. "SÖZLEŞME YÖNETİMİ",
+     "UZAKTAN ALGILAMA"). **Not:** bu framework koddaydı, DB'de "Faz8.5"
+     adında bir VERİ kaydı bulunamadı — canlı ortamda ayrıca böyle bir
+     kayıt varsa (Chrome uzantısı bu oturumda bağlanamadı) ayrı ele alınmalı.
+  10. Kullanıcı renk teması: `frontend/src/lib/theme.js`'e `ACCENT_PRESETS`
+     (turuncu/mavi/yeşil/mor/kırmızı/lacivert) + `getAccent/applyAccent/
+     setAccent` — aydınlık/koyu tema mekanizmasından BAĞIMSIZ, CSS
+     değişkenleri (`--primary` vb.) inline `style` ile ezilir. Sunucu
+     tarafı: `users.py` `MyProfileUpdate.accent_color` + `PUT /me/profile`;
+     `Login.jsx` her girişte `data.user.accent_color`'ı cihaza uygular
+     (tek cihaza özel localStorage'a güvenilmez); `Profil.jsx`'e renk
+     bloğu seçici eklendi.
+
+  **Yan bulgu/düzeltme:** `Layout.jsx`'teki `navGroups` dizisine (SİSTEM
+  grubu, madde 6 düzenlemesi sırasında) JSX yorum sözdizimi (`{/* ... */}`)
+  YANLIŞLIKLA düz bir JS dizi elemanı konumuna yazılmıştı — bu, sözdizimsel
+  olarak geçerli ama BOŞ bir obje (`{}`) üretip diziye ekliyordu. SİSTEM
+  grubu açıldığında (client-side route değişiminde React state kalıcı
+  olduğu için farklı sayfalarda da tetiklenebiliyordu) o boş obje
+  `item.icon` olarak render edilmeye çalışılınca "l is not a function"
+  hatasıyla çöküyordu — kullanıcının AI Bilgi Kütüphanesi/Lojistik/Ekim
+  Karar Motoru'nda bildirdiği çökme muhtemelen budur. `//` satır yorumuna
+  çevrilerek düzeltildi; tüm değişen `.jsx`/`.js` dosyaları babel ile
+  (`@babel/preset-react`+`preset-env`) tek tek derlenip doğrulandı.
+
+  **Doğrulama:** değişen TÜM backend dosyaları `python3 -m py_compile` ile,
+  TÜM değişen frontend dosyaları babel transform ile hatasız derlendi.
+  Canlı tarayıcı/DB erişimi bu oturumda yoktu (Claude in Chrome bağlı
+  değildi) — madde 1 ve 9'un DB-veri kısmı statik kod incelemesiyle
+  sınırlı kaldı, kullanıcıdan canlı doğrulama istendi.
 
 ## 7. Çalıştırma
 

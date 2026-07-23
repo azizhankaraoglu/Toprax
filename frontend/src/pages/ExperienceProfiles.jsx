@@ -67,7 +67,7 @@ export function ExperienceProfileYonetimi() {
   return (
     <div className="p-8 max-w-[1400px]" data-testid="experience-profiles-page">
       <header className="mb-6">
-        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">FAZ 12 — MOBİL</div>
+        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">EXPERIENCE PROFILE</div>
         <h1 className="font-display text-4xl flex items-center gap-2"><Smartphone size={28}/> Experience Profile (Mobil Persona)</h1>
         <p className="text-[var(--text-dim)] text-sm mt-1">
           Mobil deneyim statik rol bazlı değil — burada tanımlanan profiller kullanıcılara atanır,

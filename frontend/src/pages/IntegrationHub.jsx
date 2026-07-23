@@ -93,7 +93,7 @@ export default function IntegrationHub() {
   return (
     <div className="p-8 max-w-[1400px]" data-testid="integration-hub-page">
       <header className="mb-6">
-        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">FAZ 11 — PLATFORM CORE</div>
+        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">INTEGRATION HUB</div>
         <h1 className="font-display text-4xl flex items-center gap-2"><Cable size={28}/> Integration Hub</h1>
         <p className="text-[var(--text-dim)] text-sm mt-1">
           Toprax dışarıya doğrudan bağlanmaz — tüm 3. parti çağrılar aşağıdaki envanterden geçer.

@@ -18,6 +18,7 @@ import api from "@/api";
 import { QuickAddPanel } from "@/components/QuickAdd";
 import RowActions from "@/components/RowActions";
 import BulkParcelSelect from "@/components/BulkParcelSelect";
+import FilterPanel from "@/components/FilterPanel";
 import { Sprout, Trash2, Layers, X } from "lucide-react";
 
 const STAGE_OPTS = [
@@ -153,7 +154,7 @@ export default function EkimKaydi() {
 
   return (
     <div className="p-8" data-testid="ekim-page">
-      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">ÜRETİM · MODÜL</div>
+      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">EKİM KAYDI</div>
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <h1 className="font-display text-4xl flex items-center gap-3">
           <Sprout size={30} className="text-[var(--primary)]" /> Ekim Kaydı
@@ -203,6 +204,11 @@ export default function EkimKaydi() {
           </button>
         </div>
       )}
+
+      {/* SON HAL #3 — gelişmiş arama (Query Engine, module="plantings").
+          Not: sonuçlar `plantings` state'inin üzerine yazar; sezon/parsel
+          filtre çubuğu ayrı bir mekanizma olarak durur (load() ile döner). */}
+      <FilterPanel module="plantings" onResults={(items) => setPlantings(items)} />
 
       <div className="card overflow-hidden">
         <table className="w-full text-sm">

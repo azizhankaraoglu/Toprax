@@ -51,7 +51,7 @@ export default function PlatformCore() {
     <div className="p-8 max-w-[1400px]" data-testid="platform-core-page">
       <header className="mb-6 flex items-end justify-between">
         <div>
-          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">FAZ 11 — PLATFORM CORE</div>
+          <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">PLATFORM CORE</div>
           <h1 className="font-display text-4xl flex items-center gap-2"><Settings size={28}/> Platform Core</h1>
           <p className="text-[var(--text-dim)] text-sm mt-1">
             Feature Flags, Module Manifest, Lisanslama iskeleti ve Health Center — bundan sonraki

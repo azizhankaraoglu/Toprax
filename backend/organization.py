@@ -69,6 +69,17 @@ class UserPositionAssign(BaseModel):
     is_primary: bool = True
 
 
+# SON HAL #7 — kullanıcı talebi: "organizasyon hiyerarşisine silme/toplu
+# silme fonksiyonu ekle". OrganizationUnit'te tekli DELETE zaten vardı;
+# Position'da HİÇ yoktu (aşağıda eklendi). Bulk endpoint'ler ikisi için de.
+class BulkDeleteUnitsRequest(BaseModel):
+    unit_ids: List[str]
+
+
+class BulkDeletePositionsRequest(BaseModel):
+    position_ids: List[str]
+
+
 # =====================================================================
 # Diğer modüllerin (approval.py başta olmak üzere) çağırdığı yardımcılar
 # =====================================================================
@@ -156,6 +167,19 @@ def register_organization_routes(api_router, db, current_user, require_permissio
         await log_audit(db, user, action="deactivate", entity="organization_unit", entity_id=unit_id, old_value=old, request=request)
         return {"status": "deactivated"}
 
+    @api_router.post("/organization-units/bulk-delete")
+    async def bulk_delete_org_units(body: BulkDeleteUnitsRequest, request: Request,
+                                     user=Depends(require_permission("organization:manage"))):
+        deleted = 0
+        for unit_id in body.unit_ids:
+            old = await db.organization_units.find_one({"id": unit_id}, {"_id": 0})
+            if not old:
+                continue
+            await db.organization_units.update_one({"id": unit_id}, {"$set": {"is_active": False}})
+            await log_audit(db, user, action="deactivate", entity="organization_unit", entity_id=unit_id, old_value=old, request=request)
+            deleted += 1
+        return {"status": "deactivated", "deleted_count": deleted}
+
     # ---------------- Positions ----------------
     @api_router.get("/positions")
     async def list_positions(organization_unit_id: Optional[str] = None,
@@ -192,6 +216,31 @@ def register_organization_routes(api_router, db, current_user, require_permissio
         new = await db.positions.find_one({"id": position_id}, {"_id": 0})
         await log_audit(db, user, action="update", entity="position", entity_id=position_id, old_value=old, new_value=new, request=request)
         return new
+
+    # SON HAL #7 — Position'da tekli silme HİÇ yoktu (sadece Unit'te vardı);
+    # OrganizationUnit ile AYNI soft-delete deseni.
+    @api_router.delete("/positions/{position_id}")
+    async def deactivate_position(position_id: str, request: Request,
+                                   user=Depends(require_permission("organization:manage"))):
+        old = await db.positions.find_one({"id": position_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Pozisyon bulunamadı")
+        await db.positions.update_one({"id": position_id}, {"$set": {"is_active": False}})
+        await log_audit(db, user, action="deactivate", entity="position", entity_id=position_id, old_value=old, request=request)
+        return {"status": "deactivated"}
+
+    @api_router.post("/positions/bulk-delete")
+    async def bulk_delete_positions(body: BulkDeletePositionsRequest, request: Request,
+                                     user=Depends(require_permission("organization:manage"))):
+        deleted = 0
+        for position_id in body.position_ids:
+            old = await db.positions.find_one({"id": position_id}, {"_id": 0})
+            if not old:
+                continue
+            await db.positions.update_one({"id": position_id}, {"$set": {"is_active": False}})
+            await log_audit(db, user, action="deactivate", entity="position", entity_id=position_id, old_value=old, request=request)
+            deleted += 1
+        return {"status": "deactivated", "deleted_count": deleted}
 
     # ---------------- User ↔ Position ataması ----------------
     @api_router.get("/users/{user_id}/position")

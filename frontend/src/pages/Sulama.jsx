@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { QuickAddPanel } from "@/components/QuickAdd";
 import RowActions from "@/components/RowActions";
 import BulkParcelSelect from "@/components/BulkParcelSelect";
+import FilterPanel from "@/components/FilterPanel";
 
 const METHOD_COLORS = { damla: "#4ade80", yağmurlama: "#60a5fa", karık: "#fbbf24", diğer: "#97a8a0" };
 const RISK_COLORS = { düşük: "text-[var(--primary)]", orta: "text-amber-400", yüksek: "text-red-400" };
@@ -102,7 +103,7 @@ export default function Sulama() {
   return (
     <div className="p-8 max-w-[1600px]" data-testid="sulama-page">
       <header className="mb-6">
-        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">M15 · MODÜL</div>
+        <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">SULAMA & KAYNAK</div>
         <h1 className="font-display text-4xl">Sulama & Kaynak Yönetimi</h1>
         <p className="text-[var(--text-dim)] text-sm mt-1">2025 sezonu su kullanımı, kaynak takibi ve kuraklık riski</p>
       </header>
@@ -219,6 +220,9 @@ export default function Sulama() {
         />
         <BulkIrrigationSection onCreated={load} />
       </div>
+
+      {/* SON HAL #3 — gelişmiş arama (Query Engine, module="irrigation_events") */}
+      <FilterPanel module="irrigation_events" onResults={(items) => setEvents(items)} />
 
       <div className="card overflow-hidden mt-4">
         <div className="p-4 border-b border-[var(--border)]"><h3 className="font-display text-lg">Son Sulama Kayıtları</h3></div>
