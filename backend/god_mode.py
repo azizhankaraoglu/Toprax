@@ -59,6 +59,27 @@ class TenantLicenseCreate(BaseModel):
 # ai/gis/lms anahtarları platform_core.py ile ORTAK (tek kaynak), geri
 # kalan 6'sı (farmer/parcel/production/factory/ufyd/communication) burada
 # ilk kez tanımlanır.
+#
+# SON HAL (2026-07-23) — kullanıcı geri bildirimi: bu liste ilk sürümden
+# beri güncellenmemişti, uygulamaya sonradan eklenen modüllerin BÜYÜK
+# ÇOĞUNLUĞU (Sözleşmeler, Ekim, Sulama, Operasyon, Toprak, Saha
+# Operasyonları, Formlar, İdari Alanlar, Organizasyon, Integration Hub vb.)
+# Tenant Yönetimi > Modüller çekmecesinde HİÇ görünmüyordu. Aşağıdaki 20
+# yeni anahtar `Layout.jsx`'teki navGroups ile birebir eşleşecek şekilde
+# eklendi (Kullanıcılar/Özel Roller/Ayarlar/Form Yönetimi/Dashboard
+# BİLİNÇLİ OLARAK dışarıda bırakıldı — bunlar "kapatılabilir modül" değil,
+# çekirdek hesap yönetimi).
+#
+# ÖNEMLİ SINIR (kapsam notu): yeni 20 anahtarın toggle'ı bu ekranda
+# ÇALIŞIR ve `feature_flags` koleksiyonuna yazılır, ANCAK ilk 9 anahtarın
+# aksine (farmer/parcel/production/factory/ufyd/lms/ai/whatsapp/
+# communication — bunlar server.py/production_cycles.py/ledger.py/lms.py/
+# extras.py/communications.py içinde `require_feature()` ile GERÇEKTEN
+# backend'de zorlanıyor) yeni eklenenler için backend route'larına henüz
+# `require_feature()` bağlanmadı — yani şu an SADECE görünürlük/kayıt
+# amaçlı (kapatılsa bile ilgili API'ler 403 dönmez). Tüm modüllere gerçek
+# erişim kısıtlaması eklemek ayrı, daha büyük bir iterasyon — istenirse
+# takip talebi olarak açılabilir.
 MODULE_TOGGLE_LABELS = {
     "farmer": "Çiftçi Yönetimi",
     "parcel": "Parsel / GIS Veri Girişi",
@@ -69,6 +90,27 @@ MODULE_TOGGLE_LABELS = {
     "lms": "Eğitim Merkezi (LMS)",
     "gis": "Harita Paneli",
     "ai": "Yapay Zeka",
+    # --- SON HAL (2026-07-23) eklenen modüller ---
+    "contracts": "Sözleşmeler",
+    "planting": "Ekim Kaydı & Ekim Karar Motoru",
+    "irrigation": "Sulama & Kaynak Yönetimi",
+    "operations": "Operasyon Yönetimi",
+    "soil": "Toprak Analizleri",
+    "remote_sensing": "Uydu / NDVI / Uzaktan Algılama",
+    "field_ops": "Saha Operasyonları / Görev Yönetimi",
+    "automation": "Otomasyon Kuralları",
+    "forms": "Formlar & Anket",
+    "logistics": "Lojistik & Randevu",
+    "reports": "Raporlar (Verimlilik / Çiftçi Karne / Saha Raporları)",
+    "invoicing": "E-Fatura / İrsaliye",
+    "admin_areas": "İdari Alanlar",
+    "organization": "Organizasyon Hiyerarşisi",
+    "approvals": "Onay Zincirleri / Onay Bekleyenlerim",
+    "case_management": "Bize Ulaşın (Destek Talepleri)",
+    "integration_hub": "Integration Hub",
+    "developer_portal": "Geliştirici Portalı",
+    "experience_profiles": "Experience Profile",
+    "audit": "Audit Log",
 }
 
 

@@ -13,7 +13,19 @@ const TABS = [
   { id: "health", label: "Sistem Sağlığı", icon: HeartPulse },
 ];
 
-const MODULE_ORDER = ["farmer", "parcel", "production", "factory", "ufyd", "communication", "lms", "gis", "ai"];
+// SON HAL (2026-07-23) — god_mode.py'nin MODULE_TOGGLE_LABELS'ıyla BİREBİR
+// eşleşmeli (sıra burada gösterim sırası, kaynak liste backend'de). Yeni
+// bir modül eklendiğinde HER İKİ dosyada da güncellenmesi gerekir.
+const MODULE_ORDER = [
+  "farmer", "parcel", "contracts", "planting", "irrigation", "operations", "soil",
+  "production", "remote_sensing", "gis", "ai",
+  "field_ops", "automation", "forms", "logistics", "factory",
+  "reports", "ufyd", "invoicing",
+  "communication",
+  "lms",
+  "admin_areas", "organization", "approvals", "case_management",
+  "integration_hub", "developer_portal", "experience_profiles", "audit",
+];
 
 const LICENSE_FIELDS = [
   { key: "user_limit", label: "Kullanıcı Limiti" },
