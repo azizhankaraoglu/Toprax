@@ -642,10 +642,9 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
         ai_error = None
         if body.use_ai:
             try:
-                from integrations import get_ai_service_config
-                from ai_provider import get_ai_provider
-                cfg = await get_ai_service_config(db)
-                if cfg:
+                from ai_router import get_ai_router
+                router = await get_ai_router(db)
+                if router.local or router.external:
                     prompt = await db.agronomy_prompts.find_one({"key": "ekim_planlama"}, {"_id": 0}) \
                              or DEFAULT_PROMPT
                     sinyal_metni = "\n".join(
@@ -661,8 +660,7 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
                         alan=parcel.get("area_dekar") or "-", sezon=season,
                         cesit=body.variety or "-", skor=result["score"],
                         karar=result["decision_label"], sinyaller=sinyal_metni, bulgular=bulgu_metni)
-                    ai = get_ai_provider(cfg.get("provider"), cfg.get("api_key"), cfg.get("model"))
-                    text = ai.generate_text(
+                    text = router.generate_text(
                         prompt.get("system_prompt") or DEFAULT_PROMPT["system_prompt"], user_text)
                     if text and text.strip():
                         narrative = text.strip()

@@ -2,6 +2,58 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [Yayınlanmamış] — Faz 4: Ollama Hibrit Yerel LLM (2026-07-24, Build 24072026-2000)
+
+### Eklendi
+- Yeni `backend/ai_router.py` — `ai_provider.py`'nin ABC+factory kalıbının
+  bir üst katmanı: `OllamaProvider` (yerel LLM, API key gerektirmez,
+  `/api/chat` üzerinden metin+görüntü) + `HybridAIRouter` (3 strateji:
+  `local_only`, `external_only` [varsayılan, geriye dönük uyumlu],
+  `hybrid_confidence`). Hibrit modda yanıttan `GUVEN: 0.x` satırı ayrıştırılır
+  (`_extract_confidence`) — eşiğin altındaysa istek otomatik dış API'ye
+  (Gemini/OpenAI/Anthropic) eskale edilir; kısa/refusal benzeri yanıtlar
+  düşük varsayılan skorla (0.3) güvenli tarafta kalır. `routed_as` alanı
+  ("local"/"external"/"escalated") her çağrıdan sonra metering için okunur.
+- `integrations.py`: `ai_service` config'i genişletildi
+  (`local_llm_enabled`/`ollama_base_url`/`ollama_text_model`/
+  `ollama_vision_model`/`strategy`/`confidence_threshold`) — yeni bir
+  `VALID_TYPES` girdisi DEĞİL, mevcut `ai_service` dokümanının parçası.
+  `_has_credentials`, `/test`, `/health` yalnız yerel LLM açıkken de
+  (dış sağlayıcı olmadan) gerçek bir Ollama bağlantı kontrolü yapar
+  (`_probe_ollama` — `/api/tags` ile yüklü modelleri listeler).
+- Çağrı noktaları hibrit router'a taşındı: `extras.py` (`ai_disease_detect`
+  vision çağrısı, `_call_ai_text`/`ai_copilot` metin çağrısı — `ai_usage_logs`
+  kaydına artık `routed` alanı işleniyor), `agronomy.py` (ekim planlama AI
+  anlatımı). `ai_engine.py`'nin (FAZ 18) "cloud escalation"ı BİLİNÇLİ OLARAK
+  dokunulmadı — o modül zaten tamamen simülasyon (`simulate_local_models()`),
+  gerçek bir `generate_vision` çağrısı hiç yapmıyordu; onu gerçek hale
+  getirmek bu iterasyonun kapsamı dışında bırakıldı.
+- Frontend: Ayarlar > Entegrasyonlar > AI Servisi kartına "Yerel LLM
+  (Ollama)" bölümü — etkinleştirme, URL/model alanları, strateji radyoları,
+  hibrit modda güven eşiği slider'ı.
+- Ops: `docker-compose.ollama.yml` (ana compose'a `-f` ile eklenir, sadece
+  localhost'a açık port, mevcut `toprax-net` ağını yeniden kullanır),
+  `scripts/ollama-modelleri-indir.ps1`/`.sh`, `docs/yerel-llm-kurulum.md`.
+
+### Doğrulama
+- Backend: py_compile + pyflakes (0 undefined name, 1 gerçek hata bulunup
+  düzeltildi — `ai_copilot`'ta kalan `ai_cfg` referansı `ai_ready`'e
+  çevrildi) + 47 pytest yeşil.
+- `_extract_confidence()` birim test edildi: `GUVEN: 0.85` satırı doğru
+  ayrıştırıldı ve metinden temizlendi, kısa yanıt (fallback 0.3), GUVEN
+  satırsız uzun yanıt (fallback 0.5), `GUVEN: 1` (1.0) — hepsi doğru.
+- **Gerçek Ollama konteyneriyle uçtan uca (qwen2.5:0.5b, gerçek indirme):**
+  `docker-compose.ollama.yml` birleşik config'i doğrulandı (`docker compose
+  config` — tek ağa çözüldü); `/integrations/ai_service/test` gerçek
+  `/api/tags` çağrısıyla yüklü modeli gördü; `strategy=local_only` ile
+  `POST /ai/copilot` **gerçek yerel modelden** geçerli bir JSON filtre
+  üretti, Query Engine üzerinden 20 gerçek Konya parselini döndürdü,
+  `ai_usage_logs`'a `routed:"local"` yazıldığı doğrulandı; imkânsız yüksek
+  eşik (0.99) + dış API yokken hibrit mod düşük güvenli de olsa yerel
+  sonucu döndürdü (çökme yok); erişilemez Ollama URL'i + dış API yokken
+  temiz bir 500 döndü ve sunucu `healthy` kalmaya devam etti (çökme yok).
+  Test verisi (ai_service config, ai_usage_logs kayıtları) temizlendi.
+
 ## [Yayınlanmamış] — Faz 3: MERNİS + TAKBİS Entegrasyonları (2026-07-24, Build 24072026-1800)
 
 ### Eklendi

@@ -1,0 +1,53 @@
+version: "3.9"
+
+# Denetim Faz 4 — Yerel LLM (Ollama) opsiyonel eklentisi.
+# Ana docker-compose.yml'yi DEĞİŞTİRMEZ, ayrı bir dosyadır — istenirse
+# uygulama üstüne eklenir:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d
+#
+# Sonra backend'in "toprax-net" ağı üzerinden Ollama'ya erişebilmesi için
+# Ayarlar > Entegrasyonlar > AI Servisi > Yerel LLM bölümüne
+#   Ollama URL: http://ollama:11434
+# girilir (backend konteyner İÇİNDEN çalıştığı için "localhost" DEĞİL,
+# compose servis adı "ollama" kullanılır). Backend konteyner dışında
+# (yerel geliştirmede, uvicorn doğrudan Windows'ta çalışırken) ise
+# http://localhost:11434 kullanılır.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: toprax-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      # Sadece localhost'a açık — dışarıya kapalı (Mongo'nun P0 düzeltmesiyle
+      # AYNI ihtiyat: yerel LLM sunucusu da host'un dışına açılmamalı).
+      - "127.0.0.1:11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - toprax-net
+    # GPU varsa (NVIDIA + nvidia-container-toolkit kurulu) aşağıdaki bloğun
+    # yorumunu kaldırın — CPU'da da çalışır, sadece daha yavaştır.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  ollama_models:
+
+# NOT: "toprax-net" ağı burada YENİDEN TANIMLANMAZ — docker-compose.yml
+# (-f ile ilk verilen dosya) zaten tanımlıyor; iki dosya BİRLEŞTİRİLEREK
+# çalıştırıldığında (yukarıdaki komut) aynı ağ anahtarı otomatik çözülür.
+# Bu dosya TEK BAŞINA ("docker compose -f docker-compose.ollama.yml up")
+# çalıştırılamaz — ana dosyayla birlikte kullanılmalıdır.

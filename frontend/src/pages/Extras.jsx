@@ -293,6 +293,73 @@ export function AyarlarEntegrasyon() {
                      onChange={(e) => setField("ai_service", "model", e.target.value)} />
             </div>
           )}
+
+          {/* Denetim Faz 4 — Yerel LLM (Ollama) hibrit yönlendirme. Aynı
+              ai_service entegrasyon dokümanının config'inde yaşar (yeni bir
+              VALID_TYPES eklenmedi) — backend ai_router.py bu alanları okur. */}
+          <div className="mt-4 pt-4 border-t border-[var(--border)]">
+            <label className="flex items-center gap-2 text-sm mb-3">
+              <input type="checkbox" checked={forms.ai_service?.config?.local_llm_enabled ?? false}
+                     onChange={(e) => setField("ai_service", "local_llm_enabled", e.target.checked)}
+                     data-testid="ollama-enabled-toggle"/>
+              <span className="font-medium">Yerel LLM (Ollama)</span>
+            </label>
+            {forms.ai_service?.config?.local_llm_enabled && (
+              <div className="space-y-3 pl-6">
+                <input className="input" placeholder="Ollama URL (varsayılan: http://localhost:11434)"
+                       value={forms.ai_service?.config?.ollama_base_url || ""}
+                       onChange={(e) => setField("ai_service", "ollama_base_url", e.target.value)}
+                       data-testid="ollama-url-input"/>
+                <div className="grid grid-cols-2 gap-3">
+                  <input className="input" placeholder="Metin modeli (llama3.1:8b)"
+                         value={forms.ai_service?.config?.ollama_text_model || ""}
+                         onChange={(e) => setField("ai_service", "ollama_text_model", e.target.value)}
+                         data-testid="ollama-text-model-input"/>
+                  <input className="input" placeholder="Görüntü modeli (llava:7b)"
+                         value={forms.ai_service?.config?.ollama_vision_model || ""}
+                         onChange={(e) => setField("ai_service", "ollama_vision_model", e.target.value)}
+                         data-testid="ollama-vision-model-input"/>
+                </div>
+                <div>
+                  <label className="text-xs text-[var(--text-dim)] mb-1.5 block">STRATEJİ</label>
+                  <div className="flex flex-col gap-2 text-sm">
+                    {[
+                      { v: "local_only", l: "Sadece Yerel — dış API'ye asla gitmez" },
+                      { v: "external_only", l: "Sadece Dış — yerel modeli kullanmaz" },
+                      { v: "hybrid_confidence", l: "Hibrit — önce yerel dener, güven düşükse dışa eskale eder" },
+                    ].map((opt) => (
+                      <label key={opt.v} className="flex items-center gap-2">
+                        <input type="radio" name="ai-strategy" value={opt.v}
+                               checked={(forms.ai_service?.config?.strategy || "external_only") === opt.v}
+                               onChange={() => setField("ai_service", "strategy", opt.v)}
+                               data-testid={`ollama-strategy-${opt.v}`}/>
+                        {opt.l}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {forms.ai_service?.config?.strategy === "hybrid_confidence" && (
+                  <div>
+                    <label className="text-xs text-[var(--text-dim)] mb-1.5 block">
+                      GÜVEN EŞİĞİ ({Number(forms.ai_service?.config?.confidence_threshold ?? 0.6).toFixed(2)})
+                    </label>
+                    <input type="range" min="0" max="1" step="0.05" className="w-full"
+                           value={forms.ai_service?.config?.confidence_threshold ?? 0.6}
+                           onChange={(e) => setField("ai_service", "confidence_threshold", Number(e.target.value))}
+                           data-testid="ollama-confidence-slider"/>
+                    <p className="text-[11px] text-[var(--text-dim)] mt-1">
+                      Yerel modelin kendi güven puanı bu eşiğin altındaysa istek dış API'ye yönlendirilir.
+                    </p>
+                  </div>
+                )}
+                <p className="text-[11px] text-[var(--text-dim)]">
+                  Ollama'nın aynı ağda/makinede çalışıyor olması gerekir (bkz. docs/yerel-llm-kurulum.md).
+                  API key gerekmez.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-2 mt-3">
             <button onClick={() => save("ai_service")} disabled={saving.ai_service} className="btn btn-ghost">
               <Save size={14}/> {saving.ai_service ? "Kaydediliyor…" : "Kaydet"}

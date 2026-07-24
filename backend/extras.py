@@ -32,7 +32,6 @@ import re
 from tenant_context import current_tenant_id
 from satellite_provider import (get_satellite_provider, ndvi_to_health, ndvi_to_risk_level, DemoSatelliteProvider,
                                  get_satellite_provider_tiered, build_image_meta, maybe_auto_task_on_anomaly)
-from ai_provider import get_ai_provider
 from config_service import ALLOW_DATA_SEEDING
 
 
@@ -62,10 +61,19 @@ def register_extra_routes(api_router, db, current_user, is_admin, require_featur
                 )
                 if used >= lic["ai_limit"]:
                     raise HTTPException(403, f"Lisans limiti aşıldı: Yapay Zeka isteği ({used}/{lic['ai_limit']} bu ay)")
+        log_id = str(uuid.uuid4())
         await db.ai_usage_logs.insert_one({
-            "id": str(uuid.uuid4()), "feature": feature, "user_id": user.get("id"),
+            "id": log_id, "feature": feature, "user_id": user.get("id"),
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
+        return log_id
+
+    async def _mark_ai_routed(log_id: str, routed_as: Optional[str]):
+        """Denetim Faz 4 (Ollama) — hangi çağrının yerel/dış/eskale edilmiş
+        olduğunu `ai_usage_logs` kaydına işler (God Mode istatistik
+        dashboard'unun yerel/dış oranını görebilmesi için)."""
+        if routed_as:
+            await db.ai_usage_logs.update_one({"id": log_id}, {"$set": {"routed": routed_as}})
 
     # =====================================================================
     # AI HASTALIK TESPİTİ — Gemini Vision
@@ -86,14 +94,14 @@ def register_extra_routes(api_router, db, current_user, is_admin, require_featur
         girilir (bkz. integrations.py). Sağlayıcıya göre uygun vision API'si
         çağrılır.
         """
-        from integrations import get_ai_service_config
+        from ai_router import get_ai_router
 
-        ai_cfg = await get_ai_service_config(db)
-        if not ai_cfg:
+        router = await get_ai_router(db)
+        if not router.local and not router.external:
             raise HTTPException(
                 500,
                 "AI servisi yapılandırılmamış. Lütfen Ayarlar > Entegrasyonlar > AI Servisi "
-                "bölümünden bir sağlayıcı (OpenAI/Gemini/Anthropic) ve API key girin."
+                "bölümünden bir sağlayıcı (OpenAI/Gemini/Anthropic) VEYA Yerel LLM (Ollama) girin."
             )
 
         # Base64'ün "data:image/..." prefix'ini temizle
@@ -110,13 +118,14 @@ def register_extra_routes(api_router, db, current_user, is_admin, require_featur
             '{"plant": "...", "disease": "...", "severity": "...", "action": "...", "urgency": "..."}'
         )
 
-        await _check_ai_limit(user, "disease_detect")
+        log_id = await _check_ai_limit(user, "disease_detect")
 
-        # IT-32 — Integration Hub: doğrudan OpenAI/Gemini/Anthropic HTTP çağrısı
-        # burada YOK, tek bir ai_provider.py üzerinden geçer (bkz. modül docstring'i).
+        # Denetim Faz 4 — doğrudan OpenAI/Gemini/Anthropic/Ollama HTTP çağrısı
+        # burada YOK, tek bir ai_router.py (hibrit yerel/dış yönlendirici)
+        # üzerinden geçer (bkz. modül docstring'i).
         try:
-            ai = get_ai_provider(ai_cfg.get("provider"), ai_cfg.get("api_key"), ai_cfg.get("model"))
-            response = ai.generate_vision(system_prompt, "Bu bitki fotoğrafını analiz et.", img_b64)
+            response = router.generate_vision(system_prompt, "Bu bitki fotoğrafını analiz et.", img_b64)
+            await _mark_ai_routed(log_id, router.routed_as)
         except ValueError as e:
             raise HTTPException(500, str(e))
         except Exception as e:
@@ -203,15 +212,18 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
 Örnek çıktı: {"region_name": "Konya", "risk_level": ["turuncu", "kirmizi"], "sort_by": "ndvi", "sort_dir": "asc", "limit": 20, "summary": "Konya bölgesindeki en riskli 20 parsel"}
 """
 
-    async def _call_ai_text(ai_cfg: dict, system_prompt: str, user_text: str) -> str:
-        """AI servisine metin isteği gönderir, ham metin yanıtını döner (sağlayıcı-agnostik).
-        IT-32 — Integration Hub: gerçek çağrı ai_provider.py'ye taşındı, burada
-        sadece config'i o modülün factory'sine geçirmekten ibaret."""
+    async def _call_ai_text(system_prompt: str, user_text: str):
+        """AI'ye metin isteği gönderir, (ham_yanıt, routed_as) döner. Denetim
+        Faz 4 — gerçek çağrı `ai_router.py`'nin hibrit yönlendiricisine
+        taşındı (yerel/dış/hibrit strateji), burada sadece o modülün
+        factory'sine geçirmekten ibaret."""
+        from ai_router import get_ai_router
+        router = await get_ai_router(db)
         try:
-            ai = get_ai_provider(ai_cfg.get("provider"), ai_cfg.get("api_key"), ai_cfg.get("model"))
+            text = router.generate_text(system_prompt, user_text)
         except ValueError as e:
             raise HTTPException(500, str(e))
-        return ai.generate_text(system_prompt, user_text)
+        return text, router.routed_as
 
     REGION_NAMES = ["Konya", "Eskişehir", "Kayseri", "Erzurum", "Afyon", "Çorum", "Ankara", "Yozgat"]
 
@@ -311,16 +323,17 @@ Sadece anlamlı alanları dahil et.
         anahtar-kelime eşleştirmeli bir fallback devreye girer — Copilot
         temel senaryolarda API key olmadan da çalışır.
         """
-        from integrations import get_ai_service_config
-        ai_cfg = await get_ai_service_config(db)
+        from ai_router import is_ai_available
+        ai_ready = await is_ai_available(db)
 
         module = body.module if body.module in ("parcels", "farmers") else "parcels"
         schema_prompt = COPILOT_FARMERS_PROMPT if module == "farmers" else COPILOT_SCHEMA_PROMPT
         fallback = _rule_based_parse_farmers if module == "farmers" else _rule_based_parse
 
-        if ai_cfg:
-            await _check_ai_limit(user, "copilot")
-            raw = await _call_ai_text(ai_cfg, schema_prompt, body.query)
+        if ai_ready:
+            log_id = await _check_ai_limit(user, "copilot")
+            raw, routed_as = await _call_ai_text(schema_prompt, body.query)
+            await _mark_ai_routed(log_id, routed_as)
             # AI bazen JSON'u ```json ... ``` bloğu içinde döner — temizle
             cleaned = raw.strip()
             if cleaned.startswith("```"):
@@ -397,7 +410,7 @@ Sadece anlamlı alanları dahil et.
             "summary": filt_spec.get("summary", f"{len(results)} {entity_label} bulundu."),
             "result_count": len(results),
             "items": results,
-            "ai_powered": bool(ai_cfg),
+            "ai_powered": ai_ready,
         }
         if module == "parcels":
             out["parcels"] = results          # geriye uyumluluk (HaritaPaneli/AICopilot)

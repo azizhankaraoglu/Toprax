@@ -114,6 +114,10 @@ def _has_credentials(itype: str, config: dict, provider: Optional[str]) -> bool:
     if itype == "email":
         return _is_filled(config, "host") and _is_filled(config, "username") and _is_filled(config, "password")
     if itype == "ai_service":
+        # Denetim Faz 4 — yerel LLM (Ollama) tek başına "kimlik bilgisi var"
+        # sayılır (API key gerekmez); dış sağlayıcı hâlâ provider+api_key ister.
+        if config.get("local_llm_enabled") and _is_filled(config, "ollama_base_url"):
+            return True
         return bool(provider) and _is_filled(config, "api_key")
     if itype in ("planet_labs", "eosda"):
         return _is_filled(config, "api_key")
@@ -397,10 +401,28 @@ def _probe_eosda(cfg: dict, timeout: int) -> Tuple[bool, str]:
         return False, f"Bağlantı hatası: {e}"
 
 
+def _probe_ollama(cfg: dict, timeout: int) -> Tuple[bool, str]:
+    """Ollama (yerel LLM) erişilebilirlik kontrolü — `/api/tags` model
+    listesini çeker, hiçbir üretim yapmaz (yıkıcı olmayan)."""
+    base_url = (cfg.get("ollama_base_url") or "http://localhost:11434").rstrip("/")
+    try:
+        resp = requests.get(f"{base_url}/api/tags", timeout=timeout)
+        if resp.status_code != 200:
+            return False, f"Ollama yanıtı: HTTP {resp.status_code}"
+        models = [m.get("name") for m in resp.json().get("models", [])]
+        return True, f"Ollama erişilebilir — yüklü modeller: {', '.join(models) or 'yok'}"
+    except Exception as e:
+        return False, f"Ollama bağlantı hatası ({base_url}): {e}"
+
+
 def _probe_ai_service(provider: str, cfg: dict, timeout: int) -> Tuple[bool, str]:
+    # Denetim Faz 4 — dış sağlayıcı hiç yapılandırılmamışsa ama yerel LLM
+    # açıksa, "Test Et" Ollama'yı pingler (dış API key yokluğu hata sayılmaz).
     api_key = cfg.get("api_key")
+    if (not api_key or not provider) and cfg.get("local_llm_enabled"):
+        return _probe_ollama(cfg, timeout)
     if not api_key or not provider:
-        return False, "Önce AI servis sağlayıcısı ve API key girilmeli"
+        return False, "Önce AI servis sağlayıcısı ve API key girilmeli (veya Yerel LLM'i etkinleştirin)"
     try:
         if provider == "openai":
             resp = requests.get(
@@ -947,8 +969,8 @@ def register_integration_routes(api_router, db, current_user, is_admin, log_audi
         doc = await db.integrations.find_one({"type": "ai_service"}, {"_id": 0})
         cfg = (doc or {}).get("config", {})
         provider = (doc or {}).get("provider")
-        if not cfg.get("api_key") or not provider:
-            raise HTTPException(400, "Önce AI servis sağlayıcısı ve API key girilmeli")
+        if (not cfg.get("api_key") or not provider) and not cfg.get("local_llm_enabled"):
+            raise HTTPException(400, "Önce AI servis sağlayıcısı ve API key girilmeli (veya Yerel LLM'i etkinleştirin)")
 
         timeout = _resolve_timeout(doc)
         retry_count = _resolve_retry(doc)
