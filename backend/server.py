@@ -187,6 +187,14 @@ async def current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
         api_user = await resolve_api_key_user(raw_db, creds.credentials)
         if not api_user:
             raise HTTPException(401, "Geçersiz, süresi dolmuş veya iptal edilmiş API anahtarı")
+        # Denetim düzeltmesi (2026-07-24): middleware API key'lerde JWT
+        # çözemediği için tenant bağlamı BOŞ kalıyordu — endpoint kodu
+        # `db` üzerinden TÜM tenant'ları okuyabiliyordu (fail-closed
+        # sonrası ise hiçbir şey okuyamazdı). Bağlam burada, anahtarın
+        # ait olduğu tenant'la kurulur (middleware finally bloğu isteğin
+        # sonunda kendi reset'ini yapar, ek sızıntı olmaz).
+        if api_user.get("tenant_id"):
+            current_tenant_id.set(api_user["tenant_id"])
         return api_user
 
     try:
@@ -457,7 +465,11 @@ async def login(body: LoginReq, request: Request):
     # birine karşı denenir (login sırasında current_tenant_id henüz bilinmediği
     # için tenant'a göre daraltamayız — bkz. tenant_context.py'nin bu
     # senaryo için bilinçli "filtre eklenmez" notu).
-    candidates = await db.users.find({"email": body.email.lower()}).to_list(20)
+    # raw_db (sarmalanmamış) — login anında tenant bağlamı henüz YOK;
+    # tenant_context.py artık fail-closed olduğu için bağlamsız `db`
+    # sorgusu boş dönerdi. Platform-admin kodundaki raw_db konvansiyonuyla
+    # aynı bilinçli istisna (bkz. UNAUTHORIZED_TENANT_SENTINEL).
+    candidates = await raw_db.users.find({"email": body.email.lower()}).to_list(20)
     user = None
     for candidate in candidates:
         if verify_password(body.password, candidate.get("password", "")):
@@ -488,8 +500,9 @@ async def login(body: LoginReq, request: Request):
             raise HTTPException(401, "Geçersiz TOTP kodu")
 
     # Şifre hâlâ eski SHA256 formatındaysa sessizce bcrypt'e yükselt
+    # (raw_db — login'de tenant bağlamı yok, fail-closed `db` eşleşmezdi)
     if needs_rehash(user["password"]):
-        await db.users.update_one({"id": user["id"]}, {"$set": {"password": hash_password(body.password)}})
+        await raw_db.users.update_one({"id": user["id"]}, {"$set": {"password": hash_password(body.password)}})
 
     record_successful_login(body.email, client_ip)
     access_token = make_access_token(user["id"], user["role"], user.get("farmer_id"), user.get("tenant_id"))
@@ -516,9 +529,17 @@ async def refresh_access_token(body: RefreshTokenReq):
     except jwt.PyJWTError:
         raise HTTPException(401, "Geçersiz veya süresi dolmuş refresh token")
 
-    user = await db.users.find_one({"id": payload["user_id"]}, {"_id": 0, "password": 0, "totp_secret": 0})
+    # raw_db — refresh isteği geçerli bir access token TAŞIMAZ (süresi
+    # dolmuştur), middleware tenant bağlamı kuramaz; fail-closed `db`
+    # sorgusu kullanıcıyı asla bulamazdı. Kimlik id + token'daki tenant
+    # eşleşmesiyle doğrulanır.
+    user = await raw_db.users.find_one({"id": payload["user_id"]}, {"_id": 0, "password": 0, "totp_secret": 0})
     if not user:
         raise HTTPException(401, "Kullanıcı bulunamadı")
+    if user.get("tenant_id") != payload.get("tenant_id"):
+        raise HTTPException(401, "Token tenant uyuşmazlığı")
+    if user.get("active") is False:
+        raise HTTPException(403, "Hesabınız pasif duruma alınmış")
 
     new_access = make_access_token(user["id"], user["role"], user.get("farmer_id"), user.get("tenant_id"))
     return {"token": new_access, "access_token": new_access}
@@ -1072,6 +1093,17 @@ async def delete_farmer(farmer_id: str, request: Request,
             f"Bu çiftçiye bağlı {linked_contracts} sözleşme var. Önce sözleşmeleri "
             "kapatın/taşıyın, sonra çiftçiyi silin."
         )
+    # Denetim A5 (2026-07-24): aktif (terminal olmayan) üretim sezonları da
+    # yetim kalmasın — parsel/sözleşme guard'ıyla AYNI 409 deseni.
+    linked_cycles = await db.production_cycles.count_documents(
+        {"farmer_id": farmer_id, "status": {"$nin": ["completed", "cancelled"]}}
+    )
+    if linked_cycles > 0:
+        raise HTTPException(
+            409,
+            f"Bu çiftçiye bağlı {linked_cycles} aktif üretim sezonu var. Önce "
+            "sezonları tamamlayın veya iptal edin, sonra çiftçiyi silin."
+        )
 
     await db.farmers.update_one(
         {"id": farmer_id},
@@ -1081,6 +1113,21 @@ async def delete_farmer(farmer_id: str, request: Request,
             "deleted_by": user.get("full_name") or user.get("email"),
         }},
     )
+    # Denetim A5: çiftçiye bağlı (guard gereği zaten pasif/terminal olan)
+    # kayıtlar `farmer_inactive: true` ile işaretlenir — arşiv görünümleri
+    # ve raporlar "sahibi pasif" kaydı ayırt edebilsin (kendi is_active/
+    # status alanlarına DOKUNULMAZ, yetim işaretidir sadece).
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for coll_name in ("parcels", "contracts", "production_cycles"):
+        res = await db[coll_name].update_many(
+            {"farmer_id": farmer_id},
+            {"$set": {"farmer_inactive": True, "farmer_inactive_at": now_iso}},
+        )
+        if res.modified_count:
+            await log_audit(db, user, action="cascade_farmer_inactive", entity=coll_name,
+                             entity_id=farmer_id,
+                             new_value={"farmer_id": farmer_id, "modified": res.modified_count},
+                             request=request)
     await log_audit(db, user, action="soft_delete", entity="farmer", entity_id=farmer_id, old_value=old, request=request)
     return {"status": "deactivated"}
 
@@ -2849,7 +2896,7 @@ register_karne_engine_routes(api_router, db, current_user, require_permission, l
 # Dosya Depolama (IT-04) — basit dosya/resim upload + field_definitions
 # file/image/multifile alan tiplerinin ve "Belgeler" sekmesinin backend'i.
 from storage import register_storage_routes
-register_storage_routes(api_router, db, current_user, log_audit)
+register_storage_routes(api_router, db, current_user, log_audit, raw_db=raw_db)
 
 # Harita Paneli — Kişisel Çalışma Alanı (IT-14) — widget seçimi + harita
 # görünümü + aktif filtrenin kullanıcı başına tek kayıt olarak saklanması.
@@ -3114,6 +3161,29 @@ async def startup():
             await raw_db[coll].create_index("tenant_id")
         await raw_db.tenants.create_index("slug", unique=True)
         await raw_db.tenants.create_index("id", unique=True)
+
+        # ============ BİLEŞİK İNDEKSLER (denetim A4, 2026-07-24) ============
+        # Query Engine + liste ekranları ağırlıklı olarak tenant_id +
+        # created_at/status/farmer_id kombinasyonlarıyla sorgular — tek
+        # alanlı tenant_id index'i yüksek veri hacminde yetersiz kalır.
+        # İsimli (name=) tanımlandılar: create_index idempotenttir, her
+        # startup'ta güvenle tekrar çalışır.
+        _TS = [("tenant_id", 1), ("created_at", -1)]
+        for coll in ["farmers", "parcels", "contracts", "plantings", "soil_samples",
+                     "field_tasks", "visits", "support_requests", "ledger_entries",
+                     "communications", "kantar_records", "production_cycles",
+                     "notifications", "irrigation_events"]:
+            await raw_db[coll].create_index(_TS, name="tenant_created_idx")
+        # Durum makineli koleksiyonlar — kanban/dashboard "duruma göre say/filtrele"
+        for coll in ["field_tasks", "support_requests", "production_cycles",
+                     "campaigns", "cases", "work_orders"]:
+            await raw_db[coll].create_index([("tenant_id", 1), ("status", 1)],
+                                            name="tenant_status_idx")
+        # Çiftçi-çocuk koleksiyonlar — 360 görünümü/detay sayfaları farmer_id ile çeker
+        for coll in ["parcels", "contracts", "support_requests", "ledger_entries",
+                     "visits", "kantar_records", "entitlements"]:
+            await raw_db[coll].create_index([("tenant_id", 1), ("farmer_id", 1)],
+                                            name="tenant_farmer_idx")
 
         # ============ PLATFORM ADMIN BOOTSTRAP ============
         # platform_admin, tenant'lar oluşturup yönetir (bkz. tenants.py).

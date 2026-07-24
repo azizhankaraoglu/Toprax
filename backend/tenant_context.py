@@ -33,6 +33,13 @@ current_tenant_id: ContextVar[Optional[str]] = ContextVar("current_tenant_id", d
 # tenant_id ile hiç filtrelenmeyecek (tenant'lar-arası) koleksiyonlar.
 GLOBAL_COLLECTIONS = {"tenants"}
 
+# Fail-closed sentinel (denetim 2026-07-24): tenant bağlamı OLMADAN
+# tenant-scoped bir koleksiyon okunmaya çalışılırsa sorguya bu değer
+# enjekte edilir — hiçbir gerçek dokümanla eşleşmez, sonuç HER ZAMAN boş.
+# Tenant'sız meşru erişim (login, refresh, platform admin, worker'lar)
+# sarmalanmamış `raw_db` üzerinden yapılmalıdır.
+UNAUTHORIZED_TENANT_SENTINEL = "__UNAUTHORIZED__"
+
 
 class TenantScopedCollection:
     """Bir MongoDB koleksiyonunu sarmalar; her çağrıda mevcut tenant_id'yi
@@ -49,9 +56,13 @@ class TenantScopedCollection:
             return filt
         tid = current_tenant_id.get()
         if tid is None:
-            # Tenant bağlamı yoksa (örn. login sırasında email ile arama,
-            # ya da unauthenticated bootstrap endpoint'i) filtre eklenmez —
-            # bilinçli bir tasarım kararı, tenant henüz bilinmiyor demektir.
+            # FAIL-CLOSED (denetim düzeltmesi 2026-07-24): eski davranış
+            # "tenant bilinmiyorsa filtre ekleme" idi — bu, auth kontrolü
+            # unutulmuş bir endpoint'in TÜM tenant'ların verisini
+            # sızdırmasına izin veriyordu. Artık bağlamsız sorgu HİÇBİR
+            # kayıtla eşleşmez; login/refresh gibi meşru bağlamsız yollar
+            # `raw_db` kullanır (bkz. UNAUTHORIZED_TENANT_SENTINEL notu).
+            filt["tenant_id"] = UNAUTHORIZED_TENANT_SENTINEL
             return filt
         filt["tenant_id"] = tid
         return filt
@@ -80,9 +91,11 @@ class TenantScopedCollection:
 
     def aggregate(self, pipeline, *args, **kwargs):
         # Aggregate pipeline'ların başına otomatik $match enjekte edilir.
-        tid = current_tenant_id.get()
-        if not self._exempt and tid is not None:
-            pipeline = [{"$match": {"tenant_id": tid}}] + list(pipeline)
+        # Fail-closed: bağlam yoksa sentinel ile boş sonuç (bkz. _scoped_filter).
+        if not self._exempt:
+            tid = current_tenant_id.get()
+            match_tid = tid if tid is not None else UNAUTHORIZED_TENANT_SENTINEL
+            pipeline = [{"$match": {"tenant_id": match_tid}}] + list(pipeline)
         return self._c.aggregate(pipeline, *args, **kwargs)
 
     # ---- yazma ----

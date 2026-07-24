@@ -116,7 +116,10 @@ export default function PlatformAdmin() {
     try {
       const { data } = await api.post(`/god-mode/tenants/${t.id}/enter`);
       localStorage.setItem("token", data.token);
-      localStorage.setItem("refresh_token", "");
+      // Redirect-loop düzeltmesi (denetim 2026-07-24): boş string yerine
+      // backend'in ürettiği gerçek refresh token saklanır — api.js
+      // interceptor'ı boş refresh token görünce ilk 401'de logout'a düşüyordu.
+      localStorage.setItem("refresh_token", data.refresh_token || "");
       localStorage.setItem("user", JSON.stringify(data.user));
       // Client-side nav() DEĞİL — kimlik/tenant tamamen değiştiği için
       // TAM sayfa yenileme (map_snapshots.py'nin "?snapshot=" linkinde
@@ -137,7 +140,7 @@ export default function PlatformAdmin() {
     try {
       const { data } = await api.post(`/god-mode/tenants/${t.id}/enter`);
       localStorage.setItem("token", data.token);
-      localStorage.setItem("refresh_token", "");
+      localStorage.setItem("refresh_token", data.refresh_token || "");
       localStorage.setItem("user", JSON.stringify(data.user));
       window.location.href = path;
     } catch (e) {

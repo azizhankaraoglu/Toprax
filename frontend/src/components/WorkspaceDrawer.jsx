@@ -143,7 +143,10 @@ export default function WorkspaceDrawer() {
                 className={`w-full text-left p-3 border-b border-[var(--border)] hover:bg-[var(--surface-2)] min-w-0 ${n.status !== "okundu" ? "bg-[var(--primary)]/5" : ""}`}
               >
                 <div className="flex items-start justify-between gap-2 min-w-0">
-                  <div className="text-sm font-medium truncate min-w-0">{n.title}</div>
+                  {/* Denetim (2026-07-24): truncate uzun Türkçe başlıkları tek
+                      satırda kesip "yazılar yarım görünüyor" şikayetine yol
+                      açıyordu — 2 satıra kadar sarılır, sonrası kırpılır. */}
+                  <div className="text-sm font-medium break-words line-clamp-2 min-w-0">{n.title}</div>
                   {n.status !== "okundu" && <span className="w-2 h-2 rounded-full bg-[var(--primary)] mt-1.5 shrink-0" />}
                 </div>
                 {/* break-words — uzun/boşluksuz mesajlar (URL vb.) 420px'lik

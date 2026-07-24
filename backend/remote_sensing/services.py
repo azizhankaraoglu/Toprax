@@ -271,10 +271,16 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
             payload = decode_token(raw)
         except Exception:
             raise HTTPException(401, "Geçersiz veya süresi dolmuş token")
-        u = await db.users.find_one({"id": payload.get("user_id")}, {"_id": 0, "password": 0})
+        # Sarmalanmamış erişim (2026-07-24 fail-closed düzeltmesi): bu iki
+        # sorgu ContextVar set edilmeden ÖNCE çalışır — tenant_context.py
+        # artık fail-closed olduğu için bağlamsız `db` sorgusu boş dönerdi
+        # (tüm uydu görüntüleri 403/404 olurdu). Tenant eşleşmesi hemen
+        # altta ELLE kontrol ediliyor (storage.py ile aynı desen).
+        _unscoped = getattr(db, "_real_db", db)
+        u = await _unscoped.users.find_one({"id": payload.get("user_id")}, {"_id": 0, "password": 0})
         if not u or u.get("active") is False:
             raise HTTPException(403, "Yetkisiz")
-        img = await db.remote_sensing_images.find_one({"stored_name": stored_name}, {"_id": 0})
+        img = await _unscoped.remote_sensing_images.find_one({"stored_name": stored_name}, {"_id": 0})
         if not img:
             raise HTTPException(404, "Görüntü bulunamadı")
         if u.get("role") != "platform_admin" and img.get("tenant_id") not in (None, payload.get("tenant_id")):

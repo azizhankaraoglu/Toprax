@@ -35,7 +35,7 @@ from fastapi import HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Optional
 
-from security import make_access_token
+from security import make_access_token, make_refresh_token
 from platform_core import get_tenant_license, LicenseUpdate, FEATURE_FLAG_LABELS
 
 
@@ -154,10 +154,16 @@ def register_god_mode_routes(api_router, raw_db, current_user, log_audit):
         target = candidates[0]
 
         token = make_access_token(target["id"], target["role"], target.get("farmer_id"), tenant_id)
+        # Denetim bulgusu (2026-07-24, redirect loop): impersonation yanıtı
+        # refresh token İÇERMEDİĞİ için frontend localStorage'a boş string
+        # yazıyor, api.js interceptor'ı ilk 401'de logout'a düşüyordu.
+        # Artık gerçek bir refresh token da üretilir.
+        refresh_token = make_refresh_token(target["id"], tenant_id)
         await log_audit(raw_db, user, action="god_mode_impersonate", entity="tenant", entity_id=tenant_id,
                          new_value={"impersonated_user_id": target["id"], "impersonated_email": target.get("email")},
                          request=request)
-        return {"token": token, "access_token": token, "user": target, "tenant": tenant}
+        return {"token": token, "access_token": token, "refresh_token": refresh_token,
+                "user": target, "tenant": tenant}
 
     # ================= 4) Modül Yönetimi (tenant bazlı) =================
     @api_router.get("/god-mode/tenants/{tenant_id}/modules")

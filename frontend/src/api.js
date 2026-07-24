@@ -38,6 +38,10 @@ client.interceptors.response.use(
         }
         const { data } = await refreshing;
         localStorage.setItem("token", data.token);
+        // Backend refresh yanıtı ileride döndürülmüş (rotate edilmiş) bir
+        // refresh token içerirse onu da persist et — bugün dönmüyor ama
+        // impersonation düzeltmesiyle aynı ailede bir sağlamlaştırma.
+        if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
         original.headers.Authorization = `Bearer ${data.token}`;
         return client(original);
       } catch (refreshErr) {

@@ -178,3 +178,47 @@ html, body, #root, .App {
 .badge-c { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
 .badge-d { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
 .badge-neutral { background: rgba(151, 168, 160, 0.15); color: var(--text-dim); }
+
+/* =====================================================================
+   Denetim UI düzeltmesi (2026-07-24) — EkimPlanlama.jsx'in kullandığı
+   .page/.page-header/.tabs/.tab/.table/.muted sınıfları CSS'te HİÇ
+   tanımlı değildi: tablolar tarayıcı varsayılanıyla (padding'siz,
+   çizgisiz) render olup "yazılar birbiri içine girmiş" görünüyordu.
+   Mevcut tasarım dilinin (card/btn/badge) değişkenleriyle tanımlandılar.
+   ===================================================================== */
+.page { display: flex; flex-direction: column; gap: 16px; }
+.page-header h1 {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 0;
+}
+.page-header p { margin: 4px 0 0; }
+.muted { color: var(--text-dim); }
+
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 500;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-dim); cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
+}
+.tab:hover { border-color: var(--primary); color: var(--text); }
+.tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table th {
+  text-align: left; padding: 8px 10px; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+.table td {
+  padding: 8px 10px; border-bottom: 1px solid var(--border);
+  vertical-align: top; overflow-wrap: break-word;
+}
+.table tr:last-child td { border-bottom: none; }
+
+/* .card içi başlık/boşluk — EkimPlanlama kartları başka sayfaların aksine
+   içeriye padding'i elle vermiyordu, kart kenarına yapışıyordu. */
+.page .card { padding: 16px; }
+.page .card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+.page .card h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }

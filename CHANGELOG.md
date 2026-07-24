@@ -2,6 +2,47 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [Yayınlanmamış] — Denetim Düzeltmeleri Faz 0 (2026-07-24, Build 24072026-1200)
+
+### Güvenlik
+- **A3 Tenant izolasyonu FAIL-CLOSED** (`tenant_context.py`): `current_tenant_id`
+  None iken artık filtre atlanmıyor — `{"tenant_id": "__UNAUTHORIZED__"}`
+  sentinel'i enjekte edilir, bağlamsız sorgu HER ZAMAN boş döner. Meşru
+  bağlamsız yollar `raw_db`'ye taşındı: login e-posta araması + SHA256→bcrypt
+  rehash (`server.py`), `/auth/refresh` kullanıcı sorgusu (+ token-tenant
+  eşleşme ve aktiflik kontrolü eklendi), `storage.py` `?token=` dosya indirme
+  yetkilendirmesi, `remote_sensing/services.py` görüntü sunumu. Aggregate
+  pipeline'ları da fail-closed. Yeni `tests/test_tenant_fail_closed.py` (6 test).
+- **API key isteklerinde tenant bağlamı** (`server.py current_user`):
+  middleware yalnız JWT çözdüğü için `toprax_key_` isteklerinde bağlam boş
+  kalıyordu — makine anahtarı TÜM tenant'ların verisini okuyabiliyordu.
+  Bağlam artık anahtarın tenant'ıyla kurulur.
+
+### Düzeltildi
+- **A1 Impersonation redirect loop**: `god_mode.py /god-mode/tenants/{id}/enter`
+  artık gerçek bir `refresh_token` da döner; `PlatformAdmin.jsx` boş string
+  yerine bunu saklar; `api.js` refresh yanıtında dönebilecek yeni refresh
+  token'ı persist eder. "Kooperatif olarak gir" sonrası sayfa geçişlerinde
+  login'e fırlatılma sorunu giderildi.
+- **A2 Saved Queries `title`/`name`**: kod düzeyinde doğrulandı —
+  `FilterPanel.jsx` zaten `name` gönderiyor, `saved_queries.py` `name`
+  bekliyor; denetim raporundaki uyumsuzluk daha önce kapatılmış. Değişiklik yok.
+- **H/UI Bildirim çekmecesi**: başlıklar `truncate` yerine `line-clamp-2`
+  ile 2 satıra sarılır (`WorkspaceDrawer.jsx`).
+- **H/UI Ekim Planlama Karar Motoru**: sayfanın kullandığı `.page/.tabs/.tab/
+  .table/.muted/.page-header` sınıfları CSS'te hiç tanımlı değildi — tablolar
+  stilsiz render olup metinler üst üste biniyordu; `index.css`'e mevcut
+  tasarım diliyle tanımlandı.
+
+### Eklendi
+- **A4 Bileşik indeksler** (`server.py` startup): 14 koleksiyona
+  `(tenant_id, created_at)`, durum makineli 6 koleksiyona `(tenant_id, status)`,
+  çiftçi-çocuk 7 koleksiyona `(tenant_id, farmer_id)` isimli idempotent indeks.
+- **A5 Yetim kayıt koruması** (`server.py delete_farmer`): aktif üretim
+  sezonu varken çiftçi silinemez (409, parsel/sözleşme guard'ına ek);
+  silinen çiftçinin bağlı kayıtları `farmer_inactive: true` ile işaretlenir
+  (kendi durum alanlarına dokunulmaz) + koleksiyon başına audit.
+
 ## [Yayınlanmamış] — FAZ 18: Agricultural Intelligence Engine (IT-47..53)
 
 ### Eklendi

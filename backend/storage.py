@@ -145,7 +145,14 @@ def delete_upload_file(subfolder: str, stored_name: str) -> None:
         path.unlink()
 
 
-def register_storage_routes(api_router: APIRouter, db, current_user, log_audit=None):
+def register_storage_routes(api_router: APIRouter, db, current_user, log_audit=None, raw_db=None):
+    # raw_db (2026-07-24 fail-closed düzeltmesi): ?token= indirmelerinde
+    # middleware tenant bağlamı kuramaz — tenant_context.py artık fail-closed
+    # olduğu için bağlamsız `db` sorguları BOŞ dönerdi (tüm <img>/<a>
+    # indirmeleri 404 olurdu). Bu fonksiyondaki yetkilendirme zaten tenant
+    # eşleşmesini ELLE yaptığından, kimlik/kayıt sorguları sarmalanmamış
+    # koleksiyonla yapılır.
+    _unscoped = raw_db if raw_db is not None else getattr(db, "_real_db", db)
 
     async def _authorize_file_download(request: Request, subfolder: str, stored_name: str,
                                         token: Optional[str] = Query(None)) -> dict:
@@ -177,7 +184,7 @@ def register_storage_routes(api_router: APIRouter, db, current_user, log_audit=N
         if payload.get("type") == "refresh":
             raise HTTPException(401, "Refresh token bu uçta kullanılamaz")
 
-        user = await db.users.find_one(
+        user = await _unscoped.users.find_one(
             {"id": payload.get("user_id")}, {"_id": 0, "password": 0, "totp_secret": 0}
         )
         if not user:
@@ -185,7 +192,7 @@ def register_storage_routes(api_router: APIRouter, db, current_user, log_audit=N
         if user.get("active") is False:
             raise HTTPException(403, "Hesabınız pasif duruma alınmış")
 
-        upload_doc = await db.uploads.find_one(
+        upload_doc = await _unscoped.uploads.find_one(
             {"module": subfolder, "stored_name": stored_name}, {"_id": 0}
         )
         if not upload_doc:
