@@ -77,8 +77,12 @@ SIGNAL_CATALOG: List[Dict[str, str]] = [
     {"key": "ort_polar", "label": "Ortalama Polar (%)", "category": "gecmis", "type": "number"},
     {"key": "son_polar", "label": "Son Yıl Polar (%)", "category": "gecmis", "type": "number"},
     {"key": "ort_verim_ton_dekar", "label": "Ortalama Verim (ton/dekar)", "category": "gecmis", "type": "number"},
+    # Denetim düzeltmesi (2026-07-24) — etiketler ÖNCEDEN "Pancar" adını
+    # içeriyordu; motor artık parametrik (herhangi bir ürün) olduğundan
+    # genel isimlendirmeye çevrildi. Sinyal ANAHTARLARI (ardisik_pancar_yili
+    # vb.) DEĞİŞMEDİ — mevcut kural kayıtları bu anahtarı referans alıyor.
     {"key": "munavebe_ihlali", "label": "Münavebe İhlali (1/0)", "category": "gecmis", "type": "number"},
-    {"key": "ardisik_pancar_yili", "label": "Ardışık Pancar Yılı", "category": "gecmis", "type": "number"},
+    {"key": "ardisik_pancar_yili", "label": "Ardışık Yıl (Aynı Ürün)", "category": "gecmis", "type": "number"},
 ]
 
 SIGNAL_KEYS = {s["key"] for s in SIGNAL_CATALOG}
@@ -163,16 +167,30 @@ DEFAULT_RULES: List[Dict[str, Any]] = [
      "advice": "Bu parsel için uydu ölçümü yok. İzleme başlatılırsa sezon içi stres erken görülebilir."},
 ]
 
-DEFAULT_PROMPT = {
-    "key": "ekim_planlama",
+# Denetim düzeltmesi (2026-07-24) — motor parametrik hale getirildi (istek:
+# "sadece pancar var, bunu parametrik yap"). `agronomy_crops` — admin'in
+# yönetebildiği bitki kataloğu (`support_types`/`task_types` ile AYNI
+# `_ensure_*`/idempotent seed ailesi). Her ürünün kendi kural kütüphanesi
+# (`agronomy_rules.crop`) ve AI anlatım şablonu (`agronomy_prompts.crop`)
+# vardır — SIGNAL_CATALOG (ölçüm kataloğu) ürünler arasında ORTAKTIR,
+# değişmez (toprak/uydu/sulama/hastalık/geçmiş verim her üründe aynı
+# şekilde ölçülür, sadece KURALLARIN eşiği/skoru ürüne göre değişir).
+DEFAULT_CROP = {
+    "key": "pancar", "label": "Şeker Pancarı",
+    "match_terms": ["pancar", "şeker pancarı", "seker pancari"],
+}
+
+# Sistem promptu {urun} yer tutucusu taşır — crop.label ile doldurulur,
+# böylece YENİ bir ürün eklendiğinde varsayılan şablon otomatik uyarlanır
+# (admin isterse ürüne özel şablonu ekrandan yine düzenleyebilir).
+DEFAULT_PROMPT_TEMPLATE = {
     "label": "Ekim Planlama AI Anlatımı",
     "system_prompt": (
-        "Sen şeker pancarı üretiminde uzman bir ziraat mühendisisin. Sana bir parselin "
+        "Sen {urun} üretiminde uzman bir ziraat mühendisisin. Sana bir parselin "
         "toprak, uydu, sulama, hastalık ve geçmiş verim verileri ile kural motorunun "
         "bulguları verilecek. Görevin: çiftçinin anlayacağı sade bir Türkçe ile, bu parselde "
-        "bu sezon şeker pancarı ekilmeli mi sorusunu yanıtlamak. ÖNCELİĞİN POLAR (şeker) "
-        "ORANINI YÜKSELTMEK. Kararı değiştirme, sadece açıkla ve somut eylem önerileri ver. "
-        "En fazla 6 madde yaz."
+        "bu sezon {urun} ekilmeli mi sorusunu yanıtlamak. Kararı değiştirme, sadece açıkla "
+        "ve somut eylem önerileri ver. En fazla 6 madde yaz."
     ),
     "user_template": (
         "Parsel: {parsel_adi} ({il}/{ilce}/{mahalle}, {alan} dekar)\n"
@@ -183,6 +201,15 @@ DEFAULT_PROMPT = {
         "Bu parsel için değerlendirmeni yaz."
     ),
 }
+
+
+def _default_prompt_for(crop_label: str) -> Dict[str, str]:
+    return {
+        "label": DEFAULT_PROMPT_TEMPLATE["label"],
+        "system_prompt": DEFAULT_PROMPT_TEMPLATE["system_prompt"].format(urun=crop_label),
+        "user_template": DEFAULT_PROMPT_TEMPLATE["user_template"],
+    }
+
 
 DEFAULT_VARIETIES = [
     "Leila", "Bardolino", "Danton", "Esperanza", "Fabiola",
@@ -328,8 +355,11 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
     # Çeşit lookup'ı
     # =================================================================
     @api_router.get("/ekim-planlama/varieties")
-    async def list_varieties(user=Depends(require_permission("plantings:view"))):
-        grp = await db.lookup_groups.find_one({"key": "pancar_cesidi"}, {"_id": 0})
+    async def list_varieties(crop: str = DEFAULT_CROP["key"],
+                             user=Depends(require_permission("plantings:view"))):
+        # Denetim düzeltmesi (2026-07-24) — lookup grup anahtarı artık ÜRÜNE
+        # göre ("{crop}_cesidi") — her ürün kendi çeşit listesini taşıyabilir.
+        grp = await db.lookup_groups.find_one({"key": f"{crop}_cesidi"}, {"_id": 0})
         if not grp:
             return []
         vals = await db.lookup_values.find(
@@ -338,10 +368,95 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
         return vals
 
     # =================================================================
-    # Bilgi kütüphanesi (kurallar) — düzenlenebilir
+    # Bitki kataloğu — parametrik ürün listesi (Denetim düzeltmesi 2026-07-24)
+    # =================================================================
+    class CropCreate(BaseModel):
+        key: str
+        label: str
+        match_terms: List[str] = []   # boşsa [label.lower()] varsayılır
+
+    class CropUpdate(BaseModel):
+        label: Optional[str] = None
+        match_terms: Optional[List[str]] = None
+        is_active: Optional[bool] = None
+
+    async def _crop_or_404(crop_key: str) -> Dict[str, Any]:
+        doc = await db.agronomy_crops.find_one({"key": crop_key, "is_active": {"$ne": False}}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, f"Bilinmeyen veya pasif ürün: {crop_key}")
+        return doc
+
+    @api_router.get("/agronomy/crops")
+    async def list_crops(user=Depends(require_permission("plantings:view"))):
+        return await db.agronomy_crops.find(
+            {"is_active": {"$ne": False}}, {"_id": 0}).sort([("label", 1)]).to_list(200)
+
+    @api_router.post("/agronomy/crops")
+    async def create_crop(body: CropCreate, request: Request,
+                          user=Depends(require_permission("agronomy:rules_manage"))):
+        key = body.key.strip().lower().replace(" ", "_")
+        if not key:
+            raise HTTPException(400, "Geçersiz ürün anahtarı")
+        existing = await db.agronomy_crops.find_one({"key": key}, {"_id": 0})
+        if existing:
+            if existing.get("is_active", True):
+                raise HTTPException(400, f"'{key}' anahtarlı bir ürün zaten var")
+            # Daha önce kaldırılmış (soft-delete) bir ürün YENİDEN eklenmeye
+            # çalışılıyor — anahtarı sonsuza dek "kullanılamaz" bırakmak
+            # yerine yeniden ETKİNLEŞTİRİLİR (kuralları zaten silinmemişti).
+            terms = [t.strip().lower() for t in body.match_terms if t.strip()] or [body.label.strip().lower()]
+            await db.agronomy_crops.update_one(
+                {"key": key}, {"$set": {"label": body.label, "match_terms": terms, "is_active": True}})
+            new = await db.agronomy_crops.find_one({"key": key}, {"_id": 0})
+            await log_audit(db, user, action="reactivate", entity="agronomy_crop",
+                            entity_id=new["id"], old_value=existing, new_value=new, request=request)
+            return new
+        doc = {
+            "id": str(uuid.uuid4()), "key": key, "label": body.label,
+            "match_terms": [t.strip().lower() for t in body.match_terms if t.strip()] or [body.label.strip().lower()],
+            "is_active": True, "is_default": False, "created_at": _now(),
+        }
+        await db.agronomy_crops.insert_one(doc)
+        doc.pop("_id", None)
+        await log_audit(db, user, action="create", entity="agronomy_crop",
+                        entity_id=doc["id"], new_value=doc, request=request)
+        return doc
+
+    @api_router.put("/agronomy/crops/{crop_id}")
+    async def update_crop(crop_id: str, body: CropUpdate, request: Request,
+                          user=Depends(require_permission("agronomy:rules_manage"))):
+        old = await db.agronomy_crops.find_one({"id": crop_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Ürün bulunamadı")
+        updates = {k: v for k, v in body.model_dump().items() if v is not None}
+        if "match_terms" in updates:
+            updates["match_terms"] = [t.strip().lower() for t in updates["match_terms"] if t.strip()]
+        if updates:
+            await db.agronomy_crops.update_one({"id": crop_id}, {"$set": updates})
+        new = await db.agronomy_crops.find_one({"id": crop_id}, {"_id": 0})
+        await log_audit(db, user, action="update", entity="agronomy_crop",
+                        entity_id=crop_id, old_value=old, new_value=new, request=request)
+        return new
+
+    @api_router.delete("/agronomy/crops/{crop_id}")
+    async def delete_crop(crop_id: str, request: Request,
+                          user=Depends(require_permission("agronomy:rules_manage"))):
+        """Soft delete — o ürüne ait kural kütüphanesi/geçmiş analizler
+        SİLİNMEZ (convention #3), sadece ürün seçim listesinden kalkar."""
+        old = await db.agronomy_crops.find_one({"id": crop_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Ürün bulunamadı")
+        await db.agronomy_crops.update_one({"id": crop_id}, {"$set": {"is_active": False}})
+        await log_audit(db, user, action="soft_delete", entity="agronomy_crop",
+                        entity_id=crop_id, old_value=old, request=request)
+        return {"status": "deactivated"}
+
+    # =================================================================
+    # Bilgi kütüphanesi (kurallar) — düzenlenebilir, ÜRÜNE göre ayrılır
     # =================================================================
     class RuleCreate(BaseModel):
         name: str
+        crop: str = DEFAULT_CROP["key"]
         category: str = "toprak"
         signal: str
         operator: str = "lt"
@@ -354,6 +469,7 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
 
     class RuleUpdate(BaseModel):
         name: Optional[str] = None
+        crop: Optional[str] = None
         category: Optional[str] = None
         signal: Optional[str] = None
         operator: Optional[str] = None
@@ -376,15 +492,17 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
         return {"signals": SIGNAL_CATALOG, "operators": OPERATORS}
 
     @api_router.get("/agronomy/rules")
-    async def list_rules(user=Depends(require_permission("plantings:view"))):
+    async def list_rules(crop: str = DEFAULT_CROP["key"],
+                         user=Depends(require_permission("plantings:view"))):
         return await db.agronomy_rules.find(
-            {"is_active": {"$ne": False}}, {"_id": 0}
+            {"is_active": {"$ne": False}, "crop": crop}, {"_id": 0}
         ).sort([("order", 1)]).to_list(500)
 
     @api_router.post("/agronomy/rules")
     async def create_rule(body: RuleCreate, request: Request,
                           user=Depends(require_permission("agronomy:rules_manage"))):
         _validate_rule(body.signal, body.operator)
+        await _crop_or_404(body.crop)
         doc = body.model_dump()
         doc.update({"id": str(uuid.uuid4()), "is_active": True,
                     "is_default": False, "created_at": _now()})
@@ -402,6 +520,8 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
             raise HTTPException(404, "Kural bulunamadı")
         updates = {k: v for k, v in body.model_dump().items() if v is not None}
         _validate_rule(updates.get("signal"), updates.get("operator"))
+        if "crop" in updates:
+            await _crop_or_404(updates["crop"])
         if updates:
             await db.agronomy_rules.update_one({"id": rule_id}, {"$set": updates})
         new = await db.agronomy_rules.find_one({"id": rule_id}, {"_id": 0})
@@ -427,26 +547,33 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
         system_prompt: Optional[str] = None
         user_template: Optional[str] = None
 
+    def _prompt_key(crop: str) -> str:
+        return f"ekim_planlama_{crop}"
+
     @api_router.get("/agronomy/prompt")
-    async def get_prompt(user=Depends(require_permission("plantings:view"))):
-        doc = await db.agronomy_prompts.find_one({"key": "ekim_planlama"}, {"_id": 0})
-        return doc or DEFAULT_PROMPT
+    async def get_prompt(crop: str = DEFAULT_CROP["key"],
+                         user=Depends(require_permission("plantings:view"))):
+        doc = await db.agronomy_prompts.find_one({"key": _prompt_key(crop)}, {"_id": 0})
+        if doc:
+            return doc
+        crop_doc = await db.agronomy_crops.find_one({"key": crop}, {"_id": 0})
+        return _default_prompt_for(crop_doc["label"] if crop_doc else crop)
 
     @api_router.put("/agronomy/prompt")
-    async def update_prompt(body: PromptUpdate, request: Request,
+    async def update_prompt(body: PromptUpdate, request: Request, crop: str = DEFAULT_CROP["key"],
                             user=Depends(require_permission("agronomy:rules_manage"))):
-        old = await db.agronomy_prompts.find_one({"key": "ekim_planlama"}, {"_id": 0})
+        pkey = _prompt_key(crop)
+        old = await db.agronomy_prompts.find_one({"key": pkey}, {"_id": 0})
         updates = {k: v for k, v in body.model_dump().items() if v is not None}
         updates["updated_at"] = _now()
         await db.agronomy_prompts.update_one(
-            {"key": "ekim_planlama"},
-            {"$set": updates, "$setOnInsert": {"id": str(uuid.uuid4()),
-                                               "key": "ekim_planlama",
-                                               "label": DEFAULT_PROMPT["label"]}},
+            {"key": pkey},
+            {"$set": updates, "$setOnInsert": {"id": str(uuid.uuid4()), "key": pkey,
+                                               "crop": crop, "label": DEFAULT_PROMPT_TEMPLATE["label"]}},
             upsert=True)
-        new = await db.agronomy_prompts.find_one({"key": "ekim_planlama"}, {"_id": 0})
+        new = await db.agronomy_prompts.find_one({"key": pkey}, {"_id": 0})
         await log_audit(db, user, action="update", entity="agronomy_prompt",
-                        entity_id="ekim_planlama", old_value=old, new_value=new, request=request)
+                        entity_id=pkey, old_value=old, new_value=new, request=request)
         return new
 
     # =================================================================
@@ -455,26 +582,38 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
     @api_router.post("/agronomy/seed-defaults")
     async def seed_defaults(request: Request,
                             user=Depends(require_permission("agronomy:rules_manage"))):
+        # Denetim düzeltmesi (2026-07-24) — bitki kataloğuna varsayılan "Şeker
+        # Pancarı" kaydı (idempotent) — mevcut DEFAULT_RULES/DEFAULT_PROMPT_
+        # TEMPLATE zaten bu ürün için yazılmıştı, davranış AYNEN korunur.
+        crop_key = DEFAULT_CROP["key"]
+        if not await db.agronomy_crops.find_one({"key": crop_key}, {"_id": 0}):
+            await db.agronomy_crops.insert_one({
+                "id": str(uuid.uuid4()), **DEFAULT_CROP,
+                "is_active": True, "is_default": True, "created_at": _now(),
+            })
+
         added = 0
         for i, r in enumerate(DEFAULT_RULES):
-            if await db.agronomy_rules.find_one({"name": r["name"]}, {"_id": 0}):
+            if await db.agronomy_rules.find_one({"name": r["name"], "crop": crop_key}, {"_id": 0}):
                 continue
             doc = dict(r)
-            doc.update({"id": str(uuid.uuid4()), "is_active": True, "is_default": True,
+            doc.update({"id": str(uuid.uuid4()), "crop": crop_key, "is_active": True, "is_default": True,
                         "order": (i + 1) * 10, "created_at": _now()})
             await db.agronomy_rules.insert_one(doc)
             added += 1
 
-        if not await db.agronomy_prompts.find_one({"key": "ekim_planlama"}, {"_id": 0}):
-            p = dict(DEFAULT_PROMPT)
-            p.update({"id": str(uuid.uuid4()), "created_at": _now()})
+        pkey = _prompt_key(crop_key)
+        if not await db.agronomy_prompts.find_one({"key": pkey}, {"_id": 0}):
+            p = _default_prompt_for(DEFAULT_CROP["label"])
+            p.update({"id": str(uuid.uuid4()), "key": pkey, "crop": crop_key, "created_at": _now()})
             await db.agronomy_prompts.insert_one(p)
 
         # Çeşit lookup grubu (field_definitions.py'nin _ensure_* kalıbıyla AYNI şekil)
-        grp = await db.lookup_groups.find_one({"key": "pancar_cesidi"}, {"_id": 0})
+        variety_group_key = f"{crop_key}_cesidi"
+        grp = await db.lookup_groups.find_one({"key": variety_group_key}, {"_id": 0})
         if not grp:
-            grp = {"id": str(uuid.uuid4()), "key": "pancar_cesidi",
-                   "label": "Şeker Pancarı Çeşidi", "order": 90, "parent_group_id": None,
+            grp = {"id": str(uuid.uuid4()), "key": variety_group_key,
+                   "label": f"{DEFAULT_CROP['label']} Çeşidi", "order": 90, "parent_group_id": None,
                    "is_active": True, "created_at": _now()}
             await db.lookup_groups.insert_one(dict(grp))
         varieties_added = 0
@@ -495,7 +634,7 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
     # =================================================================
     # Sinyal toplama — GERÇEK veriden
     # =================================================================
-    async def _gather_signals(parcel: Dict[str, Any], season: int) -> Dict[str, Any]:
+    async def _gather_signals(parcel: Dict[str, Any], season: int, match_terms: List[str]) -> Dict[str, Any]:
         pid = parcel["id"]
         sig: Dict[str, Any] = {}
         detay: Dict[str, Any] = {}
@@ -561,22 +700,27 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
             [{"season": y.get("season"), "ton": y.get("actual_ton"), "polar": y.get("polar_oran")}
              for y in ylds], key=lambda x: x["season"] or 0, reverse=True)[:6]
 
-        # --- Münavebe: ardışık pancar yılı (plantings + yields birleşimi) ---
+        # --- Münavebe: ardışık AYNI ÜRÜN yılı (plantings + yields birleşimi) ---
+        # Denetim düzeltmesi (2026-07-24) — ÖNCEDEN hardcoded "ancar" (pancar)
+        # alt-string eşleşmesiydi; artık seçili ürünün `match_terms` listesine
+        # (agronomy_crops, admin düzenler) göre eşleşir — herhangi bir ürün
+        # için doğru çalışır.
         plant = await db.plantings.find(
             {"parcel_id": pid, "is_active": {"$ne": False}}, {"_id": 0}).to_list(100)
-        pancar_yillari = set()
+        terms = [t.strip().lower() for t in (match_terms or []) if t and t.strip()]
+        crop_yillari = set()
         for rec in list(plant) + list(ylds):
-            crop = str(rec.get("crop") or "")
-            if "ancar" in crop and rec.get("season"):
-                pancar_yillari.add(int(rec["season"]))
+            crop = str(rec.get("crop") or "").strip().lower()
+            if crop and any(term in crop for term in terms) and rec.get("season"):
+                crop_yillari.add(int(rec["season"]))
         ardisik = 0
         yil = int(season) - 1
-        while yil in pancar_yillari:
+        while yil in crop_yillari:
             ardisik += 1
             yil -= 1
         sig["ardisik_pancar_yili"] = ardisik
         sig["munavebe_ihlali"] = 1 if ardisik >= 1 else 0
-        detay["pancar_ekilen_yillar"] = sorted(pancar_yillari, reverse=True)[:8]
+        detay["ayni_urun_ekilen_yillar"] = sorted(crop_yillari, reverse=True)[:8]
 
         return sig, detay
 
@@ -598,6 +742,7 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
     # =================================================================
     class AnalyzeRequest(BaseModel):
         parcel_id: str
+        crop: str = DEFAULT_CROP["key"]
         season: Optional[int] = None
         variety: Optional[str] = None
         use_ai: bool = True
@@ -609,15 +754,17 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
             {"id": body.parcel_id, "is_active": {"$ne": False}}, {"_id": 0})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")
+        crop_doc = await _crop_or_404(body.crop)
         season = body.season or datetime.now(timezone.utc).year
 
         rules = await db.agronomy_rules.find(
-            {"is_active": {"$ne": False}}, {"_id": 0}).sort([("order", 1)]).to_list(500)
+            {"is_active": {"$ne": False}, "crop": body.crop}, {"_id": 0}).sort([("order", 1)]).to_list(500)
         if not rules:
             raise HTTPException(
-                400, "Bilgi kütüphanesi boş. Önce 'Varsayılanları Yükle' ile kuralları oluşturun.")
+                400, f"'{crop_doc['label']}' için bilgi kütüphanesi boş. Önce kural ekleyin "
+                     "(varsayılan ürün için 'Varsayılanları Yükle' kullanılabilir).")
 
-        sig, detay = await _gather_signals(parcel, season)
+        sig, detay = await _gather_signals(parcel, season, crop_doc.get("match_terms") or [])
         result = evaluate_rules(rules, sig)
 
         # Eksik veri şeffaflığı — "veri yok" ile "sorun yok" karıştırılmasın
@@ -645,15 +792,15 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
                 from ai_router import get_ai_router
                 router = await get_ai_router(db)
                 if router.local or router.external:
-                    prompt = await db.agronomy_prompts.find_one({"key": "ekim_planlama"}, {"_id": 0}) \
-                             or DEFAULT_PROMPT
+                    prompt = await db.agronomy_prompts.find_one({"key": _prompt_key(body.crop)}, {"_id": 0}) \
+                             or _default_prompt_for(crop_doc["label"])
                     sinyal_metni = "\n".join(
                         f"- {s['label']}: {sig.get(s['key'])}"
                         for s in SIGNAL_CATALOG if sig.get(s["key"]) is not None)
                     bulgu_metni = "\n".join(
                         f"- {m['name']} ({m['score_delta']:+.0f}): {m['advice']}"
                         for m in result["matched_rules"]) or "- Olumsuz bulgu yok"
-                    user_text = (prompt.get("user_template") or DEFAULT_PROMPT["user_template"]).format(
+                    user_text = (prompt.get("user_template") or DEFAULT_PROMPT_TEMPLATE["user_template"]).format(
                         parsel_adi=parcel.get("name") or "-", il=parcel.get("il") or "-",
                         ilce=parcel.get("ilce") or "-",
                         mahalle=parcel.get("mahalle") or parcel.get("village") or "-",
@@ -661,7 +808,8 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
                         cesit=body.variety or "-", skor=result["score"],
                         karar=result["decision_label"], sinyaller=sinyal_metni, bulgular=bulgu_metni)
                     text = router.generate_text(
-                        prompt.get("system_prompt") or DEFAULT_PROMPT["system_prompt"], user_text)
+                        prompt.get("system_prompt") or DEFAULT_PROMPT_TEMPLATE["system_prompt"].format(urun=crop_doc["label"]),
+                        user_text)
                     if text and text.strip():
                         narrative = text.strip()
                         ai_powered = True
@@ -677,6 +825,8 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
                        "ada_no": parcel.get("ada_no"),
                        "parsel_no_tapu": parcel.get("parsel_no_tapu")},
             "farmer": farmer,
+            "crop": body.crop,
+            "crop_label": crop_doc["label"],
             "season": season,
             "variety": body.variety,
             "score": result["score"],
@@ -694,7 +844,7 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
 
         # Analiz izlenebilir olsun (otomasyon/rapor için) — kayıt tutulur.
         await db.agronomy_analyses.insert_one({
-            "id": str(uuid.uuid4()), "parcel_id": parcel["id"], "season": season,
+            "id": str(uuid.uuid4()), "parcel_id": parcel["id"], "crop": body.crop, "season": season,
             "variety": body.variety, "score": result["score"], "decision": result["decision"],
             "matched_rule_ids": [m["id"] for m in result["matched_rules"]],
             "ai_powered": ai_powered, "created_at": _now(),
@@ -710,3 +860,72 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
             filt["parcel_id"] = parcel_id
         return await db.agronomy_analyses.find(filt, {"_id": 0}).sort(
             [("created_at", -1)]).limit(min(limit, 200)).to_list(200)
+
+    # =================================================================
+    # TOPLU SORGU — Denetim düzeltmesi (2026-07-24): "bu sene X ekmeye en
+    # uygun alanlar hangileri" — tekil analiz motorunun (evaluate_rules)
+    # AYNI kural kütüphanesini bir parsel HAVUZUNA uygular ve skora göre
+    # SIRALAR. AI çağrısı YAPILMAZ (yüzlerce parsel için pahalı/yavaş
+    # olurdu — bkz. analyze()'in tekil AI anlatımı, o ayrı kalır); bu uç
+    # SADECE deterministik kural motorunun (saniyeler içinde biten) skorunu
+    # döner. crud_base.py'nin CSV export'undaki "ilk N kayıt + truncated
+    # bayrağı" bilinçli sınırlama ailesiyle AYNI — silent cap YOK.
+    # =================================================================
+    class BulkAnalyzeRequest(BaseModel):
+        crop: str = DEFAULT_CROP["key"]
+        season: Optional[int] = None
+        parcel_ids: Optional[List[str]] = None   # verilirse SADECE bunlar taranır
+        il: Optional[str] = None
+        ilce: Optional[str] = None
+        scan_limit: int = 1000                    # taranacak parsel üst sınırı
+        top_n: Optional[int] = None                # sonuç listesini en iyi N ile sınırla
+
+    @api_router.post("/ekim-planlama/bulk-analyze")
+    async def bulk_analyze(body: BulkAnalyzeRequest,
+                           user=Depends(require_permission("agronomy:analyze"))):
+        crop_doc = await _crop_or_404(body.crop)
+        season = body.season or datetime.now(timezone.utc).year
+        match_terms = crop_doc.get("match_terms") or []
+
+        rules = await db.agronomy_rules.find(
+            {"is_active": {"$ne": False}, "crop": body.crop}, {"_id": 0}).sort([("order", 1)]).to_list(500)
+        if not rules:
+            raise HTTPException(
+                400, f"'{crop_doc['label']}' için bilgi kütüphanesi boş. Önce kural ekleyin.")
+
+        filt: Dict[str, Any] = {"is_active": {"$ne": False}}
+        if body.parcel_ids:
+            filt["id"] = {"$in": body.parcel_ids}
+        if body.il:
+            filt["il"] = body.il
+        if body.ilce:
+            filt["ilce"] = body.ilce
+
+        total_candidates = await db.parcels.count_documents(filt)
+        scan_limit = max(1, min(body.scan_limit, 2000))
+        parcels = await db.parcels.find(filt, {"_id": 0}).limit(scan_limit).to_list(scan_limit)
+
+        results = []
+        for parcel in parcels:
+            sig, _ = await _gather_signals(parcel, season, match_terms)
+            r = evaluate_rules(rules, sig)
+            results.append({
+                "parcel_id": parcel["id"], "name": parcel.get("name"),
+                "il": parcel.get("il"), "ilce": parcel.get("ilce"),
+                "mahalle": parcel.get("mahalle") or parcel.get("village"),
+                "area_dekar": parcel.get("area_dekar"), "farmer_id": parcel.get("farmer_id"),
+                "score": r["score"], "decision": r["decision"], "decision_label": r["decision_label"],
+                "blocking": r["blocking"],
+                "top_issues": [{"name": m["name"], "score_delta": m["score_delta"]} for m in r["matched_rules"][:3]],
+            })
+
+        results.sort(key=lambda x: x["score"], reverse=True)
+        truncated = total_candidates > len(parcels)
+        if body.top_n:
+            results = results[:max(1, body.top_n)]
+
+        return {
+            "crop": body.crop, "crop_label": crop_doc["label"], "season": season,
+            "total_candidates": total_candidates, "scanned": len(parcels),
+            "truncated": truncated, "results": results,
+        }

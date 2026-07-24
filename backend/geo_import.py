@@ -44,7 +44,12 @@ COMMON_EPSG_CODES = [
     {"code": 23037, "label": "ED50 / UTM Zone 37N (EPSG:23037)"},
 ]
 
-MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+# Denetim düzeltmesi (2026-07-24) — 20 MB, Türkiye çapında ~1100 ilçe /
+# ~60.000 mahalle sınır verisi (detaylı poligonlarla) için yetersiz kaldı.
+# nginx'in client_max_body_size'ı (Dockerfile.frontend) da bununla UYUMLU
+# olacak şekilde (bu sınırın ÜZERİNDE, 60 MB) yükseltildi — aksi halde
+# nginx erken keserse bu dosyanın Türkçe hata mesajı hiç görünmez.
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 
 def _transform_coords(coords, transformer):

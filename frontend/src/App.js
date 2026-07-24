@@ -30,7 +30,6 @@ import AdminAreaManagement from "@/pages/AdminAreaManagement";
 import UfydDashboard from "@/pages/UfydDashboard";
 import SahaOperasyonlari from "@/pages/SahaOperasyonlari";
 import AutomationRules from "@/pages/AutomationRules";
-import EkimPlanlama from "@/pages/EkimPlanlama";
 import NotificationDetail from "@/pages/NotificationDetail";
 import { SablonYonetimi } from "@/pages/TemplateManagement";
 import AnnouncementManagement from "@/pages/AnnouncementManagement";
@@ -147,7 +146,9 @@ function App() {
             <Route path="/ufyd-dashboard" element={<UfydDashboard />} />
             <Route path="/saha-operasyonlari" element={<SahaOperasyonlari />} />
             <Route path="/otomasyon-kurallari" element={<AutomationRules />} />
-            <Route path="/ekim-planlama" element={<EkimPlanlama />} />
+            {/* Denetim düzeltmesi (2026-07-24) — Ekim Karar Motoru artık
+                /ekim'in "Karar Motoru" sekmesi (/arama -> / deseniyle AYNI). */}
+            <Route path="/ekim-planlama" element={<Navigate to="/ekim?view=karar-motoru" replace />} />
             <Route path="/formlar" element={<FormListesi />} />
             <Route path="/formlar/yeni" element={<FormBuilder />} />
             <Route path="/formlar/:id/duzenle" element={<FormBuilder />} />

@@ -19,7 +19,8 @@ import { QuickAddPanel } from "@/components/QuickAdd";
 import RowActions from "@/components/RowActions";
 import BulkParcelSelect from "@/components/BulkParcelSelect";
 import FilterPanel from "@/components/FilterPanel";
-import { Sprout, Trash2, Layers, X } from "lucide-react";
+import EkimPlanlama from "@/pages/EkimPlanlama";
+import { Sprout, Trash2, Layers, X, ClipboardList, Sparkles } from "lucide-react";
 
 const STAGE_OPTS = [
   { value: "ekim", label: "Ekim" }, { value: "gelişim", label: "Gelişim" },
@@ -116,6 +117,17 @@ function BulkPlantingSection({ season, onCreated }) {
 export default function EkimKaydi() {
   const [params, setParams] = useSearchParams();
   const parcelFilter = params.get("parcel") || "";
+  // Denetim düzeltmesi (2026-07-24) — "Ekim Karar Motoru" ayrı bir üst
+  // menü öğesi OLMAKTAN ÇIKARILDI, bu modülün (Ekim Planlama) altına
+  // alındı: SahaOperasyonlari.jsx'in `?view=raporlar` deseniyle AYNI
+  // (IT-41 emsali) — eski `/ekim-planlama` route'u App.js'te bu görünüme
+  // yönlendirir, eski linkler kırılmaz.
+  const view = params.get("view") === "karar-motoru" ? "karar-motoru" : "kayitlar";
+  const setView = (v) => setParams((p) => {
+    const next = new URLSearchParams(p);
+    if (v === "kayitlar") next.delete("view"); else next.set("view", v);
+    return next;
+  });
   const [season, setSeason] = useState(2025);
   const [plantings, setPlantings] = useState([]);
   const [parcelsById, setParcelsById] = useState(new Map());
@@ -154,19 +166,38 @@ export default function EkimKaydi() {
 
   return (
     <div className="p-8" data-testid="ekim-page">
-      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">EKİM KAYDI</div>
-      <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
+      <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">EKİM PLANLAMA</div>
+      <div className="flex items-end justify-between flex-wrap gap-3 mb-4">
         <h1 className="font-display text-4xl flex items-center gap-3">
-          <Sprout size={30} className="text-[var(--primary)]" /> Ekim Kaydı
+          <Sprout size={30} className="text-[var(--primary)]" /> Ekim Planlama
         </h1>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-[var(--text-dim)]">Sezon</label>
-          <select className="input w-28" value={season} onChange={(e) => setSeason(Number(e.target.value))}
-                  data-testid="ekim-season-select">
-            {[2023, 2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
+        {view === "kayitlar" && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-[var(--text-dim)]">Sezon</label>
+            <select className="input w-28" value={season} onChange={(e) => setSeason(Number(e.target.value))}
+                    data-testid="ekim-season-select">
+              {[2023, 2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        )}
       </div>
+
+      {/* Denetim düzeltmesi (2026-07-24) — Ekim Karar Motoru artık bu
+          modülün (Ekim Planlama) bir SEKMESİ, ayrı bir üst menü öğesi değil. */}
+      <div className="mb-6 flex flex-wrap gap-2">
+        <button onClick={() => setView("kayitlar")}
+                className={`btn ${view === "kayitlar" ? "btn-primary" : "btn-ghost"} text-sm`} data-testid="ekim-view-kayitlar">
+          <ClipboardList size={14} /> Ekim Kayıtları
+        </button>
+        <button onClick={() => setView("karar-motoru")}
+                className={`btn ${view === "karar-motoru" ? "btn-primary" : "btn-ghost"} text-sm`} data-testid="ekim-view-karar-motoru">
+          <Sparkles size={14} /> Karar Motoru
+        </button>
+      </div>
+
+      {view === "karar-motoru" && <EkimPlanlama />}
+
+      {view === "kayitlar" && <>
 
       {parcelFilter && (
         <div className="card p-3 mb-4 flex items-center gap-2 text-sm" data-testid="ekim-parcel-filter-chip">
@@ -262,6 +293,7 @@ export default function EkimKaydi() {
           <p className="p-6 text-sm text-[var(--text-dim)]">Bu sezonda ekim kaydı yok.</p>
         )}
       </div>
+      </>}
     </div>
   );
 }

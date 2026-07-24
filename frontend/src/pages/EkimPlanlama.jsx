@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import api from "@/api";
 import ParcelPicker from "@/components/ParcelPicker";
 import FilterPanel from "@/components/FilterPanel";
-import { Sprout, Search, BookOpen, Plus, Trash2, Sparkles, AlertTriangle } from "lucide-react";
+import { Sprout, Search, BookOpen, Plus, Trash2, Sparkles, AlertTriangle, Layers, X } from "lucide-react";
 
 const DECISION_BADGE = {
   uygun: { cls: "badge-a", text: "UYGUN" },
@@ -27,8 +27,19 @@ const emptyRule = {
   value: "", value2: "", score_delta: -10, advice: "", is_blocking: false, order: 100,
 };
 
+const emptyCrop = { key: "", label: "", match_terms: "" };
+
 export default function EkimPlanlama() {
   const [tab, setTab] = useState("analiz");
+
+  // Denetim düzeltmesi (2026-07-24) — motor artık parametrik (istek: "sadece
+  // pancar var, bunu parametrik yap"); seçili ürün Analiz/Toplu Sorgu/Bilgi
+  // Kütüphanesi sekmelerinin ÜÇÜNDE de ORTAK — her sekme kendi ürününe göre
+  // filtrelenmiş veriyi çeker.
+  const [crops, setCrops] = useState([]);
+  const [crop, setCrop] = useState("pancar");
+  const [cropForm, setCropForm] = useState(emptyCrop);
+  const [showCropForm, setShowCropForm] = useState(false);
 
   // --- Parsel seçimi (ortak ParcelPicker bileşeniyle — SON HAL) ---
   const [parcel, setParcel] = useState(null);
@@ -42,6 +53,14 @@ export default function EkimPlanlama() {
   const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState("");
 
+  // --- Toplu Sorgu (bu sene X ekimi için en uygun parseller) ---
+  const [bulkSeason, setBulkSeason] = useState(new Date().getFullYear());
+  const [bulkIl, setBulkIl] = useState("");
+  const [bulkTopN, setBulkTopN] = useState(20);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
+  const [bulkError, setBulkError] = useState("");
+
   // --- Bilgi kütüphanesi ---
   const [rules, setRules] = useState([]);
   const [signals, setSignals] = useState([]);
@@ -50,24 +69,57 @@ export default function EkimPlanlama() {
   const [prompt, setPrompt] = useState({ system_prompt: "", user_template: "" });
   const [libMsg, setLibMsg] = useState("");
 
-  const loadRules = useCallback(() => api.get("/agronomy/rules").then((r) => setRules(r.data)), []);
+  const loadCrops = useCallback(() => api.get("/agronomy/crops").then((r) => setCrops(r.data)), []);
+  const loadRules = useCallback(() => api.get("/agronomy/rules", { params: { crop } }).then((r) => setRules(r.data)), [crop]);
+  const loadVarieties = useCallback(() => api.get("/ekim-planlama/varieties", { params: { crop } }).then((r) => setVarieties(r.data)).catch(() => {}), [crop]);
+  const loadPrompt = useCallback(() => api.get("/agronomy/prompt", { params: { crop } }).then((r) => setPrompt(r.data)).catch(() => {}), [crop]);
 
   useEffect(() => {
-    api.get("/ekim-planlama/varieties").then((r) => setVarieties(r.data)).catch(() => {});
+    loadCrops().catch(() => {});
     api.get("/agronomy/signals").then((r) => {
       setSignals(r.data.signals || []);
       setOperators(r.data.operators || []);
     }).catch(() => {});
-    api.get("/agronomy/prompt").then((r) => setPrompt(r.data)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    loadVarieties();
+    loadPrompt();
     loadRules().catch(() => {});
-  }, [loadRules]);
+    setAnalysis(null); setBulkResult(null);
+  }, [crop, loadVarieties, loadPrompt, loadRules]);
+
+  const cropLabel = (key) => crops.find((c) => c.key === key)?.label || key;
+
+  async function submitCrop(e) {
+    e.preventDefault();
+    setLibMsg("");
+    try {
+      await api.post("/agronomy/crops", {
+        key: cropForm.key, label: cropForm.label,
+        match_terms: cropForm.match_terms.split(",").map((t) => t.trim()).filter(Boolean),
+      });
+      setCropForm(emptyCrop);
+      setShowCropForm(false);
+      loadCrops();
+    } catch (err) {
+      setLibMsg(err.response?.data?.detail || "Ürün eklenemedi");
+    }
+  }
+
+  async function deleteCrop(id) {
+    if (!window.confirm("Bu ürün listeden kaldırılsın mı? (Kuralları silinmez, sadece seçim listesinden çıkar)")) return;
+    await api.delete(`/agronomy/crops/${id}`);
+    loadCrops();
+  }
 
   async function runAnalysis() {
     if (!parcel) return;
     setBusy(true); setError(""); setAnalysis(null);
     try {
       const { data } = await api.post("/ekim-planlama/analyze", {
-        parcel_id: parcel.id, season: Number(season),
+        parcel_id: parcel.id, crop, season: Number(season),
         variety: variety || null, use_ai: useAi,
       });
       setAnalysis(data);
@@ -78,13 +130,29 @@ export default function EkimPlanlama() {
     }
   }
 
+  async function runBulkAnalysis() {
+    setBulkBusy(true); setBulkError(""); setBulkResult(null);
+    try {
+      const { data } = await api.post("/ekim-planlama/bulk-analyze", {
+        crop, season: Number(bulkSeason), il: bulkIl || null,
+        top_n: bulkTopN ? Number(bulkTopN) : null,
+      });
+      setBulkResult(data);
+    } catch (err) {
+      setBulkError(err.response?.data?.detail || "Toplu sorgu çalıştırılamadı");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   async function seedDefaults() {
     setLibMsg("");
     try {
       const { data } = await api.post("/agronomy/seed-defaults");
       setLibMsg(`${data.rules_added} kural, ${data.varieties_added} çeşit eklendi (toplam ${data.total_rules} kural).`);
       loadRules();
-      api.get("/ekim-planlama/varieties").then((r) => setVarieties(r.data));
+      loadCrops();
+      loadVarieties();
     } catch (err) {
       setLibMsg(err.response?.data?.detail || "Varsayılanlar yüklenemedi");
     }
@@ -94,7 +162,7 @@ export default function EkimPlanlama() {
     e.preventDefault();
     setLibMsg("");
     try {
-      const body = { ...ruleForm, score_delta: Number(ruleForm.score_delta), order: Number(ruleForm.order) };
+      const body = { ...ruleForm, crop, score_delta: Number(ruleForm.score_delta), order: Number(ruleForm.order) };
       if (body.value === "") body.value = null;
       if (body.value2 === "") body.value2 = null;
       await api.post("/agronomy/rules", body);
@@ -115,7 +183,7 @@ export default function EkimPlanlama() {
     try {
       await api.put("/agronomy/prompt", {
         system_prompt: prompt.system_prompt, user_template: prompt.user_template,
-      });
+      }, { params: { crop } });
       setLibMsg("AI şablonu kaydedildi.");
     } catch (err) {
       setLibMsg(err.response?.data?.detail || "Şablon kaydedilemedi");
@@ -127,17 +195,62 @@ export default function EkimPlanlama() {
   return (
     <div className="page">
       <div className="page-header">
-        <h1><Sprout size={22} /> Ekim Planlama Karar Motoru</h1>
+        <h1><Sprout size={22} /> Ekim Karar Motoru</h1>
         <p className="muted">
-          Parselin toprak, uydu, sulama, hastalık ve geçmiş polar verilerini birlikte
-          değerlendirir — hedef şeker (polar) oranını yükseltmektir.
+          Parselin toprak, uydu, sulama, hastalık ve geçmiş verim/polar verilerini birlikte
+          değerlendirir. Ürün parametriktir — aşağıdan seçin veya yeni ürün ekleyin.
         </p>
       </div>
+
+      {/* Denetim düzeltmesi (2026-07-24) — parametrik ürün seçici, üç sekmenin
+          de ORTAK bağlamı (hangi ürün seçiliyse Analiz/Toplu Sorgu/Bilgi
+          Kütüphanesi HEP o ürüne göre çalışır). */}
+      <div className="card" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <Layers size={16} className="muted" />
+        <label className="muted" style={{ fontSize: 12 }}>Ürün</label>
+        <select className="input" style={{ minWidth: 180, width: "auto" }} value={crop}
+                onChange={(e) => setCrop(e.target.value)} data-testid="crop-select">
+          {crops.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+        </select>
+        <button className="btn btn-ghost" style={{ fontSize: 12 }} type="button"
+                onClick={() => setShowCropForm((s) => !s)} data-testid="toggle-crop-form">
+          <Plus size={13} /> Yeni Ürün
+        </button>
+        {crops.length === 0 && (
+          <span className="muted" style={{ fontSize: 12 }}>
+            Henüz ürün yok — "Bilgi Kütüphanesi" sekmesinden "Varsayılanları Yükle" ile Şeker Pancarı eklenebilir.
+          </span>
+        )}
+      </div>
+      {showCropForm && (
+        <form onSubmit={submitCrop} className="card" style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div>
+            <label className="muted" style={{ fontSize: 12 }}>Anahtar (ör. bugday)</label>
+            <input className="input" required value={cropForm.key}
+                   onChange={(e) => setCropForm({ ...cropForm, key: e.target.value })} style={{ width: 140 }} />
+          </div>
+          <div>
+            <label className="muted" style={{ fontSize: 12 }}>Görünen Ad (ör. Buğday)</label>
+            <input className="input" required value={cropForm.label}
+                   onChange={(e) => setCropForm({ ...cropForm, label: e.target.value })} style={{ width: 180 }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <label className="muted" style={{ fontSize: 12 }}>Eşleşme terimleri (virgülle, ekim kaydındaki "ürün" alanında aranır)</label>
+            <input className="input" placeholder="buğday, wheat" value={cropForm.match_terms}
+                   onChange={(e) => setCropForm({ ...cropForm, match_terms: e.target.value })} />
+          </div>
+          <button type="submit" className="btn btn-primary">Ekle</button>
+        </form>
+      )}
 
       <div className="tabs" style={{ marginBottom: 16 }}>
         <button className={`tab ${tab === "analiz" ? "active" : ""}`} onClick={() => setTab("analiz")}
                 data-testid="tab-analiz">
-          <Search size={15} /> Analiz
+          <Search size={15} /> Tekil Analiz
+        </button>
+        <button className={`tab ${tab === "toplu" ? "active" : ""}`} onClick={() => setTab("toplu")}
+                data-testid="tab-toplu">
+          <Layers size={15} /> Toplu Sorgu
         </button>
         <button className={`tab ${tab === "kutuphane" ? "active" : ""}`} onClick={() => setTab("kutuphane")}
                 data-testid="tab-kutuphane">
@@ -281,18 +394,113 @@ export default function EkimPlanlama() {
         </>
       )}
 
+      {tab === "toplu" && (
+        <>
+          {/* Denetim düzeltmesi (2026-07-24) — "bu sene X ekmeye en uygun
+              alanlar hangileri" toplu sorgusu. Tekil analizdeki AYNI kural
+              motorunu (evaluate_rules) TÜM parsel havuzuna uygular ve
+              skora göre sıralar — AI çağrısı YAPILMAZ (yüzlerce parsel
+              için pahalı/yavaş olurdu), sonuç saniyeler içinde döner. */}
+          <div className="card">
+            <h3>{cropLabel(crop)} İçin En Uygun Parseller</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Seçili ürünün kural kütüphanesini TÜM (veya il ile daraltılmış) parsel havuzuna
+              uygular, en yüksek skorlu parselleri listeler.
+            </p>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div>
+                <label className="muted" style={{ fontSize: 12 }}>Sezon</label>
+                <input className="input" type="number" style={{ width: 110 }}
+                       value={bulkSeason} onChange={(e) => setBulkSeason(e.target.value)} data-testid="bulk-season-input" />
+              </div>
+              <div>
+                <label className="muted" style={{ fontSize: 12 }}>İl (opsiyonel)</label>
+                <input className="input" placeholder="ör. Konya" style={{ width: 150 }}
+                       value={bulkIl} onChange={(e) => setBulkIl(e.target.value)} data-testid="bulk-il-input" />
+              </div>
+              <div>
+                <label className="muted" style={{ fontSize: 12 }}>En iyi kaç sonuç</label>
+                <input className="input" type="number" style={{ width: 100 }}
+                       value={bulkTopN} onChange={(e) => setBulkTopN(e.target.value)} data-testid="bulk-topn-input" />
+              </div>
+              <button className="btn btn-primary" disabled={bulkBusy} onClick={runBulkAnalysis} data-testid="bulk-analyze-btn">
+                <Sparkles size={15} /> {bulkBusy ? "Taranıyor…" : "Parselleri Tara"}
+              </button>
+            </div>
+            {bulkError && <p style={{ color: "var(--danger, #d33)", marginTop: 10 }}>{bulkError}</p>}
+          </div>
+
+          {bulkResult && (
+            <div className="card" data-testid="bulk-result">
+              <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
+                Toplam {bulkResult.total_candidates} parsel · {bulkResult.scanned} tanesi tarandı
+                {bulkResult.truncated && (
+                  <span> — <b>tarama {bulkResult.scanned} parselle SINIRLANDI</b>, tüm havuz taranmadı</span>
+                )} · {bulkResult.results.length} sonuç gösteriliyor
+              </div>
+              <table className="table">
+                <thead>
+                  <tr><th>Parsel</th><th>İl/İlçe</th><th>Alan (dekar)</th><th>Skor</th><th>Karar</th><th>Öne Çıkan Bulgu</th></tr>
+                </thead>
+                <tbody>
+                  {bulkResult.results.map((r) => (
+                    <tr key={r.parcel_id}>
+                      <td>{r.name || "—"}</td>
+                      <td className="muted">{[r.il, r.ilce].filter(Boolean).join(" / ") || "—"}</td>
+                      <td>{r.area_dekar ?? "—"}</td>
+                      <td style={{ fontWeight: 700 }}>{r.score}</td>
+                      <td>
+                        <span className={`badge ${DECISION_BADGE[r.decision]?.cls || "badge-neutral"}`}>
+                          {DECISION_BADGE[r.decision]?.text || r.decision}
+                        </span>
+                      </td>
+                      <td className="muted">{r.top_issues[0]?.name || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {bulkResult.results.length === 0 && (
+                <p className="muted">Sonuç yok — kriterlerle eşleşen parsel bulunamadı.</p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
       {tab === "kutuphane" && (
         <>
           <div className="card">
+            <h3>Ürün Kataloğu ({crops.length})</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Her ürünün kendi kural kütüphanesi ve AI şablonu vardır — yukarıdaki "Ürün" seçiciyle
+              aralarında geçiş yapıp her biri için ayrı ayrı kural tanımlayın.
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {crops.map((c) => (
+                <div key={c.id} className="badge badge-neutral" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {c.label}
+                  {!c.is_default && (
+                    <button type="button" onClick={() => deleteCrop(c.id)} title="Kaldır"
+                            style={{ display: "flex" }}>
+                      <X size={11} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {crops.length === 0 && <span className="muted" style={{ fontSize: 12 }}>Henüz ürün yok.</span>}
+            </div>
+          </div>
+
+          <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
               <div>
-                <h3 style={{ margin: 0 }}>Agronomik Kurallar ({rules.length})</h3>
+                <h3 style={{ margin: 0 }}>{cropLabel(crop)} — Agronomik Kurallar ({rules.length})</h3>
                 <p className="muted" style={{ margin: "4px 0 0" }}>
                   Motor bu kuralları çalıştırır. Kural değiştirmek kod değişikliği gerektirmez.
                 </p>
               </div>
               <button className="btn" onClick={seedDefaults} data-testid="seed-btn">
-                Varsayılanları Yükle
+                Varsayılanları Yükle (Şeker Pancarı)
               </button>
             </div>
             {libMsg && <p className="muted" style={{ marginTop: 10 }}>{libMsg}</p>}

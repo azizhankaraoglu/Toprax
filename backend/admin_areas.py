@@ -301,12 +301,22 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
         if not body.features:
             raise HTTPException(400, "İçe aktarılacak feature bulunamadı")
 
+        # Denetim düzeltmesi (2026-07-24) — bu döngü ÖNCEDEN her feature için
+        # AYRI bir `await db.admin_areas.insert_one(doc)` yapıyordu; ~60.000
+        # mahalle gibi büyük bir toplu içe aktarmada bu, 60.000 SIRALI
+        # network round-trip'i demektir (dakikalarca sürer, nginx/proxy
+        # timeout'una takılır — "hata veriyor" şikayetinin İKİNCİ kök nedeni,
+        # birincisi nginx'in client_max_body_size'ıydı, bkz. Dockerfile.
+        # frontend). Şimdi TÜM dokümanlar önce bellekte toplanır, sonra
+        # `insert_many` ile PARÇALAR (chunk) halinde tek seferde yazılır —
+        # aynı sonucu saniyeler içinde verir.
         created = []
         # Denetim STAB-B1 (2026-07-24): Point/LineString feature'lar eskiden
         # SESSİZCE atlanıyordu — kullanıcı `ilceler.geojson` gibi nokta bazlı
         # bir dosya yükleyince "0 kayıt" görüp nedenini anlayamıyordu. Artık
         # atlanan tip başına sayılıp yanıtta Türkçe uyarı dönülür.
         skipped_by_type: Dict[str, int] = {}
+        docs = []
         for f in body.features:
             geom = f.get("geometry")
             if not geom or geom.get("type") not in ("Polygon", "MultiPolygon"):
@@ -314,16 +324,21 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
                 skipped_by_type[gtype] = skipped_by_type.get(gtype, 0) + 1
                 continue  # idari sınır için Point/LineString atlanır
             name = (f.get("properties") or {}).get(body.name_field) or "(adsız)"
-            doc = {
+            docs.append({
                 "id": str(uuid.uuid4()), "name": str(name), "area_type": body.area_type,
                 "parent_id": body.parent_id, "lookup_value_id": None, "geometry": geom,
                 "population": None, "agricultural_area_dekar": None, "farmer_count_est": None,
                 "is_active": True, "created_by": user.get("full_name") or user.get("email"),
                 "created_at": datetime.now(timezone.utc).isoformat(),
-            }
-            await db.admin_areas.insert_one(doc)
-            doc.pop("_id", None)
-            created.append(doc)
+            })
+
+        CHUNK = 2000
+        for i in range(0, len(docs), CHUNK):
+            chunk = docs[i:i + CHUNK]
+            await db.admin_areas.insert_many(chunk)
+            created.extend(chunk)
+        for d in created:
+            d.pop("_id", None)
 
         warnings = [
             f"{cnt} kayıt '{gtype}' tipinde olduğu için atlandı — idari sınır için "

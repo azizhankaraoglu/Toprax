@@ -477,16 +477,11 @@ export default function Parcels() {
         )}
       </div>
 
-      {/* SON HAL — AI asistanı (Harita Paneli'ndekiyle aynı motor) */}
-      <div className="mb-3 flex">
-        <AiAssistantBox module="parcels"
-                        onResults={(items) => setAiIds(new Set(items.map((p) => p.id)))}
-                        placeholder='Örn: "Çumra&apos;daki en riskli 20 parseli göster"'
-                        testId="parcels-ai" />
-      </div>
-
-      {/* LİSTE & FİLTRE & TOPLU SİLME (#3) + TOPLU UZAKTAN ALGILAMA */}
-      <div className="mb-3 flex flex-wrap gap-2">
+      {/* Denetim UI düzeltmesi (2026-07-24) — AI Asistanı artık kendi ayrı
+          satırında DEĞİL, Liste & Filtre / Uzaktan Algılama ile AYNI
+          satırda (AiAssistantBox kapalıyken kompakt bir "btn btn-ghost"
+          pill'i döndürdüğü için doğal olarak sığar, bkz. o bileşen). */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <button onClick={() => setShowList((s) => !s)}
           className={`btn ${showList ? "btn-primary" : "btn-ghost"} text-xs`} data-testid="toggle-list-panel">
           <List size={14} /> Liste & Filtre (Toplu Seç/Sil)
@@ -495,6 +490,10 @@ export default function Parcels() {
           className={`btn ${showBulkRS ? "btn-primary" : "btn-ghost"} text-xs`} data-testid="toggle-bulk-rs">
           <Satellite size={14} /> Uzaktan Algılama (Toplu Sorgu & Analiz)
         </button>
+        <AiAssistantBox module="parcels"
+                        onResults={(items) => setAiIds(new Set(items.map((p) => p.id)))}
+                        placeholder='Örn: "Çumra&apos;daki en riskli 20 parseli göster"'
+                        testId="parcels-ai" />
       </div>
       {showList && (
         <div className="card p-5 mb-3">

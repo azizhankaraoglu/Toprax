@@ -37,8 +37,7 @@ const navGroups = [
   {
     title: "ÜRETİM",
     items: [
-      { to: "/ekim", icon: Sprout, label: "Ekim Kaydı", featureFlag: "planting" },
-      { to: "/ekim-planlama", icon: Sparkles, label: "Ekim Karar Motoru", featureFlag: "planting" },
+      { to: "/ekim", icon: Sprout, label: "Ekim Planlama", featureFlag: "planting" },
       { to: "/sulama", icon: Droplets, label: "Sulama & Kaynak", featureFlag: "irrigation" },
       { to: "/operasyon", icon: Settings2, label: "Operasyon", featureFlag: "operations" },
       { to: "/toprak", icon: FlaskConical, label: "Toprak Analizleri", featureFlag: "soil" },

@@ -71,59 +71,75 @@ html, body, #root, .App {
   z-index: 1;
 }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  position: relative;
-}
+/* Denetim UI düzeltmesi (2026-07-24) — bu bileşen sınıfları ÖNCEDEN
+   `@tailwind utilities`'in ALTINDA, katmansız (layer'sız) düz CSS olarak
+   tanımlıydı. Tailwind'de layer'sız kurallar `@layer utilities`'ten
+   SONRA gelir ve AYNI özgüllükte (tek class selector) olduklarından
+   kaynak SIRASI kazanır — yani `.input{width:100%}` HER ZAMAN `w-32`/
+   `pl-11` gibi bir Tailwind genişlik/padding utility'sini EZİYORDU
+   (`!important` işaretsiz hiçbir utility bu sınıflarla birleşince
+   çalışmıyordu — FilterPanel'in Koşul satırındaki "büyük/küçük kutu"
+   karışıklığının VE arama kutusundaki ikon/metin çakışmasının kök
+   nedeni buydu). `@layer components` içine alınca Tailwind'in doğal
+   katman sırası (base < components < utilities) geri gelir, TÜM
+   `input`/`btn`/`card`/`badge` + bir boyut/padding utility kombinasyonu
+   uygulama genelinde ARTIK BEKLENDİĞİ GİBİ ÇALIŞIR — tek tek her
+   kullanım yerini `!w-32` gibi işaretlemek yerine kök neden düzeltildi. */
+@layer components {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    position: relative;
+  }
 
-.card-hover {
-  transition: border-color 200ms ease, transform 200ms ease;
-}
-.card-hover:hover {
-  border-color: rgba(255, 140, 0, 0.4);
-  transform: translateY(-2px);
-}
+  .card-hover {
+    transition: border-color 200ms ease, transform 200ms ease;
+  }
+  .card-hover:hover {
+    border-color: rgba(255, 140, 0, 0.4);
+    transform: translateY(-2px);
+  }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  border-radius: 999px;
-  font-weight: 500;
-  font-size: 14px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
-}
-.btn:active { transform: scale(0.97); }
-.btn-primary {
-  background: var(--primary);
-  color: #ffffff;
-  font-weight: 600;
-}
-.btn-primary:hover { background: var(--primary-dark); }
-.btn-ghost {
-  background: transparent;
-  border-color: var(--border);
-  color: var(--text);
-}
-.btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-weight: 500;
+    font-size: 14px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary {
+    background: var(--primary);
+    color: #ffffff;
+    font-weight: 600;
+  }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-ghost {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--text);
+  }
+  .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
 
-.input {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  color: var(--text);
-  font-size: 14px;
-  outline: none;
-  width: 100%;
-  transition: border-color 150ms ease;
+  .input {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    width: 100%;
+    transition: border-color 150ms ease;
+  }
+  .input:focus { border-color: var(--primary); }
 }
-.input:focus { border-color: var(--primary); }
 
 .scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
 .scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -163,21 +179,23 @@ html, body, #root, .App {
   100% { box-shadow: 0 0 0 0 rgba(255, 140, 0, 0); }
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+@layer components {
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .badge-a { background: rgba(255, 140, 0, 0.15); color: #FF8C00; }
+  .badge-b { background: rgba(16, 185, 129, 0.15); color: #10B981; }
+  .badge-c { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
+  .badge-d { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+  .badge-neutral { background: rgba(151, 168, 160, 0.15); color: var(--text-dim); }
 }
-.badge-a { background: rgba(255, 140, 0, 0.15); color: #FF8C00; }
-.badge-b { background: rgba(16, 185, 129, 0.15); color: #10B981; }
-.badge-c { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
-.badge-d { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-.badge-neutral { background: rgba(151, 168, 160, 0.15); color: var(--text-dim); }
 
 /* =====================================================================
    Denetim UI düzeltmesi (2026-07-24) — EkimPlanlama.jsx'in kullandığı

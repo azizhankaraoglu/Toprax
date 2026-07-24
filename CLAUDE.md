@@ -2372,6 +2372,49 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   çalıştı, konsolda hata yok. 50/50 pytest yeşil (3 yeni idempotency
   testi). Test verisi temizlendi.
 
+- ✅ **2026-07-24/25 — Kullanıcı geri bildirimi turu TAMAMLANDI** (Build
+  25072026-0015), denetim raporu + 8 fazın (Faz 0-8) TAMAMLANMASININ
+  ARDINDAN. 5 madde:
+  1. **FilterPanel/arama kutusu tasarım hatası — KÖK NEDEN düzeltildi:**
+     `index.css`'teki `.card/.btn/.input/.badge*` `@tailwind utilities`'in
+     ALTINDA katmansız düz CSS'ti — layer'sız kurallar utilities'ten SONRA
+     gelip kaynak sırasıyla KAZANIYORDU, yani `.input{width:100%}` HER
+     ZAMAN `w-32` gibi bir utility'yi eziyordu (`!` işaretsiz hiçbir boyut/
+     padding utility'si çalışmıyordu). `@layer components` içine alınarak
+     Tailwind'in doğal katman sırası geri geldi — TEK bir CSS değişikliği
+     ile FilterPanel'in Koşul kutu boyutları VE arama ikonu/metin çakışması
+     UYGULAMA GENELİNDE düzeldi. `FilterPanel.jsx` kapalıyken artık
+     `AiAssistantBox` ile aynı kompakt pill; `Farmers.jsx`'te arama+bölge+
+     karne+AI+Filtre tek satıra alındı; `Parcels.jsx`'te AI Asistanı
+     "Liste & Filtre"/"Uzaktan Algılama" satırına taşındı.
+  2. **Ekim Karar Motoru parametrik + toplu sorgu + Ekim Planlama'nın
+     altına taşındı:** `agronomy.py`'ye `agronomy_crops` kataloğu (ürün
+     parametrik — önceden sadece pancar), kural/AI şablonu artık crop'a
+     göre ayrılıyor; yeni `POST /ekim-planlama/bulk-analyze` ("bu sene X
+     ekmeye en uygun parseller", AI'sız hızlı toplu skorlama, truncated
+     bayrağıyla dürüst sınır). Mevcut crop'suz kayıtlar için tek seferlik
+     veri migrasyonu yapıldı (özel kural kaybolmadı). `EkimPlanlama.jsx`
+     artık `EkimKaydi.jsx`'in ("Ekim Planlama" olarak yeniden adlandırıldı)
+     "Karar Motoru" sekmesi — ayrı üst menü öğesi değil (`?view=` deseni,
+     IT-41 emsali), eski route yönlendirir.
+  3. **Sentinel Hub gerçek kimlik bilgisi** Integration Center'a kaydedildi
+     — gerçek CDSE token alışverişi VE gerçek parselde uçtan uca görüntü/
+     istatistik çekimi doğrulandı (mock_mode otomatik false).
+  4. **İdari Alanlar ilçe/mahalle toplu yükleme hatası — İKİ kök neden:**
+     nginx'te `client_max_body_size` HİÇ ayarlanmamıştı (varsayılan 1 MB,
+     ~1100 ilçe/~60.000 mahalle'yi istek backend'e ulaşmadan 413 ile
+     reddediyordu) + `admin_areas.py`'nin toplu import'u her feature için
+     ayrı `insert_one` yapıyordu (60.000 kayıt = dakikalarca sıralı round-
+     trip, timeout riski). nginx `client_max_body_size 60M`+`proxy_read_
+     timeout 300s`, `geo_import.py` MAX_UPLOAD_BYTES 20→50 MB, `admin_
+     areas.py` 2000'lik parçalarla `insert_many`. Gerçek nginx proxy
+     yolundan (backend'e değil, frontend servisine) sentetik 60.000
+     feature/20 MB GeoJSON ile uçtan uca doğrulandı (2.2s ayrıştırma + 2.4s
+     içe aktarma — önceden dakikalarca sürüp timeout riski taşıyordu).
+  5. Madde 1'in bir parçası (Parseller AI Asistanı konumu).
+  **Doğrulama:** py_compile+pyflakes temiz, 50 pytest yeşil, gerçek Docker
+  deployment'ta uçtan uca (her madde ayrı doğrulandı, bkz. CHANGELOG.md).
+
 ## 7. Çalıştırma
 
 ```bash

@@ -176,11 +176,25 @@ export default function FilterPanel({ module, onResults, pageSize = 50, onFilter
     loadSavedQueries();
   }
 
+  // Denetim UI düzeltmesi (2026-07-24) — kapalıyken AiAssistantBox'ın
+  // (bkz. o bileşen) "btn btn-ghost" pill'iyle AYNI kompakt görünüm:
+  // önceden HER ZAMAN tam genişlikte, kenarlıklı bir "card" içinde
+  // render ediliyordu, bu da arama kutusu + AI Asistanı ile aynı satıra
+  // sığmasını engelliyordu. Açıkken davranış/İÇERİK DEĞİŞMEDİ, sadece
+  // dış sarmalayıcı — data-testid HER İKİ durumda da aynı kalır.
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="btn btn-ghost" data-testid={`filter-panel-${module}`}>
+        <Filter size={15} /> Gelişmiş Filtre <ChevronDown size={14} />
+      </button>
+    );
+  }
+
   return (
-    <div className="card p-4 mb-4" data-testid={`filter-panel-${module}`}>
+    <div className="card p-4 mb-4 w-full" data-testid={`filter-panel-${module}`}>
       <button className="flex items-center gap-2 text-sm font-medium" onClick={() => setOpen((o) => !o)}>
         <Filter size={15} /> Gelişmiş Filtre
-        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        <ChevronUp size={14} />
       </button>
 
       {open && (

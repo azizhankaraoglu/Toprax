@@ -273,6 +273,9 @@ CORE_FILTERABLE_FIELDS = {
     # SON HAL #3 — Ekim Karar Motoru'nun Bilgi Kütüphanesi (agronomy_rules).
     "agronomy_rules": [
         {"key": "name", "label": "Kural Adı", "type": "text"},
+        # Denetim düzeltmesi (2026-07-24) — motor parametrik oldu, kurallar
+        # artık ürüne göre ayrılıyor (bkz. agronomy.py) — filtrelenebilir olmalı.
+        {"key": "crop", "label": "Ürün", "type": "text"},
         {"key": "category", "label": "Kategori", "type": "text"},
         {"key": "signal", "label": "Sinyal", "type": "text"},
         {"key": "operator", "label": "Operatör", "type": "text"},

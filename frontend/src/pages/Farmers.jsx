@@ -69,33 +69,35 @@ export default function Farmers() {
         </button>
       </header>
 
+      {/* Denetim UI düzeltmesi (2026-07-24) — arama + bölge/karne + AI
+          Asistanı + Gelişmiş Filtre artık TEK bir esnek (flex-wrap) satırda;
+          önceden üç ayrı bloktu (arama+filtre kutuları / AI / Gelişmiş
+          Filtre). AiAssistantBox ve FilterPanel kapalıyken zaten kompakt
+          bir "btn btn-ghost" pill'i döndürüyor (bkz. o bileşenler), bu
+          yüzden aynı satırda doğal olarak yan yana sığarlar; açıldıklarında
+          kendi tam genişlikteki kartlarını satırın ALTINDA gösterirler. */}
       <div className="card p-4 mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div className="relative md:col-span-2">
-            <Search size={16} className="absolute left-4 top-3.5 text-[var(--text-dim)]"/>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[240px]">
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-dim)]"/>
             <input data-testid="farmer-search" className="input pl-11" placeholder="TC, ad, telefon veya üye no ara…"
               value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          <select className="input" value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)}>
+          <select className="input w-auto min-w-[160px]" value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)}>
             <option value="">Tüm bölgeler</option>
             {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
-          <select className="input" value={karneFilter} onChange={(e) => setKarneFilter(e.target.value)}>
+          <select className="input w-auto min-w-[160px]" value={karneFilter} onChange={(e) => setKarneFilter(e.target.value)}>
             <option value="">Tüm karneler</option>
             <option value="A">A — En iyi</option><option value="B">B — İyi</option>
             <option value="C">C — Orta</option><option value="D">D — Zayıf</option>
           </select>
+          <AiAssistantBox module="farmers" onResults={(items) => setFarmers(items)}
+                          placeholder='Örn: "Konya bölgesindeki A karneli 10 çiftçiyi göster"'
+                          testId="farmers-ai" />
+          <FilterPanel module="farmers" onResults={(items) => setFarmers(items)} />
         </div>
       </div>
-
-      {/* SON HAL — AI asistanı artık Çiftçiler'de de (Harita Paneli emsali) */}
-      <div className="mb-4 flex">
-        <AiAssistantBox module="farmers" onResults={(items) => setFarmers(items)}
-                        placeholder='Örn: "Konya bölgesindeki A karneli 10 çiftçiyi göster"'
-                        testId="farmers-ai" />
-      </div>
-
-      <FilterPanel module="farmers" onResults={(items) => setFarmers(items)} />
 
       <div className="card overflow-hidden">
         <table className="w-full text-sm">

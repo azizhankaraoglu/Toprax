@@ -2,6 +2,104 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [Yayınlanmamış] — Kullanıcı Geri Bildirimi Turu (2026-07-24/25, Build 25072026-0015)
+
+Denetim raporu + 8 fazın tamamlanmasının ARDINDAN kullanıcının canlı ekranı
+inceleyip bildirdiği 5 madde.
+
+### 1. FilterPanel "Koşul" satırı + arama kutusu — KÖK NEDEN düzeltmesi
+- **Kök neden bulundu:** `index.css`'teki `.card/.btn/.input/.badge*`
+  sınıfları `@tailwind utilities`'in ALTINDA, katmansız düz CSS olarak
+  tanımlıydı — Tailwind'de layer'sız kurallar utilities'ten SONRA gelir
+  ve aynı özgüllükte (tek class) olduklarından kaynak SIRASI kazanır. Yani
+  `.input{width:100%}` HER ZAMAN `w-32` gibi bir genişlik utility'sini
+  eziyordu (`!` işaretsiz hiçbir boyut/padding utility'si `.input`/`.btn`/
+  `.card` ile birleşince çalışmıyordu) — FilterPanel'in Koşul satırındaki
+  "birinci kutu küçük, ikincisi büyük" karışıklığının VE arama kutusundaki
+  ikon/metin çakışmasının (arka planda `pl-11`'in `.input`'un `padding:
+  10px 14px`'i tarafından ezilmesi) TEK kök nedeniydi.
+- **Düzeltme:** bu sınıflar `@layer components { ... }` içine alındı —
+  Tailwind'in doğal katman sırası (base < components < utilities) geri
+  geldi, TÜM `input`/`btn`/`card`/`badge` + boyut/padding utility
+  kombinasyonu UYGULAMA GENELİNDE düzeldi (tek tek her kullanım yerini
+  işaretlemek yerine kök neden giderildi — Farmers.jsx'te ölçüldü: field
+  select 312px, operator 128px, value 312px; arama kutusu padding-left
+  44px, artık ikonla çakışmıyor).
+- `FilterPanel.jsx`: kapalıyken artık `AiAssistantBox` ile AYNI kompakt
+  "btn btn-ghost" pill'i (önceden her zaman tam genişlikte bir "card"tı).
+- `Farmers.jsx`: arama + bölge/karne + AI Asistanı + Gelişmiş Filtre TEK
+  esnek (flex-wrap) satıra alındı.
+- `Parcels.jsx`: AI Asistanı butonu artık "Liste & Filtre"/"Uzaktan
+  Algılama" ile AYNI satırda (kendi ayrı satırından kaldırıldı).
+
+### 2. Ekim Karar Motoru → Ekim Planlama'nın altına + toplu sorgu + parametrik ürün
+- `backend/agronomy.py`: yeni `agronomy_crops` kataloğu (`GET/POST/PUT/
+  DELETE /agronomy/crops`, soft-delete + YENİDEN ETKİNLEŞTİRME) — kural
+  kütüphanesi (`agronomy_rules.crop`) ve AI şablonu (`agronomy_prompts`,
+  `ekim_planlama_{crop}` anahtarıyla) artık ÜRÜNE göre ayrılıyor. Sinyal
+  kataloğu (toprak/uydu/sulama/hastalık/geçmiş verim) ürünler arasında
+  ORTAK kalır — sadece kuralların eşiği/skoru ürüne göre değişir. Münavebe
+  sinyali (`ardisik_pancar_yili`) ÖNCEDEN hardcoded "ancar" alt-string
+  eşleşmesiydi, artık seçili ürünün `match_terms` listesine göre çalışır.
+  Çeşit lookup grubu da parametrik (`{crop}_cesidi`).
+- Yeni `POST /ekim-planlama/bulk-analyze` — "bu sene X ekmeye en uygun
+  parseller hangileri" toplu sorgusu: tekil analizin AYNI kural motorunu
+  (AI çağrısı OLMADAN, hızlı) bir parsel havuzuna uygular, skora göre
+  sıralar; il ile daraltılabilir, "truncated" bayrağıyla dürüst sınır
+  bildirimi (crud_base.py'nin CSV export sınırlamasıyla aynı aile).
+- **Veri migrasyonu:** mevcut (crop alanı olmayan) 18 varsayılan kural +
+  1 özel kural + 1 AI şablonu, yeni crop-etiketli seed'in ürettiği
+  kopyalarla ÇAKIŞMIŞTI (aynı isim, farklı crop durumu) — tek seferlik
+  migrasyonla eski kayıtlar `crop:"pancar"` ile etiketlenip yinelenen
+  taze kopyalar silindi; özel kural ("ZZ TEST...") KAYBOLMADI.
+- Frontend: `EkimPlanlama.jsx`'e ürün seçici + "Yeni Ürün" formu + "Toplu
+  Sorgu" sekmesi (3. sekme) + "Bilgi Kütüphanesi"nde ürün kataloğu listesi
+  eklendi. `EkimKaydi.jsx`'e gömüldü — artık `/ekim` sayfasının "Karar
+  Motoru" sekmesi (SahaOperasyonlari.jsx'in `?view=raporlar` deseniyle
+  AYNI, IT-41 emsali), ayrı bir üst menü öğesi DEĞİL. Eski `/ekim-
+  planlama` route'u `/ekim?view=karar-motoru`'ya yönlenir (eski linkler
+  kırılmaz). Layout.jsx'te "Ekim Kaydı" → "Ekim Planlama" olarak yeniden
+  adlandırıldı, ayrı "Ekim Karar Motoru" nav kaydı kaldırıldı.
+
+### 3. Sentinel Hub — gerçek kimlik bilgisi
+- Kullanıcının verdiği CDSE (Copernicus) `client_id`/`client_secret`
+  Integration Center'a kaydedildi — `mock_mode` otomatik `false` oldu
+  (mevcut "kimlik girilince otomatik canlı moda geç" davranışı, IT-01).
+  Gerçek token alışverişi (`HTTP 200`) VE gerçek bir parselde uçtan uca
+  görüntü/istatistik çekimi (62 gerçek NDVI noktası, 1 gerçek sahne — 31
+  saniyelik gerçek ağ gecikmesiyle, demo modun anlık davranışından FARKLI)
+  doğrulandı.
+
+### 4. İdari Alanlar — ilçe/mahalle toplu yükleme hatası
+- **İKİ gerçek kök neden bulundu:** (a) `Dockerfile.frontend`'in nginx
+  yapılandırmasında `client_max_body_size` HİÇ ayarlanmamıştı — nginx'in
+  VARSAYILANI (1 MB) hem dosya yüklemesini hem ayrıştırılmış geometrinin
+  geri POST'unu (~1100 ilçe / ~60.000 mahalle için kolayca aşılan bir
+  sınır) istek backend'e ULAŞMADAN sessizce 413 ile reddediyordu; (b)
+  `admin_areas.py`'nin toplu içe aktarma uçu HER feature için AYRI bir
+  `await db.admin_areas.insert_one(doc)` yapıyordu — 60.000 kayıt için
+  bu, dakikalarca süren sıralı network round-trip'i demekti (gateway
+  timeout riski).
+- **Düzeltme:** nginx `client_max_body_size 60M` + `proxy_read_timeout
+  300s` (Dockerfile.frontend); `geo_import.py`'nin `MAX_UPLOAD_BYTES`ı
+  20→50 MB; `admin_areas.py`'nin döngüsü tek tek `insert_one` yerine
+  2000'lik PARÇALAR halinde `insert_many` kullanacak şekilde yeniden
+  yazıldı.
+- **Doğrulama:** frontend'in GERÇEK nginx proxy yolu üzerinden (backend'e
+  doğrudan değil, `frontend` servisi üzerinden) sentetik 60.000 feature'lı
+  20 MB'lık bir GeoJSON yüklendi — ayrıştırma 2.2s, toplu içe aktarma
+  2.4s'de tamamlandı (önceden dakikalarca sürüp timeout riski taşıyordu).
+  Test verisi (75.000 kayıt) temizlendi.
+
+### 5. Parseller — AI Asistanı konumu
+- (Madde 1'in bir parçası olarak yukarıda ele alındı — "Liste & Filtre"/
+  "Uzaktan Algılama" satırına taşındı.)
+
+### Doğrulama
+- `py_compile`+`pyflakes` (0 uyarı) + 50 pytest yeşil.
+- Tüm değişiklikler gerçek Docker deployment'ta uçtan uca doğrulandı
+  (yukarıdaki her madde kendi doğrulama notunu taşıyor).
+
 ## [Yayınlanmamış] — Faz 8: Rol Bazlı Offline (2026-07-24, Build 24072026-2359)
 
 Denetim raporunun kullanıcı tarafından onaylanan 8 maddesinden #2: "hangi
