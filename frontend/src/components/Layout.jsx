@@ -29,26 +29,26 @@ const navGroups = [
     title: "ANA ALAN",
     items: [
       { to: "/", icon: LayoutDashboard, label: "Dashboard", end: true },
-      { to: "/ciftciler", icon: Users, label: "Çiftçiler" },
-      { to: "/parseller", icon: Map, label: "Parseller" },
-      { to: "/sozlesmeler", icon: FileText, label: "Sözleşmeler" },
+      { to: "/ciftciler", icon: Users, label: "Çiftçiler", featureFlag: "farmer" },
+      { to: "/parseller", icon: Map, label: "Parseller", featureFlag: "parcel" },
+      { to: "/sozlesmeler", icon: FileText, label: "Sözleşmeler", featureFlag: "contracts" },
     ]
   },
   {
     title: "ÜRETİM",
     items: [
-      { to: "/ekim", icon: Sprout, label: "Ekim Kaydı" },
-      { to: "/ekim-planlama", icon: Sparkles, label: "Ekim Karar Motoru" },
-      { to: "/sulama", icon: Droplets, label: "Sulama & Kaynak" },
-      { to: "/operasyon", icon: Settings2, label: "Operasyon" },
-      { to: "/toprak", icon: FlaskConical, label: "Toprak Analizleri" },
+      { to: "/ekim", icon: Sprout, label: "Ekim Kaydı", featureFlag: "planting" },
+      { to: "/ekim-planlama", icon: Sparkles, label: "Ekim Karar Motoru", featureFlag: "planting" },
+      { to: "/sulama", icon: Droplets, label: "Sulama & Kaynak", featureFlag: "irrigation" },
+      { to: "/operasyon", icon: Settings2, label: "Operasyon", featureFlag: "operations" },
+      { to: "/toprak", icon: FlaskConical, label: "Toprak Analizleri", featureFlag: "soil" },
     ]
   },
   {
     title: "ANALİZ & AI",
     items: [
-      { to: "/uydu", icon: Satellite, label: "Uydu / NDVI" },
-      { to: "/uzaktan-algilama", icon: Satellite, label: "Uzaktan Algılama" },
+      { to: "/uydu", icon: Satellite, label: "Uydu / NDVI", featureFlag: "remote_sensing" },
+      { to: "/uzaktan-algilama", icon: Satellite, label: "Uzaktan Algılama", featureFlag: "remote_sensing" },
       { to: "/copilot", icon: Sparkles, label: "AI Copilot", featureFlag: "ai" },
       { to: "/hastalik", icon: Brain, label: "AI Hastalık", featureFlag: "ai" },
       { to: "/ai-bilgi-kutuphanesi", icon: Brain, label: "AI Bilgi Kütüphanesi", featureFlag: "ai" },
@@ -57,13 +57,13 @@ const navGroups = [
   {
     title: "SAHA & LOJİSTİK",
     items: [
-      { to: "/harita-paneli", icon: Compass, label: "Harita Paneli" },
-      { to: "/saha-operasyonlari", icon: Kanban, label: "Görev Yönetimi" },
-      { to: "/otomasyon-kurallari", icon: Zap, label: "Otomasyon Kuralları" },
+      { to: "/harita-paneli", icon: Compass, label: "Harita Paneli", featureFlag: "gis" },
+      { to: "/saha-operasyonlari", icon: Kanban, label: "Görev Yönetimi", featureFlag: "field_ops" },
+      { to: "/otomasyon-kurallari", icon: Zap, label: "Otomasyon Kuralları", featureFlag: "automation" },
       { to: "/saha", icon: Smartphone, label: "Saha Mobil" },
-      { to: "/formlar", icon: FileSpreadsheet, label: "Formlar & Anket" },
-      { to: "/lojistik", icon: Truck, label: "Lojistik & Randevu" },
-      { to: "/kantar", icon: Scale, label: "Kantar" },
+      { to: "/formlar", icon: FileSpreadsheet, label: "Formlar & Anket", featureFlag: "forms" },
+      { to: "/lojistik", icon: Truck, label: "Lojistik & Randevu", featureFlag: "logistics" },
+      { to: "/kantar", icon: Scale, label: "Kantar", featureFlag: "factory" },
     ]
   },
   {
@@ -71,27 +71,27 @@ const navGroups = [
     // ağırlıklı olduğu için ÜRETİM'e taşındı (son hal kararı).
     title: "RAPORLAR",
     items: [
-      { to: "/saha-operasyonlari?view=raporlar", icon: ClipboardCheck, label: "Saha Raporları" },
-      { to: "/verimlilik", icon: BarChart3, label: "Verimlilik" },
-      { to: "/karne", icon: Award, label: "Çiftçi Karne" },
-      { to: "/ufyd-dashboard", icon: LineChart, label: "UFYD Dashboard" },
+      { to: "/saha-operasyonlari?view=raporlar", icon: ClipboardCheck, label: "Saha Raporları", featureFlag: "reports" },
+      { to: "/verimlilik", icon: BarChart3, label: "Verimlilik", featureFlag: "reports" },
+      { to: "/karne", icon: Award, label: "Çiftçi Karne", featureFlag: "reports" },
+      { to: "/ufyd-dashboard", icon: LineChart, label: "UFYD Dashboard", featureFlag: "ufyd" },
     ]
   },
   {
     title: "BELGE & FİNANS",
     items: [
-      { to: "/e-fatura", icon: Receipt, label: "E-Faturalar" },
-      { to: "/irsaliye", icon: FileSpreadsheet, label: "İrsaliyeler" },
+      { to: "/e-fatura", icon: Receipt, label: "E-Faturalar", featureFlag: "invoicing" },
+      { to: "/irsaliye", icon: FileSpreadsheet, label: "İrsaliyeler", featureFlag: "invoicing" },
     ]
   },
   {
     title: "İLETİŞİM",
     items: [
       { to: "/bildirimler", icon: Bell, label: "Bildirimler" },
-      { to: "/duyuru-yonetimi", icon: Radio, label: "Duyuru Yönetimi", adminTierOnly: true },
-      { to: "/kampanyalar", icon: Megaphone, label: "Kampanyalar" },
-      { to: "/sablon-yonetimi", icon: MessagesSquare, label: "Şablon Yönetimi", adminTierOnly: true },
-      { to: "/iletisim-politikalari", icon: ShieldOff, label: "İletişim Politikaları", adminTierOnly: true },
+      { to: "/duyuru-yonetimi", icon: Radio, label: "Duyuru Yönetimi", adminTierOnly: true, featureFlag: "communication" },
+      { to: "/kampanyalar", icon: Megaphone, label: "Kampanyalar", featureFlag: "communication" },
+      { to: "/sablon-yonetimi", icon: MessagesSquare, label: "Şablon Yönetimi", adminTierOnly: true, featureFlag: "communication" },
+      { to: "/iletisim-politikalari", icon: ShieldOff, label: "İletişim Politikaları", adminTierOnly: true, featureFlag: "communication" },
     ]
   },
   {
@@ -108,12 +108,12 @@ const navGroups = [
       // SON HAL #6 — Lookup Yönetimi + Destek Kataloğu, Form Yönetimi'nin
       // sekmelerine taşındı (aynı ekran ailesi); nav'da tek giriş kalır.
       { to: "/alan-tanimlari", icon: LayoutList, label: "Form Yönetimi", adminTierOnly: true },
-      { to: "/idari-alanlar", icon: Landmark, label: "İdari Alanlar" },
-      { to: "/organizasyon-hiyerarsisi", icon: Workflow, label: "Organizasyon Hiyerarşisi", adminTierOnly: true },
-      { to: "/onay-bekleyenlerim", icon: CheckSquare, label: "Onay Bekleyenlerim" },
-      { to: "/bize-ulasin", icon: Inbox, label: "Bize Ulaşın" },
-      { to: "/integration-hub", icon: Cable, label: "Integration Hub" },
-      { to: "/audit", icon: Activity, label: "Audit Log", adminTierOnly: true },
+      { to: "/idari-alanlar", icon: Landmark, label: "İdari Alanlar", featureFlag: "admin_areas" },
+      { to: "/organizasyon-hiyerarsisi", icon: Workflow, label: "Organizasyon Hiyerarşisi", adminTierOnly: true, featureFlag: "organization" },
+      { to: "/onay-bekleyenlerim", icon: CheckSquare, label: "Onay Bekleyenlerim", featureFlag: "approvals" },
+      { to: "/bize-ulasin", icon: Inbox, label: "Bize Ulaşın", featureFlag: "case_management" },
+      { to: "/integration-hub", icon: Cable, label: "Integration Hub", featureFlag: "integration_hub" },
+      { to: "/audit", icon: Activity, label: "Audit Log", adminTierOnly: true, featureFlag: "audit" },
       // SON HAL (2026-07-23) — Geliştirici Portalı / Platform Core /
       // Experience Profile / Ayarlar buradan KALDIRILDI: kullanıcı isteği
       // üzerine bunlar artık kooperatifin kendi Sistem menüsünden değil,

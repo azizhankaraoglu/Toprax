@@ -129,14 +129,16 @@ def register_api_key_routes(api_router, raw_db, require_permission, log_audit, r
         return {**safe_doc, "key": plaintext}
 
     @api_router.get("/api-keys")
-    async def list_api_keys(user=Depends(require_permission(MANAGE_PERMISSION))):
+    async def list_api_keys(user=Depends(require_permission(MANAGE_PERMISSION)),
+                             _feat=Depends(require_feature("developer_portal"))):
         return await raw_db.api_keys.find(
             {"tenant_id": user.get("tenant_id")}, {"_id": 0, "key_hash": 0}
         ).sort("created_at", -1).to_list(200)
 
     @api_router.delete("/api-keys/{key_id}")
     async def revoke_api_key(key_id: str, request: Request,
-                               user=Depends(require_permission(MANAGE_PERMISSION))):
+                               user=Depends(require_permission(MANAGE_PERMISSION)),
+                               _feat=Depends(require_feature("developer_portal"))):
         old = await raw_db.api_keys.find_one({"id": key_id, "tenant_id": user.get("tenant_id")}, {"_id": 0, "key_hash": 0})
         if not old:
             raise HTTPException(404, "API anahtarı bulunamadı")

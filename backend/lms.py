@@ -244,11 +244,11 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
 
     # ---------------- Kategoriler ----------------
     @api_router.get("/course-categories")
-    async def list_course_categories(user=Depends(require_permission("lms:catalog_view"))):
+    async def list_course_categories(user=Depends(require_permission("lms:catalog_view")), _feat=Depends(require_feature("lms"))):
         return await db.course_categories.find({}, {"_id": 0}).sort("order", 1).to_list(200)
 
     @api_router.post("/course-categories/seed-defaults")
-    async def seed_course_categories(user=Depends(require_permission("lms:catalog_manage"))):
+    async def seed_course_categories(user=Depends(require_permission("lms:catalog_manage")), _feat=Depends(require_feature("lms"))):
         created = 0
         for i, name in enumerate(DEFAULT_CATEGORIES):
             existing = await db.course_categories.find_one({"name": name})
@@ -263,7 +263,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
 
     @api_router.post("/course-categories")
     async def create_course_category(body: CourseCategoryCreate, request: Request,
-                                       user=Depends(require_permission("lms:catalog_manage"))):
+                                       user=Depends(require_permission("lms:catalog_manage")), _feat=Depends(require_feature("lms"))):
         doc = {"id": str(uuid.uuid4()), "name": body.name, "order": body.order, "is_active": True,
                "created_at": datetime.now(timezone.utc).isoformat()}
         await db.course_categories.insert_one(doc)
@@ -273,7 +273,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
 
     @api_router.delete("/course-categories/{category_id}")
     async def delete_course_category(category_id: str, request: Request,
-                                      user=Depends(require_permission("lms:catalog_manage"))):
+                                      user=Depends(require_permission("lms:catalog_manage")), _feat=Depends(require_feature("lms"))):
         old = await db.course_categories.find_one({"id": category_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Kategori bulunamadı")
@@ -283,12 +283,12 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
 
     # ---------------- Kullanıcı Grupları ----------------
     @api_router.get("/lms-user-groups")
-    async def list_user_groups(user=Depends(require_permission("lms:groups_manage"))):
+    async def list_user_groups(user=Depends(require_permission("lms:groups_manage")), _feat=Depends(require_feature("lms"))):
         return await db.lms_user_groups.find({"is_active": True}, {"_id": 0}).to_list(200)
 
     @api_router.post("/lms-user-groups")
     async def create_user_group(body: UserGroupCreate, request: Request,
-                                 user=Depends(require_permission("lms:groups_manage"))):
+                                 user=Depends(require_permission("lms:groups_manage")), _feat=Depends(require_feature("lms"))):
         doc = body.model_dump()
         doc["id"] = str(uuid.uuid4())
         doc["is_active"] = True
@@ -301,7 +301,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
 
     @api_router.put("/lms-user-groups/{group_id}")
     async def update_user_group(group_id: str, body: UserGroupUpdate, request: Request,
-                                 user=Depends(require_permission("lms:groups_manage"))):
+                                 user=Depends(require_permission("lms:groups_manage")), _feat=Depends(require_feature("lms"))):
         old = await db.lms_user_groups.find_one({"id": group_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Kullanıcı grubu bulunamadı")
@@ -313,7 +313,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
         return new
 
     @api_router.delete("/lms-user-groups/{group_id}")
-    async def delete_user_group(group_id: str, request: Request, user=Depends(require_permission("lms:groups_manage"))):
+    async def delete_user_group(group_id: str, request: Request, user=Depends(require_permission("lms:groups_manage")), _feat=Depends(require_feature("lms"))):
         old = await db.lms_user_groups.find_one({"id": group_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Kullanıcı grubu bulunamadı")
@@ -333,7 +333,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
         return await db.courses.find(filt, {"_id": 0}).sort("created_at", -1).to_list(500)
 
     @api_router.get("/courses/{course_id}")
-    async def get_course(course_id: str, user=Depends(require_permission("lms:catalog_view"))):
+    async def get_course(course_id: str, user=Depends(require_permission("lms:catalog_view")), _feat=Depends(require_feature("lms"))):
         doc = await db.courses.find_one({"id": course_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Eğitim bulunamadı")
@@ -341,7 +341,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
         return doc
 
     @api_router.post("/courses")
-    async def create_course(body: CourseCreate, request: Request, user=Depends(require_permission("lms:catalog_manage"))):
+    async def create_course(body: CourseCreate, request: Request, user=Depends(require_permission("lms:catalog_manage")), _feat=Depends(require_feature("lms"))):
         if body.education_type not in EDUCATION_TYPE_LABELS:
             raise HTTPException(400, f"Geçersiz eğitim türü: {body.education_type}")
         if body.difficulty not in DIFFICULTY_LABELS:
@@ -362,7 +362,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
 
     @api_router.put("/courses/{course_id}")
     async def update_course(course_id: str, body: CourseUpdate, request: Request,
-                             user=Depends(require_permission("lms:catalog_manage"))):
+                             user=Depends(require_permission("lms:catalog_manage")), _feat=Depends(require_feature("lms"))):
         old = await db.courses.find_one({"id": course_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Eğitim bulunamadı")
@@ -379,7 +379,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
         return new
 
     @api_router.delete("/courses/{course_id}")
-    async def delete_course(course_id: str, request: Request, user=Depends(require_permission("lms:catalog_manage"))):
+    async def delete_course(course_id: str, request: Request, user=Depends(require_permission("lms:catalog_manage")), _feat=Depends(require_feature("lms"))):
         old = await db.courses.find_one({"id": course_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Eğitim bulunamadı")
@@ -390,7 +390,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
     # ---------------- İçerik (CourseContent) ----------------
     @api_router.post("/courses/{course_id}/contents")
     async def add_course_content(course_id: str, body: CourseContentCreate, request: Request,
-                                  user=Depends(require_permission("lms:catalog_manage"))):
+                                  user=Depends(require_permission("lms:catalog_manage")), _feat=Depends(require_feature("lms"))):
         course = await db.courses.find_one({"id": course_id})
         if not course:
             raise HTTPException(404, "Eğitim bulunamadı")
@@ -412,7 +412,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
 
     @api_router.post("/courses/{course_id}/contents/reorder")
     async def reorder_course_contents(course_id: str, body: ContentReorderRequest, request: Request,
-                                       user=Depends(require_permission("lms:catalog_manage"))):
+                                       user=Depends(require_permission("lms:catalog_manage")), _feat=Depends(require_feature("lms"))):
         for item in body.items:
             await db.course_contents.update_one({"id": item.id, "course_id": course_id}, {"$set": {"order": item.order}})
         await log_audit(db, user, action="update", entity="course_content", entity_id="bulk_reorder",
@@ -421,7 +421,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
 
     @api_router.delete("/courses/{course_id}/contents/{content_id}")
     async def delete_course_content(course_id: str, content_id: str, request: Request,
-                                     user=Depends(require_permission("lms:catalog_manage"))):
+                                     user=Depends(require_permission("lms:catalog_manage")), _feat=Depends(require_feature("lms"))):
         old = await db.course_contents.find_one({"id": content_id, "course_id": course_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "İçerik bulunamadı")
@@ -432,7 +432,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
     # ---------------- Atama ----------------
     @api_router.post("/courses/{course_id}/assign")
     async def assign_course(course_id: str, body: CourseAssignmentCreate, request: Request,
-                             user=Depends(require_permission("lms:assign"))):
+                             user=Depends(require_permission("lms:assign")), _feat=Depends(require_feature("lms"))):
         course = await db.courses.find_one({"id": course_id}, {"_id": 0})
         if not course:
             raise HTTPException(404, "Eğitim bulunamadı")
@@ -482,11 +482,11 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
         return {"assignment": assignment, "resolved_user_count": len(user_ids), "new_assignments": new_count}
 
     @api_router.get("/courses/{course_id}/assignments")
-    async def list_course_assignments(course_id: str, user=Depends(require_permission("lms:status_view_all"))):
+    async def list_course_assignments(course_id: str, user=Depends(require_permission("lms:status_view_all")), _feat=Depends(require_feature("lms"))):
         return await db.course_assignments.find({"course_id": course_id}, {"_id": 0}).sort("assigned_at", -1).to_list(200)
 
     @api_router.get("/courses/{course_id}/status-summary")
-    async def course_status_summary(course_id: str, user=Depends(require_permission("lms:status_view_all"))):
+    async def course_status_summary(course_id: str, user=Depends(require_permission("lms:status_view_all")), _feat=Depends(require_feature("lms"))):
         docs = await db.user_course_status.find({"course_id": course_id}, {"_id": 0}).to_list(5000)
         summary = {k: 0 for k in STATUS_LABELS}
         for d in docs:
@@ -511,7 +511,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
         return out
 
     @api_router.get("/lms/my-courses/{status_id}")
-    async def my_course_detail(status_id: str, user=Depends(current_user)):
+    async def my_course_detail(status_id: str, user=Depends(current_user), _feat=Depends(require_feature("lms"))):
         doc = await db.user_course_status.find_one({"id": status_id}, {"_id": 0})
         if not doc or doc["user_id"] != user["id"]:
             raise HTTPException(404, "Kayıt bulunamadı")
@@ -523,7 +523,8 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
         return doc
 
     @api_router.post("/lms/my-courses/{status_id}/start")
-    async def start_course(status_id: str, request: Request, user=Depends(current_user)):
+    async def start_course(status_id: str, request: Request, user=Depends(current_user),
+                            _feat=Depends(require_feature("lms"))):
         doc = await db.user_course_status.find_one({"id": status_id}, {"_id": 0})
         if not doc or doc["user_id"] != user["id"]:
             raise HTTPException(404, "Kayıt bulunamadı")
@@ -538,7 +539,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
 
     @api_router.post("/lms/my-courses/{status_id}/contents/{content_id}/complete")
     async def complete_content(status_id: str, content_id: str, body: ContentCompleteRequest, request: Request,
-                                user=Depends(current_user)):
+                                user=Depends(current_user), _feat=Depends(require_feature("lms"))):
         doc = await db.user_course_status.find_one({"id": status_id}, {"_id": 0})
         if not doc or doc["user_id"] != user["id"]:
             raise HTTPException(404, "Kayıt bulunamadı")
@@ -570,7 +571,7 @@ def register_lms_routes(api_router, db, current_user, require_permission, log_au
         return new
 
     @api_router.post("/lms/recompute-expirations")
-    async def recompute_expirations(request: Request, user=Depends(require_permission("lms:status_view_all"))):
+    async def recompute_expirations(request: Request, user=Depends(require_permission("lms:status_view_all")), _feat=Depends(require_feature("lms"))):
         """"Süresi Doldu" kontrolünü kalıcı hale getiren tick — support.py/
         campaigns.py'deki run-scheduled kalıbıyla AYNI aile, gerçek bir OS
         cron KURULU DEĞİL (bkz. modül docstring'i)."""

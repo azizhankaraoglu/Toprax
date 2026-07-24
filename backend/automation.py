@@ -105,7 +105,8 @@ def register_automation_routes(api_router, db, current_user, require_permission,
         subscribe(event_type, _handle_automation_event)
 
     @api_router.get("/automation/event-types")
-    async def list_event_types(user=Depends(require_permission("automation:view"))):
+    async def list_event_types(user=Depends(require_permission("automation:view")),
+                                _feat=Depends(require_feature("automation"))):
         return [{"key": k, "label": v} for k, v in EVENT_TYPES.items()]
 
     @api_router.get("/automation/rules")
@@ -115,7 +116,8 @@ def register_automation_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/automation/rules")
     async def create_rule(body: AutomationRuleCreate, request: Request,
-                           user=Depends(require_permission("automation:manage"))):
+                           user=Depends(require_permission("automation:manage")),
+                           _feat=Depends(require_feature("automation"))):
         if body.event_type not in EVENT_TYPES:
             raise HTTPException(400, f"Bilinmeyen event_type: {body.event_type}")
         task_type = await db.task_types.find_one({"id": body.task_type_id, "is_active": True}, {"_id": 0})
@@ -132,7 +134,8 @@ def register_automation_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/automation/rules/{rule_id}")
     async def update_rule(rule_id: str, body: AutomationRuleUpdate, request: Request,
-                           user=Depends(require_permission("automation:manage"))):
+                           user=Depends(require_permission("automation:manage")),
+                           _feat=Depends(require_feature("automation"))):
         old = await db.automation_rules.find_one({"id": rule_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Kural bulunamadı")
@@ -150,7 +153,8 @@ def register_automation_routes(api_router, db, current_user, require_permission,
 
     @api_router.delete("/automation/rules/{rule_id}")
     async def delete_rule(rule_id: str, request: Request,
-                           user=Depends(require_permission("automation:manage"))):
+                           user=Depends(require_permission("automation:manage")),
+                           _feat=Depends(require_feature("automation"))):
         """Soft delete (convention #3 — hiçbir kayıt fiziksel silinmez)."""
         old = await db.automation_rules.find_one({"id": rule_id}, {"_id": 0})
         if not old:
@@ -161,6 +165,7 @@ def register_automation_routes(api_router, db, current_user, require_permission,
 
     @api_router.get("/automation/rule-runs")
     async def list_rule_runs(rule_id: Optional[str] = None, limit: int = 100,
-                              user=Depends(require_permission("automation:view"))):
+                              user=Depends(require_permission("automation:view")),
+                              _feat=Depends(require_feature("automation"))):
         filt = {"rule_id": rule_id} if rule_id else {}
         return await db.automation_rule_runs.find(filt, {"_id": 0}).sort("ran_at", -1).to_list(min(limit, 500))

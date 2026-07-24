@@ -36,7 +36,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from security import make_access_token
-from platform_core import get_tenant_license, LicenseUpdate
+from platform_core import get_tenant_license, LicenseUpdate, FEATURE_FLAG_LABELS
 
 
 class TenantLicenseCreate(BaseModel):
@@ -53,71 +53,20 @@ class TenantLicenseCreate(BaseModel):
     sms_limit: Optional[int] = None
     whatsapp_limit: Optional[int] = None
 
-# God Mode'un yönettiği "Modül Yönetimi" — platform_core.py'nin kendi
-# FEATURE_FLAG_LABELS'ından (ai/gis/lms) BİLİNÇLİ OLARAK ayrı bir sözlük
-# DEĞİL, AYNI `feature_flags` koleksiyonunu (tenant_id+key) kullanır —
-# ai/gis/lms anahtarları platform_core.py ile ORTAK (tek kaynak), geri
-# kalan 6'sı (farmer/parcel/production/factory/ufyd/communication) burada
-# ilk kez tanımlanır.
+# God Mode'un yönettiği "Modül Yönetimi" — AYNI `feature_flags`
+# koleksiyonunu (tenant_id+key) kullanır.
 #
-# SON HAL (2026-07-23) — kullanıcı geri bildirimi: bu liste ilk sürümden
-# beri güncellenmemişti, uygulamaya sonradan eklenen modüllerin BÜYÜK
-# ÇOĞUNLUĞU (Sözleşmeler, Ekim, Sulama, Operasyon, Toprak, Saha
-# Operasyonları, Formlar, İdari Alanlar, Organizasyon, Integration Hub vb.)
-# Tenant Yönetimi > Modüller çekmecesinde HİÇ görünmüyordu. Aşağıdaki 20
-# yeni anahtar `Layout.jsx`'teki navGroups ile birebir eşleşecek şekilde
-# eklendi (Kullanıcılar/Özel Roller/Ayarlar/Form Yönetimi/Dashboard
-# BİLİNÇLİ OLARAK dışarıda bırakıldı — bunlar "kapatılabilir modül" değil,
-# çekirdek hesap yönetimi).
-#
-# GÜNCELLEME (2026-07-23, aynı gün ikinci geçiş): yukarıdaki "yeni 20
-# anahtar sadece görünürlük amaçlı" notu artık GEÇERSİZ — kullanıcı
-# "tabiki yapmalıyız" dedi ve hepsine gerçek `require_feature()` zorlaması
-# eklendi. Her modülün ANA liste/oluşturma endpoint'i artık ilgili flag
-# kapatıldığında 403 döner (server.py: contracts/planting/soil/logistics/
-# reports[x2]; data_entry.py: irrigation/operations — zaten require_feature
-# alıyordu; extras.py: invoicing — zaten alıyordu; admin_areas.py,
-# organization.py, approval.py, case_management.py, integration_hub.py,
-# experience_profile.py, audit.py, field_ops.py, automation.py,
-# forms_module.py, remote_sensing/services.py, api_keys.py (developer_portal)
-# — bu 12 dosyaya register_*_routes(..., require_feature=None) parametresi
-# YENİ eklendi, server.py'deki çağrı yerleri güncellendi). Diğer/ikincil
-# endpoint'ler (ör. organization.py'nin update/delete uçları) BİLİNÇLİ
-# OLARAK gate'lenmedi — production/ufyd/lms/ai'daki mevcut kalıpla AYNI:
-# tek bir ana giriş noktası yeterli, her CRUD ucunu tekrar tekrar
-# kontrol etmek gereksiz karmaşıklık.
-MODULE_TOGGLE_LABELS = {
-    "farmer": "Çiftçi Yönetimi",
-    "parcel": "Parsel / GIS Veri Girişi",
-    "production": "Üretim Sezonu",
-    "factory": "Fabrika / Kantar Operasyonları",
-    "ufyd": "UFYD (Destek / Ledger / Hakediş)",
-    "communication": "İletişim Merkezi",
-    "lms": "Eğitim Merkezi (LMS)",
-    "gis": "Harita Paneli",
-    "ai": "Yapay Zeka",
-    # --- SON HAL (2026-07-23) eklenen modüller ---
-    "contracts": "Sözleşmeler",
-    "planting": "Ekim Kaydı & Ekim Karar Motoru",
-    "irrigation": "Sulama & Kaynak Yönetimi",
-    "operations": "Operasyon Yönetimi",
-    "soil": "Toprak Analizleri",
-    "remote_sensing": "Uydu / NDVI / Uzaktan Algılama",
-    "field_ops": "Saha Operasyonları / Görev Yönetimi",
-    "automation": "Otomasyon Kuralları",
-    "forms": "Formlar & Anket",
-    "logistics": "Lojistik & Randevu",
-    "reports": "Raporlar (Verimlilik / Çiftçi Karne / Saha Raporları)",
-    "invoicing": "E-Fatura / İrsaliye",
-    "admin_areas": "İdari Alanlar",
-    "organization": "Organizasyon Hiyerarşisi",
-    "approvals": "Onay Zincirleri / Onay Bekleyenlerim",
-    "case_management": "Bize Ulaşın (Destek Talepleri)",
-    "integration_hub": "Integration Hub",
-    "developer_portal": "Geliştirici Portalı",
-    "experience_profiles": "Experience Profile",
-    "audit": "Audit Log",
-}
+# MİMARİ DÜZELTME (2026-07-23, üçüncü geçiş) — bu sözlük ARTIK burada
+# TANIMLANMIYOR, `platform_core.FEATURE_FLAG_LABELS`'tan import ediliyor.
+# Önceki hal iki AYRI ve KISMEN ÇAKIŞAN sözlük tutuyordu (burada 29 anahtar,
+# platform_core.py'de 5, sadece ai/gis/lms ortaktı) — bu, `/feature-flags`
+# endpoint'inin (Layout.jsx'in nav gizleme mantığının okuduğu TEK kaynak)
+# god_mode'dan kapatılan bir modülü asla görememesine yol açan gerçek bir
+# bug'du: bir modül burada kapatılsa (backend 403 dönmeye başlasa) BİLE
+# frontend nav'ı bunu hiç öğrenemiyordu, çünkü /feature-flags sadece
+# platform_core'un 5 anahtarını döndürüyordu. Artık TEK sözlük var, TEK
+# doğru — buradan referans alınır, kopyalanmaz.
+MODULE_TOGGLE_LABELS = FEATURE_FLAG_LABELS
 
 
 async def _require_platform_admin(user):

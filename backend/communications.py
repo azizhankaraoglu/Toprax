@@ -268,26 +268,38 @@ async def send_via_channel(
     return doc, ok
 
 
-def register_communication_routes(api_router, db, current_user, require_permission, log_audit):
+def register_communication_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    # parametresini HİÇ ALMIYORDU. `/communications/send` zaten `_final_gate_
+    # check()` üzerinden "communication" bayrağını KONTROL EDİYORDU (yukarıda,
+    # satır ~141) — ama bu SADECE gönderim anında 422 ile engelliyordu, kanal
+    # listesi/şablon yönetimi/kişi zaman çizelgesi gibi diğer uçlar HİÇ
+    # kontrol edilmiyordu ve server.py çağrı satırı require_feature'ı hiç
+    # geçmiyordu. Artık diğer register_X_routes ile AYNI kalıp; /communications/
+    # send'e de standart 403 için Depends eklendi (inline kontrol de kalır).
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     # =================================================================
     # KANALLAR
     # =================================================================
     @api_router.get("/channels")
-    async def list_channels(user=Depends(require_permission("communications:view"))):
+    async def list_channels(user=Depends(require_permission("communications:view")),
+                             _feat=Depends(require_feature("communication"))):
         return [{"key": k, "label": v} for k, v in CHANNELS.items()]
 
     # =================================================================
     # ŞABLON YÖNETİMİ
     # =================================================================
     @api_router.get("/templates/variables")
-    async def list_template_variables(user=Depends(require_permission("communications:view"))):
+    async def list_template_variables(user=Depends(require_permission("communications:view")),
+                                       _feat=Depends(require_feature("communication"))):
         return TEMPLATE_VARIABLES
 
     @api_router.get("/templates")
     async def list_templates(
         channel: Optional[str] = None, include_inactive: bool = False,
         user=Depends(require_permission("communications:view")),
+        _feat=Depends(require_feature("communication")),
     ):
         filt = {}
         if channel:
@@ -297,13 +309,15 @@ def register_communication_routes(api_router, db, current_user, require_permissi
         return await db.templates.find(filt, {"_id": 0}).sort("name", 1).to_list(300)
 
     @api_router.get("/templates/{template_id}/versions")
-    async def list_template_versions(template_id: str, user=Depends(require_permission("communications:view"))):
+    async def list_template_versions(template_id: str, user=Depends(require_permission("communications:view")),
+                                      _feat=Depends(require_feature("communication"))):
         return await db.template_versions.find({"template_id": template_id}, {"_id": 0}).sort("version", -1).to_list(100)
 
     @api_router.post("/templates")
     async def create_template(
         body: TemplateCreate, request: Request,
         user=Depends(require_permission("communications:templates_manage")),
+        _feat=Depends(require_feature("communication")),
     ):
         if body.channel not in CHANNELS:
             raise HTTPException(400, f"Bilinmeyen kanal: {body.channel}")
@@ -322,6 +336,7 @@ def register_communication_routes(api_router, db, current_user, require_permissi
     async def update_template(
         template_id: str, body: TemplateUpdate, request: Request,
         user=Depends(require_permission("communications:templates_manage")),
+        _feat=Depends(require_feature("communication")),
     ):
         old = await db.templates.find_one({"id": template_id}, {"_id": 0})
         if not old:
@@ -351,6 +366,7 @@ def register_communication_routes(api_router, db, current_user, require_permissi
     async def send_communication(
         body: CommunicationSendRequest, request: Request,
         user=Depends(require_permission("communications:send")),
+        _feat=Depends(require_feature("communication")),
     ):
         doc, ok = await send_via_channel(
             db, channel=body.channel, contact_type=body.contact_type, contact_id=body.contact_id,
@@ -369,6 +385,7 @@ def register_communication_routes(api_router, db, current_user, require_permissi
     async def contact_timeline(
         contact_id: str, contact_type: str = "farmer",
         user=Depends(require_permission("communications:view")),
+        _feat=Depends(require_feature("communication")),
     ):
         comms = await db.communications.find(
             {"contact_id": contact_id, "contact_type": contact_type}, {"_id": 0}

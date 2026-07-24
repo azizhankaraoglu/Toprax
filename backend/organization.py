@@ -135,7 +135,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
 
     @api_router.post("/organization-units")
     async def create_org_unit(body: OrgUnitCreate, request: Request,
-                               user=Depends(require_permission("organization:manage"))):
+                               user=Depends(require_permission("organization:manage")),
+                               _feat=Depends(require_feature("organization"))):
         doc = body.model_dump()
         doc.update({"id": str(uuid.uuid4()), "is_active": True,
                     "created_at": datetime.now(timezone.utc).isoformat()})
@@ -146,7 +147,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
 
     @api_router.put("/organization-units/{unit_id}")
     async def update_org_unit(unit_id: str, body: OrgUnitUpdate, request: Request,
-                               user=Depends(require_permission("organization:manage"))):
+                               user=Depends(require_permission("organization:manage")),
+                               _feat=Depends(require_feature("organization"))):
         old = await db.organization_units.find_one({"id": unit_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Organizasyon birimi bulunamadı")
@@ -162,7 +164,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
 
     @api_router.delete("/organization-units/{unit_id}")
     async def deactivate_org_unit(unit_id: str, request: Request,
-                                   user=Depends(require_permission("organization:manage"))):
+                                   user=Depends(require_permission("organization:manage")),
+                                   _feat=Depends(require_feature("organization"))):
         old = await db.organization_units.find_one({"id": unit_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Organizasyon birimi bulunamadı")
@@ -172,7 +175,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
 
     @api_router.post("/organization-units/bulk-delete")
     async def bulk_delete_org_units(body: BulkDeleteUnitsRequest, request: Request,
-                                     user=Depends(require_permission("organization:manage"))):
+                                     user=Depends(require_permission("organization:manage")),
+                                     _feat=Depends(require_feature("organization"))):
         deleted = 0
         for unit_id in body.unit_ids:
             old = await db.organization_units.find_one({"id": unit_id}, {"_id": 0})
@@ -186,7 +190,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
     # ---------------- Positions ----------------
     @api_router.get("/positions")
     async def list_positions(organization_unit_id: Optional[str] = None,
-                              user=Depends(require_permission("organization:view"))):
+                              user=Depends(require_permission("organization:view")),
+                              _feat=Depends(require_feature("organization"))):
         filt = {"is_active": {"$ne": False}}
         if organization_unit_id:
             filt["organization_unit_id"] = organization_unit_id
@@ -194,7 +199,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
 
     @api_router.post("/positions")
     async def create_position(body: PositionCreate, request: Request,
-                               user=Depends(require_permission("organization:manage"))):
+                               user=Depends(require_permission("organization:manage")),
+                               _feat=Depends(require_feature("organization"))):
         unit = await db.organization_units.find_one({"id": body.organization_unit_id}, {"_id": 0})
         if not unit:
             raise HTTPException(404, "Organizasyon birimi bulunamadı")
@@ -208,7 +214,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
 
     @api_router.put("/positions/{position_id}")
     async def update_position(position_id: str, body: PositionUpdate, request: Request,
-                               user=Depends(require_permission("organization:manage"))):
+                               user=Depends(require_permission("organization:manage")),
+                               _feat=Depends(require_feature("organization"))):
         old = await db.positions.find_one({"id": position_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Pozisyon bulunamadı")
@@ -224,7 +231,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
     # OrganizationUnit ile AYNI soft-delete deseni.
     @api_router.delete("/positions/{position_id}")
     async def deactivate_position(position_id: str, request: Request,
-                                   user=Depends(require_permission("organization:manage"))):
+                                   user=Depends(require_permission("organization:manage")),
+                                   _feat=Depends(require_feature("organization"))):
         old = await db.positions.find_one({"id": position_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Pozisyon bulunamadı")
@@ -234,7 +242,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
 
     @api_router.post("/positions/bulk-delete")
     async def bulk_delete_positions(body: BulkDeletePositionsRequest, request: Request,
-                                     user=Depends(require_permission("organization:manage"))):
+                                     user=Depends(require_permission("organization:manage")),
+                                     _feat=Depends(require_feature("organization"))):
         deleted = 0
         for position_id in body.position_ids:
             old = await db.positions.find_one({"id": position_id}, {"_id": 0})
@@ -247,7 +256,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
 
     # ---------------- User ↔ Position ataması ----------------
     @api_router.get("/users/{user_id}/position")
-    async def get_user_position(user_id: str, user=Depends(require_permission("organization:view"))):
+    async def get_user_position(user_id: str, user=Depends(require_permission("organization:view")),
+                                 _feat=Depends(require_feature("organization"))):
         current = await get_active_position(db, user_id)
         history = await db.user_positions.find({"user_id": user_id}, {"_id": 0}).sort("start_date", -1).to_list(50)
         direct_reports = await get_direct_reports(db, user_id)
@@ -255,7 +265,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
 
     @api_router.put("/users/{user_id}/position")
     async def assign_user_position(user_id: str, body: UserPositionAssign, request: Request,
-                                    user=Depends(require_permission("organization:manage"))):
+                                    user=Depends(require_permission("organization:manage")),
+                                    _feat=Depends(require_feature("organization"))):
         target_user = await db.users.find_one({"id": user_id}, {"_id": 0})
         if not target_user:
             raise HTTPException(404, "Kullanıcı bulunamadı")
@@ -281,7 +292,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
         return doc
 
     @api_router.get("/users/{user_id}/direct-reports")
-    async def direct_reports(user_id: str, user=Depends(require_permission("organization:view"))):
+    async def direct_reports(user_id: str, user=Depends(require_permission("organization:view")),
+                              _feat=Depends(require_feature("organization"))):
         ids = await get_direct_reports(db, user_id)
         if not ids:
             return []
@@ -289,7 +301,8 @@ def register_organization_routes(api_router, db, current_user, require_permissio
 
     # ---------------- Org Chart (ağaç görselleştirme) ----------------
     @api_router.get("/org-chart")
-    async def org_chart(user=Depends(require_permission("organization:view"))):
+    async def org_chart(user=Depends(require_permission("organization:view")),
+                         _feat=Depends(require_feature("organization"))):
         units = await db.organization_units.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(500)
         positions = await db.positions.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(1000)
         assignments = await db.user_positions.find({"end_date": None}, {"_id": 0}).to_list(2000)

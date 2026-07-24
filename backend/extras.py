@@ -155,7 +155,7 @@ def register_extra_routes(api_router, db, current_user, is_admin, require_featur
         return record
 
     @api_router.get("/ai/disease-history")
-    async def disease_history(user=Depends(current_user)):
+    async def disease_history(user=Depends(current_user), _feat=Depends(require_feature("ai"))):
         """Geçmiş hastalık tespit kayıtları"""
         filt = {}
         if user.get("role") == "ciftci":
@@ -425,7 +425,7 @@ Sadece anlamlı alanları dahil et.
     # =====================================================================
     
     @api_router.get("/satellite/ndvi/{parcel_id}")
-    async def get_ndvi_data(parcel_id: str, user=Depends(current_user)):
+    async def get_ndvi_data(parcel_id: str, user=Depends(current_user), _feat=Depends(require_feature("gis"))):
         """
         Parselin son uydu görüntüsünden NDVI değeri. (2026-07-11) Artık
         Integration Center'da Sentinel Hub GERÇEK/aktif ise gerçek veri
@@ -489,7 +489,7 @@ Sadece anlamlı alanları dahil et.
         date: str  # "YYYY-MM-DD" — get_satellite_provider()'ın ürettiği 10 sabit tarihten biri olmalı
 
     @api_router.post("/satellite/ndvi-snapshot")
-    async def get_ndvi_snapshot(body: NdviSnapshotRequest, user=Depends(current_user)):
+    async def get_ndvi_snapshot(body: NdviSnapshotRequest, user=Depends(current_user), _feat=Depends(require_feature("gis"))):
         """
         IT-17 — Mekânsal Zaman Makinesi: ÇOKLU parsel için TEK bir tarihteki
         NDVI/risk anlık görüntüsü. `/satellite/ndvi/{parcel_id}`'nin tersine
@@ -532,7 +532,7 @@ Sadece anlamlı alanları dahil et.
         return {"date": body.date, "items": items}
 
     @api_router.get("/satellite/regional-overview")
-    async def satellite_regional_overview(user=Depends(current_user)):
+    async def satellite_regional_overview(user=Depends(current_user), _feat=Depends(require_feature("gis"))):
         """Bölge geneli NDVI özet — admin haritası için"""
         regions = await db.regions.find({}, {"_id": 0}).to_list(100)
         rnd = random.Random(2026)
@@ -584,7 +584,8 @@ Sadece anlamlı alanları dahil et.
     # =====================================================================
 
     @api_router.get("/drone/missions")
-    async def list_drone_missions(finding_type: str = None, parcel_id: str = None, user=Depends(current_user)):
+    async def list_drone_missions(finding_type: str = None, parcel_id: str = None, user=Depends(current_user),
+                                   _feat=Depends(require_feature("drone"))):
         """Drone görev listesi — bulgu tipine/parsele göre filtrelenebilir"""
         q = {}
         if finding_type:
@@ -595,7 +596,7 @@ Sadece anlamlı alanları dahil et.
         return docs
 
     @api_router.get("/drone/summary")
-    async def drone_summary(user=Depends(current_user)):
+    async def drone_summary(user=Depends(current_user), _feat=Depends(require_feature("drone"))):
         """Dashboard kartı için drone özet"""
         total = await db.drone_missions.count_documents({})
         with_findings = await db.drone_missions.count_documents({"finding_type": {"$ne": "genel_tarama"}})
@@ -623,7 +624,7 @@ Sadece anlamlı alanları dahil et.
         return docs
     
     @api_router.get("/kantar/records")
-    async def list_kantar_records(user=Depends(current_user)):
+    async def list_kantar_records(user=Depends(current_user), _feat=Depends(require_feature("factory"))):
         """Kantar tartı kayıtları"""
         docs = await db.kantar_records.find({"is_active": {"$ne": False}}, {"_id": 0}).sort([("weighing_at", -1)]).to_list(300)
         return docs
@@ -633,7 +634,8 @@ Sadece anlamlı alanları dahil et.
     # =====================================================================
     
     @api_router.get("/musthsil/{farmer_id}/{season}")
-    async def generate_mustahsil_pdf(farmer_id: str, season: int, user=Depends(current_user)):
+    async def generate_mustahsil_pdf(farmer_id: str, season: int, user=Depends(current_user),
+                                      _feat=Depends(require_feature("ufyd"))):
         """Çiftçi için müstahsil makbuzu PDF üret"""
         try:
             from reportlab.pdfgen import canvas
@@ -725,7 +727,8 @@ Sadece anlamlı alanları dahil et.
         analyze_with_ai: bool = False                          # Fotoğraf varsa otomatik AI analizi iste
 
     @api_router.post("/field/visits")
-    async def create_field_visit(body: FieldVisitCreate, request: Request, user=Depends(current_user)):
+    async def create_field_visit(body: FieldVisitCreate, request: Request, user=Depends(current_user),
+                                  _feat=Depends(require_feature("field_ops"))):
         """
         Saha mühendisi ziyaret raporu kaydeder (mobil PWA'dan).
 
@@ -766,7 +769,8 @@ Sadece anlamlı alanları dahil et.
         return doc
 
     @api_router.get("/field/visits")
-    async def list_field_visits(farmer_id: Optional[str] = None, limit: int = 100, user=Depends(current_user)):
+    async def list_field_visits(farmer_id: Optional[str] = None, limit: int = 100, user=Depends(current_user),
+                                 _feat=Depends(require_feature("field_ops"))):
         """Ziyaret listesi"""
         filt = {}
         if farmer_id: filt["farmer_id"] = farmer_id
@@ -784,7 +788,8 @@ Sadece anlamlı alanları dahil et.
         village: Optional[str] = None
     
     @api_router.put("/farmer/my-profile")
-    async def update_my_profile(body: FarmerProfileUpdate, user=Depends(current_user)):
+    async def update_my_profile(body: FarmerProfileUpdate, user=Depends(current_user),
+                                 _feat=Depends(require_feature("farmer"))):
         """Çiftçi kendi profil bilgisini günceller"""
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi kendi profilini güncelleyebilir")

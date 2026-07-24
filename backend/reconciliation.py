@@ -145,7 +145,14 @@ async def _check_reconciliation_access(db, user: dict, reconciliation: dict, req
         raise HTTPException(403, f"'{needed}' izniniz yok")
 
 
-def register_reconciliation_routes(api_router, db, current_user, require_permission, log_audit):
+def register_reconciliation_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    # parametresini HİÇ ALMIYORDU — UFYD zincirinin SON halkası (İcmal/
+    # Mutabakat + UFYD Dashboard, IT-21) God Mode'dan "ufyd" modülü
+    # kapatılsa bile HİÇBİR ZAMAN 403 dönmüyordu (server.py çağrı satırı
+    # da require_feature'ı geçmiyordu). Artık diğer register_X_routes ile
+    # AYNI kalıp.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     # =================================================================
     # İCMAL BELGESİ
@@ -154,6 +161,7 @@ def register_reconciliation_routes(api_router, db, current_user, require_permiss
     async def generate_reconciliation(
         production_cycle_id: str, request: Request,
         user=Depends(require_permission("reconciliation:manage")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         """İdempotent — zaten üretilmişse mevcut kaydı döner (yeniden üretmez)."""
         existing = await db.reconciliations.find_one({"production_cycle_id": production_cycle_id}, {"_id": 0})
@@ -185,6 +193,7 @@ def register_reconciliation_routes(api_router, db, current_user, require_permiss
     @api_router.get("/reconciliation/{production_cycle_id}")
     async def get_reconciliation_by_cycle(
         production_cycle_id: str, user=Depends(require_permission("reconciliation:view")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         doc = await db.reconciliations.find_one({"production_cycle_id": production_cycle_id}, {"_id": 0})
         if not doc:
@@ -192,7 +201,8 @@ def register_reconciliation_routes(api_router, db, current_user, require_permiss
         return doc
 
     @api_router.get("/reconciliation/{reconciliation_id}/pdf")
-    async def get_reconciliation_pdf(reconciliation_id: str, user=Depends(current_user)):
+    async def get_reconciliation_pdf(reconciliation_id: str, user=Depends(current_user),
+                                      _feat=Depends(require_feature("ufyd"))):
         doc = await db.reconciliations.find_one({"id": reconciliation_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "İcmal belgesi bulunamadı")
@@ -211,7 +221,8 @@ def register_reconciliation_routes(api_router, db, current_user, require_permiss
         )
 
     @api_router.post("/reconciliation/{reconciliation_id}/approve")
-    async def approve_reconciliation(reconciliation_id: str, request: Request, user=Depends(current_user)):
+    async def approve_reconciliation(reconciliation_id: str, request: Request, user=Depends(current_user),
+                                      _feat=Depends(require_feature("ufyd"))):
         doc = await db.reconciliations.find_one({"id": reconciliation_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "İcmal belgesi bulunamadı")
@@ -229,6 +240,7 @@ def register_reconciliation_routes(api_router, db, current_user, require_permiss
     @api_router.post("/reconciliation/{reconciliation_id}/object")
     async def object_reconciliation(
         reconciliation_id: str, body: ObjectionRequest, request: Request, user=Depends(current_user),
+        _feat=Depends(require_feature("ufyd")),
     ):
         """İtiraz — IT-28'in Case modeline bağlanana kadar basit bir durum/sebep alanı (ROADMAP notu)."""
         doc = await db.reconciliations.find_one({"id": reconciliation_id}, {"_id": 0})
@@ -249,7 +261,7 @@ def register_reconciliation_routes(api_router, db, current_user, require_permiss
         return new
 
     @api_router.get("/portal/reconciliations")
-    async def portal_list_reconciliations(user=Depends(current_user)):
+    async def portal_list_reconciliations(user=Depends(current_user), _feat=Depends(require_feature("ufyd"))):
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi erişebilir")
         return await db.reconciliations.find(
@@ -262,6 +274,7 @@ def register_reconciliation_routes(api_router, db, current_user, require_permiss
     @api_router.post("/simulation/entitlement")
     async def simulate_entitlement(
         body: SimulationRequest, user=Depends(require_permission("entitlement:calculate")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         req = EntitlementRequest(
             production_cycle_id=body.production_cycle_id,
@@ -289,7 +302,8 @@ def register_reconciliation_routes(api_router, db, current_user, require_permiss
     # UFYD DASHBOARD — canlı hesaplanır (Ledger/SupportRequest/Entitlement)
     # =================================================================
     @api_router.get("/ufyd/dashboard")
-    async def ufyd_dashboard(user=Depends(require_permission("ledger:view"))):
+    async def ufyd_dashboard(user=Depends(require_permission("ledger:view")),
+                              _feat=Depends(require_feature("ufyd"))):
         entitlements = await db.entitlements.find({}, {"_id": 0}).to_list(2000)
         total_hakedis = sum(e.get("gross_entitlement", 0) for e in entitlements)
         total_payable = sum(e.get("payable_amount", 0) for e in entitlements)

@@ -87,10 +87,14 @@ def _can_access(doc: dict, user_id: str, unit_chain: set) -> bool:
     return False
 
 
-def register_map_snapshot_routes(api_router, db, current_user, require_permission, log_audit):
+def register_map_snapshot_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    # parametresini HİÇ ALMIYORDU — "gis" (Harita Paneli / Uydu) modülü
+    # God Mode'dan kapatılsa bile snapshot uçları hiçbir zaman 403 dönmüyordu.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     @api_router.get("/map-snapshots")
-    async def list_map_snapshots(user=Depends(require_permission("parcels:view"))):
+    async def list_map_snapshots(user=Depends(require_permission("parcels:view")), _feat=Depends(require_feature("gis"))):
         """Kendi snapshot'larım + tenant içinde paylaşılanlar + organizasyon
         birimime (veya üst birimlerimden birine) paylaşılanlar (KONU 2.2)."""
         unit_chain = await _user_unit_chain(db, user["id"])
@@ -106,7 +110,7 @@ def register_map_snapshot_routes(api_router, db, current_user, require_permissio
         return docs
 
     @api_router.get("/map-snapshots/{snapshot_id}")
-    async def get_map_snapshot(snapshot_id: str, user=Depends(require_permission("parcels:view"))):
+    async def get_map_snapshot(snapshot_id: str, user=Depends(require_permission("parcels:view")), _feat=Depends(require_feature("gis"))):
         """Tek bir snapshot'ı açar — paylaşım linkinden (?snapshot=<id>) gelindiğinde
         kullanılır. Sahibi DEĞİLSE sadece kendisine paylaşılmışsa (tenant veya
         org_unit kapsamında) erişilebilir; alıcı tarafta salt-okunur açılır."""
@@ -121,7 +125,7 @@ def register_map_snapshot_routes(api_router, db, current_user, require_permissio
 
     @api_router.post("/map-snapshots/{snapshot_id}/copy")
     async def copy_map_snapshot(snapshot_id: str, request: Request,
-                                user=Depends(require_permission("parcels:view"))):
+                                user=Depends(require_permission("parcels:view")), _feat=Depends(require_feature("gis"))):
         """KONU 2.2 — "Kendime kopyala": paylaşılan (salt-okunur) bir snapshot'ı
         kullanıcının kendi private workspace'ine klonlar (yeni id, yeni sahip,
         paylaşım sıfırlanır). Alıcı böylece kopyayı serbestçe düzenleyebilir."""
@@ -151,7 +155,7 @@ def register_map_snapshot_routes(api_router, db, current_user, require_permissio
 
     @api_router.post("/map-snapshots")
     async def create_map_snapshot(body: MapSnapshotCreate, request: Request,
-                                   user=Depends(require_permission("parcels:view"))):
+                                   user=Depends(require_permission("parcels:view")), _feat=Depends(require_feature("gis"))):
         doc = body.model_dump()
         # KONU 2.2 — kapsam normalizasyonu + doğrulama (is_shared ile senkron).
         scope = doc.get("share_scope") or "private"
@@ -176,7 +180,7 @@ def register_map_snapshot_routes(api_router, db, current_user, require_permissio
 
     @api_router.delete("/map-snapshots/{snapshot_id}")
     async def delete_map_snapshot(snapshot_id: str, request: Request,
-                                   user=Depends(require_permission("parcels:view"))):
+                                   user=Depends(require_permission("parcels:view")), _feat=Depends(require_feature("gis"))):
         """Gerçek silme (soft-delete DEĞİL) — saved_queries.py ile aynı gerekçe:
         bir görünüm tercihidir, finansal/tarihsel veri değildir."""
         from config_service import get_system_tier

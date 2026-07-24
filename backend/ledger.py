@@ -120,7 +120,8 @@ def register_ledger_routes(api_router, db, current_user, require_permission, log
         return await db.ledger_entries.find(filt, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
     @api_router.get("/ledger/{entry_id}")
-    async def get_ledger_entry(entry_id: str, user=Depends(require_permission("ledger:view"))):
+    async def get_ledger_entry(entry_id: str, user=Depends(require_permission("ledger:view")),
+                                _feat=Depends(require_feature("ufyd"))):
         doc = await db.ledger_entries.find_one({"id": entry_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Ledger kaydı bulunamadı")
@@ -129,6 +130,7 @@ def register_ledger_routes(api_router, db, current_user, require_permission, log
     @api_router.post("/ledger")
     async def post_ledger_entry(
         body: LedgerEntryCreate, request: Request, user=Depends(require_permission("ledger:create")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         cycle = await db.production_cycles.find_one({"id": body.production_cycle_id}, {"_id": 0})
         if not cycle:
@@ -151,6 +153,7 @@ def register_ledger_routes(api_router, db, current_user, require_permission, log
     async def reverse_ledger_entry(
         entry_id: str, body: LedgerReverseRequest, request: Request,
         user=Depends(require_permission("ledger:reverse")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         """Orijinal kayıt HİÇ değiştirilmez/silinmez — ters işaretli YENİ bir kayıt eklenir."""
         original = await db.ledger_entries.find_one({"id": entry_id}, {"_id": 0})
@@ -176,7 +179,8 @@ def register_ledger_routes(api_router, db, current_user, require_permission, log
         return reversal
 
     @api_router.get("/production-cycles/{cycle_id}/current-account")
-    async def get_current_account(cycle_id: str, user=Depends(require_permission("ledger:view"))):
+    async def get_current_account(cycle_id: str, user=Depends(require_permission("ledger:view")),
+                                   _feat=Depends(require_feature("ufyd"))):
         cycle = await db.production_cycles.find_one({"id": cycle_id}, {"_id": 0})
         if not cycle:
             raise HTTPException(404, "Üretim sezonu bulunamadı")

@@ -120,12 +120,13 @@ def register_case_routes(api_router, db, current_user, require_permission, log_a
 
     # ---------------- Kategori Yönetimi ----------------
     @api_router.get("/case-categories")
-    async def list_categories(user=Depends(current_user)):
+    async def list_categories(user=Depends(current_user), _feat=Depends(require_feature("case_management"))):
         return await db.case_categories.find({"is_active": {"$ne": False}}, {"_id": 0}).sort("name", 1).to_list(200)
 
     @api_router.post("/case-categories")
     async def create_category(body: CaseCategoryCreate, request: Request,
-                               user=Depends(require_permission("cases:categories_manage"))):
+                               user=Depends(require_permission("cases:categories_manage")),
+                               _feat=Depends(require_feature("case_management"))):
         doc = {"id": str(uuid.uuid4()), "name": body.name, "is_active": True,
                "created_at": datetime.now(timezone.utc).isoformat()}
         await db.case_categories.insert_one(doc)
@@ -134,7 +135,8 @@ def register_case_routes(api_router, db, current_user, require_permission, log_a
         return doc
 
     @api_router.post("/case-categories/seed-defaults")
-    async def seed_categories(request: Request, user=Depends(require_permission("cases:categories_manage"))):
+    async def seed_categories(request: Request, user=Depends(require_permission("cases:categories_manage")),
+                               _feat=Depends(require_feature("case_management"))):
         created = []
         for name in DEFAULT_CATEGORIES:
             if await db.case_categories.find_one({"name": name}):
@@ -161,7 +163,8 @@ def register_case_routes(api_router, db, current_user, require_permission, log_a
         return await db.cases.find(filt, {"_id": 0}).sort("created_at", -1).to_list(500)
 
     @api_router.get("/cases/{case_id}")
-    async def get_case(case_id: str, user=Depends(require_permission("cases:view"))):
+    async def get_case(case_id: str, user=Depends(require_permission("cases:view")),
+                        _feat=Depends(require_feature("case_management"))):
         doc = await db.cases.find_one({"id": case_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Case bulunamadı")
@@ -182,14 +185,16 @@ def register_case_routes(api_router, db, current_user, require_permission, log_a
         return doc
 
     @api_router.post("/cases")
-    async def create_case(body: CaseCreate, request: Request, user=Depends(require_permission("cases:create"))):
+    async def create_case(body: CaseCreate, request: Request, user=Depends(require_permission("cases:create")),
+                           _feat=Depends(require_feature("case_management"))):
         doc = await _create_case(body.model_dump(), "dahili", user["id"], body.farmer_id)
         await log_audit(db, user, action="create", entity="case", entity_id=doc["id"], new_value=doc, request=request)
         return doc
 
     @api_router.put("/cases/{case_id}/assign")
     async def assign_case(case_id: str, body: CaseAssign, request: Request,
-                           user=Depends(require_permission("cases:manage"))):
+                           user=Depends(require_permission("cases:manage")),
+                           _feat=Depends(require_feature("case_management"))):
         old = await db.cases.find_one({"id": case_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Case bulunamadı")
@@ -218,7 +223,8 @@ def register_case_routes(api_router, db, current_user, require_permission, log_a
 
     @api_router.put("/cases/{case_id}/transition")
     async def transition_case(case_id: str, body: CaseTransition, request: Request,
-                               user=Depends(require_permission("cases:manage"))):
+                               user=Depends(require_permission("cases:manage")),
+                               _feat=Depends(require_feature("case_management"))):
         old = await db.cases.find_one({"id": case_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Case bulunamadı")
@@ -242,12 +248,14 @@ def register_case_routes(api_router, db, current_user, require_permission, log_a
 
     # ---------------- Mesajlaşma (iki yönlü) ----------------
     @api_router.get("/cases/{case_id}/messages")
-    async def list_messages(case_id: str, user=Depends(require_permission("cases:view"))):
+    async def list_messages(case_id: str, user=Depends(require_permission("cases:view")),
+                             _feat=Depends(require_feature("case_management"))):
         return await db.case_messages.find({"case_id": case_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
 
     @api_router.post("/cases/{case_id}/messages")
     async def send_message(case_id: str, body: CaseMessageCreate, request: Request,
-                            user=Depends(require_permission("cases:view"))):
+                            user=Depends(require_permission("cases:view")),
+                            _feat=Depends(require_feature("case_management"))):
         case = await db.cases.find_one({"id": case_id}, {"_id": 0})
         if not case:
             raise HTTPException(404, "Case bulunamadı")
@@ -268,7 +276,8 @@ def register_case_routes(api_router, db, current_user, require_permission, log_a
     # ---------------- Saha Operasyonlarına Köprü ----------------
     @api_router.post("/cases/{case_id}/create-task")
     async def create_task_from_case(case_id: str, body: CaseTaskCreate, request: Request,
-                                     user=Depends(require_permission("cases:manage"))):
+                                     user=Depends(require_permission("cases:manage")),
+                                     _feat=Depends(require_feature("case_management"))):
         case = await db.cases.find_one({"id": case_id}, {"_id": 0})
         if not case:
             raise HTTPException(404, "Case bulunamadı")
@@ -287,21 +296,28 @@ def register_case_routes(api_router, db, current_user, require_permission, log_a
         return task
 
     # ---------------- Çiftçi Portalı (iki yönlü — "Bize Ulaşın") ----------------
+    # NOT: /portal/cases* uçları çiftçinin "Bize Ulaşın" öz-servis erişimidir —
+    # FEATURE_FLAG_LABELS'ta "case_management" tam olarak bunu ifade eder
+    # ("Bize Ulaşın (Destek Talepleri)"). Modül God Mode'dan kapatılırsa çiftçi
+    # de yeni case açamamalı/portalı görememeli — bu yüzden BU uçlar da
+    # require_feature ile kilitlenir (personel tarafındaki /cases uçlarıyla aynı flag).
     @api_router.get("/portal/cases")
-    async def portal_list_cases(user=Depends(current_user)):
+    async def portal_list_cases(user=Depends(current_user), _feat=Depends(require_feature("case_management"))):
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi erişebilir")
         return await db.cases.find({"farmer_id": user["farmer_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
     @api_router.post("/portal/cases")
-    async def portal_create_case(body: CasePortalCreate, request: Request, user=Depends(current_user)):
+    async def portal_create_case(body: CasePortalCreate, request: Request, user=Depends(current_user),
+                                  _feat=Depends(require_feature("case_management"))):
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi case açabilir")
         doc = await _create_case(body.model_dump(), "portal", None, user["farmer_id"])
         return doc
 
     @api_router.get("/portal/cases/{case_id}/messages")
-    async def portal_list_messages(case_id: str, user=Depends(current_user)):
+    async def portal_list_messages(case_id: str, user=Depends(current_user),
+                                    _feat=Depends(require_feature("case_management"))):
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi erişebilir")
         case = await db.cases.find_one({"id": case_id, "farmer_id": user["farmer_id"]}, {"_id": 0})
@@ -310,7 +326,8 @@ def register_case_routes(api_router, db, current_user, require_permission, log_a
         return await db.case_messages.find({"case_id": case_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
 
     @api_router.post("/portal/cases/{case_id}/messages")
-    async def portal_send_message(case_id: str, body: CaseMessageCreate, request: Request, user=Depends(current_user)):
+    async def portal_send_message(case_id: str, body: CaseMessageCreate, request: Request, user=Depends(current_user),
+                                   _feat=Depends(require_feature("case_management"))):
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi mesaj gönderebilir")
         case = await db.cases.find_one({"id": case_id, "farmer_id": user["farmer_id"]}, {"_id": 0})

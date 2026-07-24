@@ -113,16 +113,19 @@ def register_integration_hub_routes(api_router, db, current_user, require_permis
         return INTEGRATION_REGISTRY
 
     @api_router.get("/integration-hub/event-types")
-    async def get_event_types(user=Depends(require_permission("integration_hub:view"))):
+    async def get_event_types(user=Depends(require_permission("integration_hub:view")),
+                               _feat=Depends(require_feature("integration_hub"))):
         return [{"key": k, "label": v} for k, v in EVENT_TYPES.items()]
 
     @api_router.get("/webhook-rules")
-    async def list_webhook_rules(user=Depends(require_permission("integration_hub:view"))):
+    async def list_webhook_rules(user=Depends(require_permission("integration_hub:view")),
+                                  _feat=Depends(require_feature("integration_hub"))):
         return await db.webhook_rules.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
     @api_router.post("/webhook-rules")
     async def create_webhook_rule(body: WebhookRuleCreate, request: Request,
-                                   user=Depends(require_permission("integration_hub:manage"))):
+                                   user=Depends(require_permission("integration_hub:manage")),
+                                   _feat=Depends(require_feature("integration_hub"))):
         if body.event_type not in EVENT_TYPES:
             raise HTTPException(400, f"Bilinmeyen event_type: {body.event_type}")
         doc = body.model_dump()
@@ -137,7 +140,8 @@ def register_integration_hub_routes(api_router, db, current_user, require_permis
 
     @api_router.put("/webhook-rules/{rule_id}")
     async def update_webhook_rule(rule_id: str, body: WebhookRuleUpdate, request: Request,
-                                   user=Depends(require_permission("integration_hub:manage"))):
+                                   user=Depends(require_permission("integration_hub:manage")),
+                                   _feat=Depends(require_feature("integration_hub"))):
         old = await db.webhook_rules.find_one({"id": rule_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Webhook kuralı bulunamadı")
@@ -151,7 +155,8 @@ def register_integration_hub_routes(api_router, db, current_user, require_permis
 
     @api_router.delete("/webhook-rules/{rule_id}")
     async def delete_webhook_rule(rule_id: str, request: Request,
-                                   user=Depends(require_permission("integration_hub:manage"))):
+                                   user=Depends(require_permission("integration_hub:manage")),
+                                   _feat=Depends(require_feature("integration_hub"))):
         """Soft delete (convention #3)."""
         old = await db.webhook_rules.find_one({"id": rule_id}, {"_id": 0})
         if not old:
@@ -162,7 +167,8 @@ def register_integration_hub_routes(api_router, db, current_user, require_permis
 
     @api_router.post("/webhook-rules/{rule_id}/test")
     async def test_webhook_rule(rule_id: str, request: Request,
-                                 user=Depends(require_permission("integration_hub:manage"))):
+                                 user=Depends(require_permission("integration_hub:manage")),
+                                 _feat=Depends(require_feature("integration_hub"))):
         """Admin ekrandan "Test Et" — event_bus'ı beklemeden GERÇEK bir HTTP
         isteğini örnek bir payload ile hemen dener (kabul kriterinin
         "simüle hedef URL'e log/istek atarak doğrulanabilir" maddesi için)."""
@@ -175,5 +181,6 @@ def register_integration_hub_routes(api_router, db, current_user, require_permis
         return delivery
 
     @api_router.get("/webhook-rules/{rule_id}/deliveries")
-    async def list_webhook_deliveries(rule_id: str, user=Depends(require_permission("integration_hub:view"))):
+    async def list_webhook_deliveries(rule_id: str, user=Depends(require_permission("integration_hub:view")),
+                                       _feat=Depends(require_feature("integration_hub"))):
         return await db.webhook_deliveries.find({"webhook_rule_id": rule_id}, {"_id": 0}).sort("attempted_at", -1).to_list(200)

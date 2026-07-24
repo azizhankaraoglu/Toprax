@@ -156,7 +156,7 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
     require_feature = require_feature or (lambda key: (lambda: True))
 
     @api_router.get("/admin-areas/meta")
-    async def admin_area_meta(user=Depends(current_user)):
+    async def admin_area_meta(user=Depends(current_user), _feat=Depends(require_feature("admin_areas"))):
         return {"area_types": [{"key": t, "label": {"il": "İl", "ilce": "İlçe", "mahalle": "Mahalle"}[t]} for t in AREA_TYPES]}
 
     @api_router.get("/admin-areas")
@@ -177,7 +177,8 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
         return docs
 
     @api_router.get("/admin-areas/{area_id}")
-    async def get_admin_area(area_id: str, user=Depends(require_permission("admin_areas:view"))):
+    async def get_admin_area(area_id: str, user=Depends(require_permission("admin_areas:view")),
+                              _feat=Depends(require_feature("admin_areas"))):
         """Tam hassasiyetli geometri — düzenleme/onay ekranı için sadeleştirilmez."""
         doc = await db.admin_areas.find_one({"id": area_id}, {"_id": 0})
         if not doc:
@@ -185,7 +186,8 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
         return doc
 
     @api_router.post("/admin-areas")
-    async def create_admin_area(body: AdminAreaCreate, request: Request, user=Depends(require_permission("admin_areas:manage"))):
+    async def create_admin_area(body: AdminAreaCreate, request: Request, user=Depends(require_permission("admin_areas:manage")),
+                                 _feat=Depends(require_feature("admin_areas"))):
         if body.area_type not in AREA_TYPES:
             raise HTTPException(400, f"Geçersiz alan tipi: {body.area_type}. Geçerli değerler: {AREA_TYPES}")
         if body.parent_id and not await db.admin_areas.find_one({"id": body.parent_id}, {"_id": 0}):
@@ -201,7 +203,8 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
         return doc
 
     @api_router.put("/admin-areas/{area_id}")
-    async def update_admin_area(area_id: str, body: AdminAreaUpdate, request: Request, user=Depends(require_permission("admin_areas:manage"))):
+    async def update_admin_area(area_id: str, body: AdminAreaUpdate, request: Request, user=Depends(require_permission("admin_areas:manage")),
+                                 _feat=Depends(require_feature("admin_areas"))):
         old = await db.admin_areas.find_one({"id": area_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "İdari alan bulunamadı")
@@ -221,7 +224,8 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
         return new
 
     @api_router.delete("/admin-areas/{area_id}")
-    async def delete_admin_area(area_id: str, request: Request, user=Depends(require_permission("admin_areas:manage"))):
+    async def delete_admin_area(area_id: str, request: Request, user=Depends(require_permission("admin_areas:manage")),
+                                 _feat=Depends(require_feature("admin_areas"))):
         """Soft delete — convention #3, alt idari alanlar/geçmiş referanslar bozulmasın diye."""
         old = await db.admin_areas.find_one({"id": area_id}, {"_id": 0})
         if not old:
@@ -235,7 +239,8 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
     # atlanır (kullanıcı zaten seçtiği satırların var olduğunu bilir).
     @api_router.post("/admin-areas/bulk-delete")
     async def bulk_delete_admin_areas(body: BulkDeleteRequest, request: Request,
-                                       user=Depends(require_permission("admin_areas:manage"))):
+                                       user=Depends(require_permission("admin_areas:manage")),
+                                       _feat=Depends(require_feature("admin_areas"))):
         deleted = 0
         for area_id in body.area_ids:
             old = await db.admin_areas.find_one({"id": area_id}, {"_id": 0})
@@ -247,7 +252,8 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
         return {"status": "deactivated", "deleted_count": deleted}
 
     @api_router.get("/portfolio/{user_id}")
-    async def user_portfolio(user_id: str, user=Depends(require_permission("admin_areas:view"))):
+    async def user_portfolio(user_id: str, user=Depends(require_permission("admin_areas:view")),
+                              _feat=Depends(require_feature("admin_areas"))):
         """#6 — Bir personelin PORTFÖYÜ: sorumlu olduğu köyler + o köylerdeki
         (isimle eşleşen) çiftçi/parsel özeti. Sorumluluk köy seviyesindedir,
         parsel/çiftçi bunu devralır."""
@@ -281,7 +287,8 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
         }
 
     @api_router.post("/admin-areas/bulk-import")
-    async def bulk_import_admin_areas(body: BulkImportRequest, request: Request, user=Depends(require_permission("admin_areas:manage"))):
+    async def bulk_import_admin_areas(body: BulkImportRequest, request: Request, user=Depends(require_permission("admin_areas:manage")),
+                                       _feat=Depends(require_feature("admin_areas"))):
         """
         Tek bir SHP/GeoJSON/KML dosyasından ayrıştırılmış (geo_import.py
         /geo-import/parse ÇIKTISI, henüz hiçbir yere kaydedilmemiş)
@@ -316,7 +323,8 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
         return {"status": "imported", "count": len(created)}
 
     @api_router.get("/admin-areas/{area_id}/summary")
-    async def admin_area_summary(area_id: str, user=Depends(require_permission("admin_areas:view"))):
+    async def admin_area_summary(area_id: str, user=Depends(require_permission("admin_areas:view")),
+                                  _feat=Depends(require_feature("admin_areas"))):
         """
         O idari alanın sınırı İÇİNDEKİ çiftçi/parselleri döner —
         Mongo'nun $geoIntersects'i (2dsphere index, bkz. server.py başlangıç

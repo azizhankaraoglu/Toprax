@@ -16,9 +16,19 @@ POSTMAN_DIR = Path(__file__).resolve().parent.parent / "postman"
 CHANGELOG_PATH = Path(__file__).resolve().parent.parent / "CHANGELOG.md"
 
 
-def register_dev_portal_routes(api_router):
+def register_dev_portal_routes(api_router, require_feature=None):
+    # MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    # parametresini HİÇ ALMIYORDU/almıyordu ve server.py çağrısı da hiçbir
+    # parametre geçmiyordu -- "developer_portal" modülü God Mode'dan
+    # kapatılsa bile bu uçlar (api_keys.py'nin aksine) hiçbir zaman 403
+    # dönmüyordu. `dev_portal_info` BİLİNÇLİ OLARAK kimlik doğrulaması
+    # İSTEMEZ (bkz. docstring) ama require_feature `current_user`'a bağlı
+    # DEĞİLDİR (tenant_context zaten çözülür) -- bu yüzden buraya da eklenir.
+    from fastapi import Depends
+    require_feature = require_feature or (lambda key: (lambda: True))
+
     @api_router.get("/dev-portal/info")
-    async def dev_portal_info():
+    async def dev_portal_info(_feat=Depends(require_feature("developer_portal"))):
         """Kimlik dogrulamasiz -- portal sayfasinin genel bilgi bolumu icin.
         Hassas bilgi icermez (API key SAYISI bile donmez, sadece statik
         meta bilgi)."""
@@ -34,7 +44,7 @@ def register_dev_portal_routes(api_router):
         }
 
     @api_router.get("/dev-portal/postman-collection")
-    async def download_postman_collection():
+    async def download_postman_collection(_feat=Depends(require_feature("developer_portal"))):
         path = POSTMAN_DIR / "toprax.postman_collection.json"
         if not path.exists():
             raise HTTPException(404, "Postman collection henüz üretilmemiş -- "
@@ -43,7 +53,7 @@ def register_dev_portal_routes(api_router):
                               filename="toprax.postman_collection.json")
 
     @api_router.get("/dev-portal/postman-environment")
-    async def download_postman_environment():
+    async def download_postman_environment(_feat=Depends(require_feature("developer_portal"))):
         path = POSTMAN_DIR / "toprax.postman_environment.json"
         if not path.exists():
             raise HTTPException(404, "Postman environment henüz üretilmemiş")
@@ -51,7 +61,7 @@ def register_dev_portal_routes(api_router):
                               filename="toprax.postman_environment.json")
 
     @api_router.get("/dev-portal/changelog")
-    async def get_changelog():
+    async def get_changelog(_feat=Depends(require_feature("developer_portal"))):
         if not CHANGELOG_PATH.exists():
             return {"markdown": "# Değişiklik Günlüğü\n\nHenüz kayıt yok."}
         return {"markdown": CHANGELOG_PATH.read_text(encoding="utf-8")}

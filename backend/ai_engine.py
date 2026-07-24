@@ -384,13 +384,13 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     # ---------------- Taksonomi ----------------
     @api_router.get("/ai/taxonomy")
-    async def list_taxonomy(user=Depends(require_permission("ai_knowledge:view"))):
+    async def list_taxonomy(user=Depends(require_permission("ai_knowledge:view")), _feat=Depends(require_feature("ai"))):
         items = await db.ai_taxonomy.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(1000)
         return {"items": items, "total": len(items)}
 
     @api_router.post("/ai/taxonomy")
     async def create_taxonomy(body: Dict[str, Any], request: Request,
-                               user=Depends(require_permission("ai_knowledge:manage"))):
+                               user=Depends(require_permission("ai_knowledge:manage")), _feat=Depends(require_feature("ai"))):
         doc = dict(body)
         doc["id"] = doc.get("id") or str(uuid.uuid4())
         doc.setdefault("is_active", True)
@@ -403,7 +403,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/seed-taxonomy")
     async def seed_taxonomy(request: Request,
-                             user=Depends(require_permission("ai_knowledge:manage"))):
+                             user=Depends(require_permission("ai_knowledge:manage")), _feat=Depends(require_feature("ai"))):
         """20+ örnek taksonomi (ürün/hastalık/zararlı) — idempotent (key bazlı)."""
         seeds = [
             ("urun", "seker_pancari", "Şeker Pancarı"), ("urun", "bugday", "Buğday"),
@@ -440,13 +440,13 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     # ---------------- Dataset ----------------
     @api_router.get("/ai/datasets")
-    async def list_datasets(user=Depends(require_permission("ai_knowledge:view"))):
+    async def list_datasets(user=Depends(require_permission("ai_knowledge:view")), _feat=Depends(require_feature("ai"))):
         items = await db.ai_datasets.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(500)
         return {"items": items, "total": len(items)}
 
     @api_router.post("/ai/datasets")
     async def create_dataset(body: Dict[str, Any], request: Request,
-                              user=Depends(require_permission("ai_knowledge:create"))):
+                              user=Depends(require_permission("ai_knowledge:create")), _feat=Depends(require_feature("ai"))):
         doc = dict(body)
         doc["id"] = doc.get("id") or str(uuid.uuid4())
         doc.setdefault("status", "draft")
@@ -462,7 +462,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
         return doc
 
     @api_router.get("/ai/datasets/{dataset_id}")
-    async def get_dataset(dataset_id: str, user=Depends(require_permission("ai_knowledge:view"))):
+    async def get_dataset(dataset_id: str, user=Depends(require_permission("ai_knowledge:view")), _feat=Depends(require_feature("ai"))):
         doc = await db.ai_datasets.find_one({"id": dataset_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Dataset bulunamadı")
@@ -470,7 +470,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.put("/ai/datasets/{dataset_id}")
     async def update_dataset(dataset_id: str, body: Dict[str, Any], request: Request,
-                              user=Depends(require_permission("ai_knowledge:manage"))):
+                              user=Depends(require_permission("ai_knowledge:manage")), _feat=Depends(require_feature("ai"))):
         old = await db.ai_datasets.find_one({"id": dataset_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Dataset bulunamadı")
@@ -484,7 +484,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.delete("/ai/datasets/{dataset_id}")
     async def delete_dataset(dataset_id: str, request: Request,
-                              user=Depends(require_permission("ai_knowledge:manage"))):
+                              user=Depends(require_permission("ai_knowledge:manage")), _feat=Depends(require_feature("ai"))):
         old = await db.ai_datasets.find_one({"id": dataset_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Dataset bulunamadı")
@@ -496,7 +496,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/datasets/{dataset_id}/import")
     async def import_dataset(dataset_id: str, body: Dict[str, Any], request: Request,
-                              user=Depends(require_permission("ai_knowledge:create"))):
+                              user=Depends(require_permission("ai_knowledge:create")), _feat=Depends(require_feature("ai"))):
         """Toplu import (ZIP/klasör önizle→doğrula→onayla — geo_import.py deseni).
         Bu ortamda gerçek ZIP açma yerine, gövdedeki `records[]` listesi
         knowledge_records'a dönüştürülür (frontend dosyaları storage.py'ye
@@ -536,7 +536,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/knowledge-records")
     async def create_record(body: Dict[str, Any], request: Request,
-                             user=Depends(require_permission("ai_knowledge:create"))):
+                             user=Depends(require_permission("ai_knowledge:create")), _feat=Depends(require_feature("ai"))):
         tid = await _tenant_id(user)
         doc = _new_knowledge_doc(body, body.get("dataset_id"), tid, user)
         await db.ai_knowledge_records.insert_one(dict(doc))
@@ -546,7 +546,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/knowledge-records/bulk")
     async def bulk_records(items: List[Dict[str, Any]], request: Request,
-                            user=Depends(require_permission("ai_knowledge:create"))):
+                            user=Depends(require_permission("ai_knowledge:create")), _feat=Depends(require_feature("ai"))):
         tid = await _tenant_id(user)
         created = []
         for body in items:
@@ -560,7 +560,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
     @api_router.get("/ai/knowledge-records")
     async def list_records(dataset_id: Optional[str] = None, object_type: Optional[str] = None,
                             approval_status: Optional[str] = None, skip: int = 0, limit: int = 50,
-                            user=Depends(require_permission("ai_knowledge:view"))):
+                            user=Depends(require_permission("ai_knowledge:view")), _feat=Depends(require_feature("ai"))):
         q: Dict[str, Any] = {"is_active": {"$ne": False}}
         if dataset_id:
             q["dataset_id"] = dataset_id
@@ -573,7 +573,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
         return {"items": items, "total": total, "skip": skip, "limit": limit}
 
     @api_router.get("/ai/knowledge-records/export")
-    async def export_records(user=Depends(require_permission("ai_knowledge:view"))):
+    async def export_records(user=Depends(require_permission("ai_knowledge:view")), _feat=Depends(require_feature("ai"))):
         items = await db.ai_knowledge_records.find({}, {"_id": 0}).to_list(10000)
         buf = io.StringIO()
         if items:
@@ -587,14 +587,14 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
                                   headers={"Content-Disposition": "attachment; filename=ai_knowledge_records.csv"})
 
     @api_router.get("/ai/knowledge-records/{record_id}")
-    async def get_record(record_id: str, user=Depends(require_permission("ai_knowledge:view"))):
+    async def get_record(record_id: str, user=Depends(require_permission("ai_knowledge:view")), _feat=Depends(require_feature("ai"))):
         doc = await db.ai_knowledge_records.find_one({"id": record_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Kayıt bulunamadı")
         return doc
 
     @api_router.get("/ai/knowledge-records/{record_id}/versions")
-    async def record_versions(record_id: str, user=Depends(require_permission("ai_knowledge:view"))):
+    async def record_versions(record_id: str, user=Depends(require_permission("ai_knowledge:view")), _feat=Depends(require_feature("ai"))):
         """Versiyon zinciri (Bölüm 4.3) — previous_version_id ile geriye doğru."""
         chain = []
         cur = await db.ai_knowledge_records.find_one({"id": record_id}, {"_id": 0})
@@ -626,7 +626,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.put("/ai/knowledge-records/{record_id}")
     async def update_record(record_id: str, body: Dict[str, Any], request: Request,
-                            user=Depends(require_permission("ai_knowledge:create"))):
+                            user=Depends(require_permission("ai_knowledge:create")), _feat=Depends(require_feature("ai"))):
         updates = {k: v for k, v in body.items()
                    if k not in ("id", "version", "previous_version_id", "created_at")}
         new = await _new_version(record_id, updates, user, "update")
@@ -636,7 +636,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/knowledge-records/{record_id}/annotations")
     async def add_annotation(record_id: str, body: Dict[str, Any], request: Request,
-                             user=Depends(require_permission("ai_knowledge:create"))):
+                             user=Depends(require_permission("ai_knowledge:create")), _feat=Depends(require_feature("ai"))):
         old = await db.ai_knowledge_records.find_one({"id": record_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Kayıt bulunamadı")
@@ -651,7 +651,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/knowledge-records/{record_id}/approve")
     async def approve_record(record_id: str, body: Dict[str, Any], request: Request,
-                             user=Depends(require_permission("ai_knowledge:approve"))):
+                             user=Depends(require_permission("ai_knowledge:approve")), _feat=Depends(require_feature("ai"))):
         status = body.get("approval_status", "onayli")
         if status not in APPROVAL_STATUSES:
             raise HTTPException(400, f"Geçersiz onay durumu: {status}")
@@ -666,7 +666,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/predict")
     async def predict(body: Dict[str, Any], request: Request,
-                      user=Depends(require_permission("ai_knowledge:create"))):
+                      user=Depends(require_permission("ai_knowledge:create")), _feat=Depends(require_feature("ai"))):
         """Senkron, küçük görev (Bölüm 7). `record_id` verilirse DB'den çekilir,
         yoksa gövde doğrudan kayıt gibi işlenir."""
         record = body
@@ -715,7 +715,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/predict/async")
     async def predict_async(body: Dict[str, Any], request: Request,
-                            user=Depends(require_permission("ai_knowledge:create"))):
+                            user=Depends(require_permission("ai_knowledge:create")), _feat=Depends(require_feature("ai"))):
         tid = await _tenant_id(user)
         job = {
             "id": str(uuid.uuid4()), "tenant_id": tid, "job_type": "predict",
@@ -729,7 +729,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
         return {"job_id": job["id"], "status": "pending"}
 
     @api_router.get("/ai/jobs/{job_id}")
-    async def get_job(job_id: str, user=Depends(require_permission("ai_knowledge:view"))):
+    async def get_job(job_id: str, user=Depends(require_permission("ai_knowledge:view")), _feat=Depends(require_feature("ai"))):
         tid = await _tenant_id(user)
         doc = await raw_db.ai_jobs.find_one({"id": job_id, "tenant_id": tid}, {"_id": 0})
         if not doc:
@@ -737,7 +737,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
         return doc
 
     @api_router.post("/ai/jobs/process-next")
-    async def process_next(user=Depends(require_permission("ai_knowledge:manage"))):
+    async def process_next(user=Depends(require_permission("ai_knowledge:manage")), _feat=Depends(require_feature("ai"))):
         """Worker tetikleyici (manuel/cron) — bir bekleyen job'ı işler."""
         tid = await _tenant_id(user)
         pending = await raw_db.ai_jobs.find_one({"status": "pending", "tenant_id": tid}, {"_id": 0})
@@ -749,7 +749,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
     # ---------------- Active Learning / Validation Queue ----------------
     @api_router.get("/ai/validation-queue")
     async def validation_queue(status: Optional[str] = "bekliyor",
-                                user=Depends(require_permission("ai_prediction:validate"))):
+                                user=Depends(require_permission("ai_prediction:validate")), _feat=Depends(require_feature("ai"))):
         q: Dict[str, Any] = {}
         if status:
             q["status"] = status
@@ -759,7 +759,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/validation-queue/{queue_id}/decide")
     async def decide_validation(queue_id: str, body: Dict[str, Any], request: Request,
-                                 user=Depends(require_permission("ai_prediction:validate"))):
+                                 user=Depends(require_permission("ai_prediction:validate")), _feat=Depends(require_feature("ai"))):
         """Uzman kararı (Bölüm 10): onay/düzeltme → knowledge_record'a
         labels[].source="hibrit" YENİ versiyon; kuyruk kaydı 'tamamlandi'."""
         item = await db.ai_active_learning_queue.find_one({"id": queue_id}, {"_id": 0})
@@ -803,13 +803,13 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     # ---------------- Model Registry / MLOps ----------------
     @api_router.get("/ai/models")
-    async def list_models(user=Depends(require_permission("ai_model:view"))):
+    async def list_models(user=Depends(require_permission("ai_model:view")), _feat=Depends(require_feature("ai"))):
         items = await db.ai_models.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(200)
         return {"items": items, "total": len(items)}
 
     @api_router.post("/ai/models")
     async def create_model(body: Dict[str, Any], request: Request,
-                            user=Depends(require_permission("ai_model:deploy"))):
+                            user=Depends(require_permission("ai_model:deploy")), _feat=Depends(require_feature("ai"))):
         doc = dict(body)
         doc["id"] = doc.get("id") or str(uuid.uuid4())
         doc.setdefault("status", "training")
@@ -825,7 +825,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
         return doc
 
     @api_router.get("/ai/models/{model_id}")
-    async def get_model(model_id: str, user=Depends(require_permission("ai_model:view"))):
+    async def get_model(model_id: str, user=Depends(require_permission("ai_model:view")), _feat=Depends(require_feature("ai"))):
         doc = await db.ai_models.find_one({"id": model_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Model bulunamadı")
@@ -838,7 +838,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/models/{model_id}/deploy")
     async def deploy_model(model_id: str, request: Request,
-                           user=Depends(require_permission("ai_model:deploy"))):
+                           user=Depends(require_permission("ai_model:deploy")), _feat=Depends(require_feature("ai"))):
         """ZORUNLU KAPI (Bölüm 11): staging→production öncesi golden dataset
         regresyon testi. Yeni metrikler mevcut production'dan KÖTÜYSE deploy
         4xx ile REDDEDİLİR (atlanamaz)."""
@@ -872,7 +872,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/models/{model_id}/rollback")
     async def rollback_model(model_id: str, request: Request,
-                             user=Depends(require_permission("ai_model:rollback"))):
+                             user=Depends(require_permission("ai_model:rollback")), _feat=Depends(require_feature("ai"))):
         """previous_model_id ile tek çağrıda önceki production'a dön (Bölüm 11)."""
         model = await db.ai_models.find_one({"id": model_id}, {"_id": 0})
         if not model:
@@ -890,7 +890,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.post("/ai/models/{model_id}/train")
     async def train_model(model_id: str, request: Request, body: Dict[str, Any] = {},
-                          user=Depends(require_permission("ai_model:deploy"))):
+                          user=Depends(require_permission("ai_model:deploy")), _feat=Depends(require_feature("ai"))):
         """Eğitim tetikleyici — golden dataset (approval_status=onayli) sayısını
         kaydeder (gerçek eğitim CPU/GPU worker'a düşer, bu ortamda simüle)."""
         model = await db.ai_models.find_one({"id": model_id}, {"_id": 0})
@@ -908,14 +908,14 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
         return {"status": "training_queued", "golden_dataset_size": golden_count, "run_id": run["id"]}
 
     @api_router.get("/ai/models/{model_id}/training-history")
-    async def training_history(model_id: str, user=Depends(require_permission("ai_model:view"))):
+    async def training_history(model_id: str, user=Depends(require_permission("ai_model:view")), _feat=Depends(require_feature("ai"))):
         runs = await db.ai_training_runs.find({"model_id": model_id}, {"_id": 0}) \
             .sort("created_at", -1).to_list(100)
         return {"items": runs, "total": len(runs)}
 
     # ---------------- Tenant Kota ----------------
     @api_router.get("/ai/tenant-quota")
-    async def get_tenant_quota(user=Depends(require_permission("ai_knowledge:view"))):
+    async def get_tenant_quota(user=Depends(require_permission("ai_knowledge:view")), _feat=Depends(require_feature("ai"))):
         tid = await _tenant_id(user)
         doc = await _get_or_create_quota(raw_db, tid)
         remaining = max(0, doc["monthly_limit_calls"] - doc["cloud_calls_used"])
@@ -924,7 +924,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     @api_router.put("/ai/tenant-quota/{tenant_id}/limits")
     async def set_tenant_quota(tenant_id: str, body: Dict[str, Any], request: Request,
-                                user=Depends(require_permission("ai_knowledge:manage"))):
+                                user=Depends(require_permission("ai_knowledge:manage")), _feat=Depends(require_feature("ai"))):
         month = _month_key()
         await _get_or_create_quota(raw_db, tenant_id)
         updates = {}
@@ -941,7 +941,7 @@ def register_ai_engine_routes(api_router, db, raw_db, current_user,
 
     # ---------------- İzleme / Dashboard (Bölüm 14 "İzleme" sekmesi) ----------------
     @api_router.get("/ai/stats")
-    async def ai_stats(user=Depends(require_permission("ai_knowledge:view"))):
+    async def ai_stats(user=Depends(require_permission("ai_knowledge:view")), _feat=Depends(require_feature("ai"))):
         total_records = await db.ai_knowledge_records.count_documents({"is_active": {"$ne": False}})
         approved = await db.ai_knowledge_records.count_documents({"approval_status": "onayli"})
         total_pred = await db.ai_predictions.count_documents({})

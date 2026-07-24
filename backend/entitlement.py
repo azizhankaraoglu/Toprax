@@ -252,7 +252,15 @@ async def gather_and_compute_entitlement(
     }
 
 
-def register_entitlement_routes(api_router, db, current_user, require_permission, log_audit):
+def register_entitlement_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    # parametresini HİÇ ALMIYORDU — UFYD zincirinin (Destek→Cari Hareket→
+    # **Hakediş**→İcmal) bu halkası, God Mode'dan "ufyd" modülü kapatılsa
+    # bile HİÇBİR ZAMAN 403 dönmüyordu (server.py'nin çağrı satırı da
+    # require_feature'ı geçmiyordu — aynı anda iki ayrı eksiklik). Artık
+    # diğer tüm register_X_routes ile AYNI kalıp: parametre eklendi, no-op
+    # fallback ile geriye uyumlu, server.py çağrısı da güncellendi.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     # =================================================================
     # PRİM / KESİNTİ TANIMLARI (yönetilebilir katalog — SupportType ile AYNI desen)
@@ -261,6 +269,7 @@ def register_entitlement_routes(api_router, db, current_user, require_permission
     async def list_definitions(
         kind: Optional[str] = None, include_inactive: bool = False,
         user=Depends(require_permission("entitlement:view")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         filt = {} if include_inactive else {"is_active": True}
         if kind:
@@ -270,6 +279,7 @@ def register_entitlement_routes(api_router, db, current_user, require_permission
     @api_router.post("/entitlement/definitions")
     async def create_definition(
         body: DefinitionCreate, request: Request, user=Depends(require_permission("entitlement:definitions_manage")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         if body.kind not in ("prim", "kesinti"):
             raise HTTPException(400, "kind 'prim' veya 'kesinti' olmalı")
@@ -289,6 +299,7 @@ def register_entitlement_routes(api_router, db, current_user, require_permission
     async def update_definition(
         def_id: str, body: DefinitionUpdate, request: Request,
         user=Depends(require_permission("entitlement:definitions_manage")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         old = await db.entitlement_definitions.find_one({"id": def_id}, {"_id": 0})
         if not old:
@@ -307,6 +318,7 @@ def register_entitlement_routes(api_router, db, current_user, require_permission
     @api_router.post("/entitlement/definitions/seed-defaults")
     async def seed_default_definitions(
         request: Request, user=Depends(require_permission("entitlement:definitions_manage")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         created = []
         for d in DEFAULT_DEFINITIONS:
@@ -328,6 +340,7 @@ def register_entitlement_routes(api_router, db, current_user, require_permission
     @api_router.post("/entitlement/calculate")
     async def calculate_entitlement(
         body: EntitlementRequest, user=Depends(require_permission("entitlement:calculate")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         """Dry-run — hiçbir şey yazmaz, sadece önizleme döner."""
         return await gather_and_compute_entitlement(db, body)
@@ -336,6 +349,7 @@ def register_entitlement_routes(api_router, db, current_user, require_permission
     async def finalize_entitlement(
         production_cycle_id: str, body: EntitlementRequest, request: Request,
         user=Depends(require_permission("entitlement:finalize")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         if body.production_cycle_id != production_cycle_id:
             raise HTTPException(400, "URL ve body'deki production_cycle_id eşleşmiyor")
@@ -412,7 +426,8 @@ def register_entitlement_routes(api_router, db, current_user, require_permission
         return entitlement_doc
 
     @api_router.get("/entitlement/{production_cycle_id}")
-    async def get_entitlement(production_cycle_id: str, user=Depends(require_permission("entitlement:view"))):
+    async def get_entitlement(production_cycle_id: str, user=Depends(require_permission("entitlement:view")),
+                               _feat=Depends(require_feature("ufyd"))):
         doc = await db.entitlements.find_one({"production_cycle_id": production_cycle_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Bu üretim sezonu için henüz hakediş sonuçlandırılmamış")

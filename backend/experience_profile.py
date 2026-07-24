@@ -94,7 +94,8 @@ def register_experience_profile_routes(api_router, db, current_user, require_per
         return await db.experience_profiles.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
     @api_router.get("/experience-profiles/{profile_id}")
-    async def get_experience_profile(profile_id: str, user=Depends(require_permission("experience_profiles:view"))):
+    async def get_experience_profile(profile_id: str, user=Depends(require_permission("experience_profiles:view")),
+                                      _feat=Depends(require_feature("experience_profiles"))):
         doc = await db.experience_profiles.find_one({"id": profile_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Experience Profile bulunamadı")
@@ -102,7 +103,8 @@ def register_experience_profile_routes(api_router, db, current_user, require_per
 
     @api_router.post("/experience-profiles")
     async def create_experience_profile(body: ExperienceProfileCreate, request: Request,
-                                         user=Depends(require_permission("experience_profiles:manage"))):
+                                         user=Depends(require_permission("experience_profiles:manage")),
+                                         _feat=Depends(require_feature("experience_profiles"))):
         doc = body.model_dump()
         doc["id"] = str(uuid.uuid4())
         doc["is_active"] = True
@@ -115,7 +117,8 @@ def register_experience_profile_routes(api_router, db, current_user, require_per
 
     @api_router.put("/experience-profiles/{profile_id}")
     async def update_experience_profile(profile_id: str, body: ExperienceProfileUpdate, request: Request,
-                                         user=Depends(require_permission("experience_profiles:manage"))):
+                                         user=Depends(require_permission("experience_profiles:manage")),
+                                         _feat=Depends(require_feature("experience_profiles"))):
         old = await db.experience_profiles.find_one({"id": profile_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Experience Profile bulunamadı")
@@ -129,7 +132,8 @@ def register_experience_profile_routes(api_router, db, current_user, require_per
 
     @api_router.delete("/experience-profiles/{profile_id}")
     async def delete_experience_profile(profile_id: str, request: Request,
-                                         user=Depends(require_permission("experience_profiles:manage"))):
+                                         user=Depends(require_permission("experience_profiles:manage")),
+                                         _feat=Depends(require_feature("experience_profiles"))):
         """Soft delete (convention #3) — bu profile atanmış kullanıcılar
         ETKİLENMEZ, sadece `/me/experience` onlar için DEFAULT_EXPERIENCE'a
         düşer (bkz. modül docstring'i)."""
@@ -141,7 +145,8 @@ def register_experience_profile_routes(api_router, db, current_user, require_per
         return {"status": "deactivated"}
 
     @api_router.get("/users/{user_id}/experience-profile")
-    async def get_user_experience_profile(user_id: str, user=Depends(require_permission("experience_profiles:view"))):
+    async def get_user_experience_profile(user_id: str, user=Depends(require_permission("experience_profiles:view")),
+                                           _feat=Depends(require_feature("experience_profiles"))):
         target = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0, "totp_secret": 0})
         if not target:
             raise HTTPException(404, "Kullanıcı bulunamadı")
@@ -149,7 +154,8 @@ def register_experience_profile_routes(api_router, db, current_user, require_per
 
     @api_router.put("/users/{user_id}/experience-profile")
     async def assign_experience_profile(user_id: str, body: ProfileAssignRequest, request: Request,
-                                         user=Depends(require_permission("experience_profiles:manage"))):
+                                         user=Depends(require_permission("experience_profiles:manage")),
+                                         _feat=Depends(require_feature("experience_profiles"))):
         target = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0, "totp_secret": 0})
         if not target:
             raise HTTPException(404, "Kullanıcı bulunamadı")
@@ -166,7 +172,14 @@ def register_experience_profile_routes(api_router, db, current_user, require_per
     @api_router.get("/me/experience")
     async def my_experience(user=Depends(current_user)):
         """Mobil PWA'nın (IT-35) açılışta çektiği BİRLEŞİK konfigürasyon —
-        dashboard+menu+widget+quick action TEK response'ta (kabul kriteri)."""
+        dashboard+menu+widget+quick action TEK response'ta (kabul kriteri).
+
+        BİLİNÇLİ OLARAK require_feature("experience_profiles") ile
+        KİLİTLENMEDİ: bu uç mobil PWA'nın HER açılışta çektiği kendi-
+        profilini-okuma (öz-servis) ucudur, admin'in yönettiği bir "modül
+        ekranı" değildir. Modül God Mode'dan kapatılırsa DEFAULT_EXPERIENCE'a
+        (aşağıda zaten var olan fallback) düşer — PWA'yı 403 ile kırmak yerine
+        güvenli bir varsayılana düşmek burada doğru davranıştır."""
         profile_id = user.get("experience_profile_id")
         if not profile_id:
             return DEFAULT_EXPERIENCE

@@ -211,7 +211,8 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
             raise HTTPException(403, "Bu göreve erişim izniniz yok")
 
     @api_router.get("/field-ops/assignable-users")
-    async def list_assignable_users(user=Depends(require_permission("field_ops:view"))):
+    async def list_assignable_users(user=Depends(require_permission("field_ops:view")),
+                                     _feat=Depends(require_feature("field_ops"))):
         """(IT-23) Görev atama formlarında personel seçimi — `settings:users_view`
         (ayrı/daha geniş bir izin) İSTEMEZ BİLİNÇLİ OLARAK: field_ops:manage sahibi
         (örn. ziraat_muhendisi) kullanıcı yönetimi iznine sahip olmadan da saha
@@ -226,12 +227,14 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
     # TASK TYPE KATALOĞU
     # =================================================================
     @api_router.get("/task-types")
-    async def list_task_types(include_inactive: bool = False, user=Depends(require_permission("field_ops:view"))):
+    async def list_task_types(include_inactive: bool = False, user=Depends(require_permission("field_ops:view")),
+                               _feat=Depends(require_feature("field_ops"))):
         filt = {} if include_inactive else {"is_active": True}
         return await db.task_types.find(filt, {"_id": 0}).sort("name", 1).to_list(200)
 
     @api_router.post("/task-types")
-    async def create_task_type(body: TaskTypeCreate, request: Request, user=Depends(require_permission("field_ops:manage"))):
+    async def create_task_type(body: TaskTypeCreate, request: Request, user=Depends(require_permission("field_ops:manage")),
+                                _feat=Depends(require_feature("field_ops"))):
         doc = body.model_dump()
         doc["id"] = str(uuid.uuid4())
         doc["is_active"] = True
@@ -242,7 +245,8 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         return doc
 
     @api_router.put("/task-types/{type_id}")
-    async def update_task_type(type_id: str, body: TaskTypeUpdate, request: Request, user=Depends(require_permission("field_ops:manage"))):
+    async def update_task_type(type_id: str, body: TaskTypeUpdate, request: Request, user=Depends(require_permission("field_ops:manage")),
+                                _feat=Depends(require_feature("field_ops"))):
         old = await db.task_types.find_one({"id": type_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Görev tipi bulunamadı")
@@ -255,7 +259,8 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         return new
 
     @api_router.post("/task-types/seed-defaults")
-    async def seed_default_task_types(request: Request, user=Depends(require_permission("field_ops:manage"))):
+    async def seed_default_task_types(request: Request, user=Depends(require_permission("field_ops:manage")),
+                                       _feat=Depends(require_feature("field_ops"))):
         created = []
         for name in DEFAULT_TASK_TYPES:
             if await db.task_types.find_one({"name": name}, {"_id": 0}):
@@ -275,12 +280,14 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
     # İŞ EMRİ (WorkOrder) — oluşturunca TOPLU görev üretir
     # =================================================================
     @api_router.get("/work-orders")
-    async def list_work_orders(status: Optional[str] = None, user=Depends(require_permission("field_ops:view"))):
+    async def list_work_orders(status: Optional[str] = None, user=Depends(require_permission("field_ops:view")),
+                                _feat=Depends(require_feature("field_ops"))):
         filt = {"status": status} if status else {}
         return await db.work_orders.find(filt, {"_id": 0}).sort("created_at", -1).to_list(500)
 
     @api_router.get("/work-orders/{work_order_id}")
-    async def get_work_order(work_order_id: str, user=Depends(require_permission("field_ops:view"))):
+    async def get_work_order(work_order_id: str, user=Depends(require_permission("field_ops:view")),
+                              _feat=Depends(require_feature("field_ops"))):
         doc = await db.work_orders.find_one({"id": work_order_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "İş emri bulunamadı")
@@ -288,7 +295,8 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         return {"work_order": doc, "tasks": tasks}
 
     @api_router.post("/work-orders")
-    async def create_work_order(body: WorkOrderCreate, request: Request, user=Depends(require_permission("field_ops:manage"))):
+    async def create_work_order(body: WorkOrderCreate, request: Request, user=Depends(require_permission("field_ops:manage")),
+                                 _feat=Depends(require_feature("field_ops"))):
         task_type = await db.task_types.find_one({"id": body.task_type_id, "is_active": True}, {"_id": 0})
         if not task_type:
             raise HTTPException(404, "Görev tipi bulunamadı veya pasif")
@@ -363,14 +371,16 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         return await db.field_tasks.find(filt, {"_id": 0}).sort("planned_date", 1).to_list(1000)
 
     @api_router.get("/tasks/{task_id}")
-    async def get_field_task(task_id: str, user=Depends(require_permission("field_ops:view"))):
+    async def get_field_task(task_id: str, user=Depends(require_permission("field_ops:view")),
+                              _feat=Depends(require_feature("field_ops"))):
         doc = await db.field_tasks.find_one({"id": task_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Görev bulunamadı")
         return doc
 
     @api_router.post("/tasks")
-    async def create_field_task(body: TaskCreate, request: Request, user=Depends(require_permission("field_ops:manage"))):
+    async def create_field_task(body: TaskCreate, request: Request, user=Depends(require_permission("field_ops:manage")),
+                                 _feat=Depends(require_feature("field_ops"))):
         task_type = await db.task_types.find_one({"id": body.task_type_id, "is_active": True}, {"_id": 0})
         if not task_type:
             raise HTTPException(404, "Görev tipi bulunamadı veya pasif")
@@ -404,7 +414,8 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         return doc
 
     @api_router.put("/tasks/{task_id}/transition")
-    async def transition_field_task(task_id: str, body: TaskTransition, request: Request, user=Depends(current_user)):
+    async def transition_field_task(task_id: str, body: TaskTransition, request: Request, user=Depends(current_user),
+                                     _feat=Depends(require_feature("field_ops"))):
         old = await db.field_tasks.find_one({"id": task_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Görev bulunamadı")
@@ -439,7 +450,8 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         return new
 
     @api_router.put("/tasks/{task_id}/checklist")
-    async def toggle_task_checklist(task_id: str, body: ChecklistToggle, request: Request, user=Depends(current_user)):
+    async def toggle_task_checklist(task_id: str, body: ChecklistToggle, request: Request, user=Depends(current_user),
+                                     _feat=Depends(require_feature("field_ops"))):
         old = await db.field_tasks.find_one({"id": task_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Görev bulunamadı")
@@ -469,6 +481,7 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         task_id: Optional[str] = None, farmer_id: Optional[str] = None,
         parcel_id: Optional[str] = None, production_cycle_id: Optional[str] = None,
         user=Depends(require_permission("field_ops:view")),
+        _feat=Depends(require_feature("field_ops")),
     ):
         """(IT-23) farmer_id/parcel_id/production_cycle_id filtreleri — Ziyaret
         Geçmişi sekmesi (FarmerDetail/ParcelDetail/ProductionCycleDetail) için;
@@ -482,7 +495,8 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         return await db.visits.find(filt, {"_id": 0}).sort("started_at", -1).to_list(1000)
 
     @api_router.post("/visits")
-    async def create_visit(body: VisitCreate, request: Request, user=Depends(current_user)):
+    async def create_visit(body: VisitCreate, request: Request, user=Depends(current_user),
+                            _feat=Depends(require_feature("field_ops"))):
         task = await db.field_tasks.find_one({"id": body.task_id}, {"_id": 0})
         if not task:
             raise HTTPException(404, "Görev bulunamadı")
@@ -506,7 +520,8 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         return doc
 
     @api_router.put("/visits/{visit_id}")
-    async def update_visit(visit_id: str, body: VisitUpdate, request: Request, user=Depends(current_user)):
+    async def update_visit(visit_id: str, body: VisitUpdate, request: Request, user=Depends(current_user),
+                            _feat=Depends(require_feature("field_ops"))):
         old = await db.visits.find_one({"id": visit_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Ziyaret bulunamadı")
@@ -531,13 +546,14 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
     # geriye dönük kırılma yok.
     # =================================================================
     @api_router.get("/portal/visits")
-    async def portal_list_my_visits(user=Depends(current_user)):
+    async def portal_list_my_visits(user=Depends(current_user), _feat=Depends(require_feature("field_ops"))):
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi erişebilir")
         return await db.visits.find({"farmer_id": user["farmer_id"]}, {"_id": 0}).sort("started_at", -1).to_list(100)
 
     @api_router.put("/portal/visits/{visit_id}/confirm-by-farmer")
-    async def portal_confirm_visit(visit_id: str, request: Request, user=Depends(current_user)):
+    async def portal_confirm_visit(visit_id: str, request: Request, user=Depends(current_user),
+                                    _feat=Depends(require_feature("field_ops"))):
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi onaylayabilir")
         old = await db.visits.find_one({"id": visit_id}, {"_id": 0})
@@ -561,7 +577,8 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
     # koleksiyonu YOK.
     # =================================================================
     @api_router.get("/field-ops/dashboard")
-    async def field_ops_dashboard(user=Depends(require_permission("field_ops:view"))):
+    async def field_ops_dashboard(user=Depends(require_permission("field_ops:view")),
+                                   _feat=Depends(require_feature("field_ops"))):
         now = datetime.now(timezone.utc)
         today_str = now.date().isoformat()
         TERMINAL = {"kapandi", "iptal_edildi"}

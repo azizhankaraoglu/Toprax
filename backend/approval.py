@@ -154,18 +154,21 @@ def register_approval_routes(api_router, db, current_user, require_permission, l
 
     # ---------------- Onay Kuralı Tanımı (Ayarlar) ----------------
     @api_router.get("/approval-chains")
-    async def list_rules(user=Depends(require_permission("approvals:rules_manage"))):
+    async def list_rules(user=Depends(require_permission("approvals:rules_manage")),
+                          _feat=Depends(require_feature("approvals"))):
         return await db.approval_chain_rules.find({}, {"_id": 0}).sort("process", 1).to_list(200)
 
     @api_router.get("/approval-chains/processes")
-    async def list_processes(user=Depends(require_permission("approvals:rules_manage"))):
+    async def list_processes(user=Depends(require_permission("approvals:rules_manage")),
+                              _feat=Depends(require_feature("approvals"))):
         """UI'nin dropdown'ı için — yeni bir süreç eklemek SADECE PROCESS_LABELS'a
         bir satır eklemek demektir, bu endpoint DEĞİŞMEZ."""
         return [{"key": k, "label": v} for k, v in PROCESS_LABELS.items()]
 
     @api_router.post("/approval-chains")
     async def create_rule(body: ApprovalChainRuleCreate, request: Request,
-                           user=Depends(require_permission("approvals:rules_manage"))):
+                           user=Depends(require_permission("approvals:rules_manage")),
+                           _feat=Depends(require_feature("approvals"))):
         existing = await db.approval_chain_rules.find_one({"process": body.process, "is_active": True})
         if existing:
             raise HTTPException(400, "Bu süreç için zaten aktif bir onay kuralı var — önce onu pasifleştirin")
@@ -179,7 +182,8 @@ def register_approval_routes(api_router, db, current_user, require_permission, l
 
     @api_router.put("/approval-chains/{rule_id}")
     async def update_rule(rule_id: str, body: ApprovalChainRuleUpdate, request: Request,
-                           user=Depends(require_permission("approvals:rules_manage"))):
+                           user=Depends(require_permission("approvals:rules_manage")),
+                           _feat=Depends(require_feature("approvals"))):
         old = await db.approval_chain_rules.find_one({"id": rule_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Onay kuralı bulunamadı")
@@ -201,7 +205,8 @@ def register_approval_routes(api_router, db, current_user, require_permission, l
         return docs
 
     @api_router.get("/approvals/{instance_id}")
-    async def get_instance(instance_id: str, user=Depends(require_permission("approvals:view_pending"))):
+    async def get_instance(instance_id: str, user=Depends(require_permission("approvals:view_pending")),
+                            _feat=Depends(require_feature("approvals"))):
         doc = await db.approval_instances.find_one({"id": instance_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Onay kaydı bulunamadı")
@@ -209,7 +214,8 @@ def register_approval_routes(api_router, db, current_user, require_permission, l
 
     @api_router.post("/approvals/{instance_id}/decide")
     async def decide(instance_id: str, body: ApprovalDecision, request: Request,
-                      user=Depends(require_permission("approvals:decide"))):
+                      user=Depends(require_permission("approvals:decide")),
+                      _feat=Depends(require_feature("approvals"))):
         inst = await db.approval_instances.find_one({"id": instance_id}, {"_id": 0})
         if not inst:
             raise HTTPException(404, "Onay kaydı bulunamadı")

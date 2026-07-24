@@ -485,17 +485,22 @@ def _geometry_bbox(geometry: Optional[dict]) -> Optional[Tuple[float, float, flo
     return (min(lons), min(lats), max(lons), max(lats))
 
 
-def register_satellite_routes(api_router, db, current_user, require_permission, log_audit):
+def register_satellite_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
     """
     Mevcut `/satellite/ndvi/*` uçları (extras.py) DEĞİŞMEDEN kalıyor —
     bu fonksiyon SADECE araştırma raporunun getirdiği YENİ yetenekler
     için (yangın alarmı + VHR tasking talebi + sağlayıcı durumu) uç ekler.
+
+    MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    parametresini HİÇ ALMIYORDU — "gis" (Coğrafi Bilgi Sistemi / Uydu)
+    modülü God Mode'dan kapatılsa bile bu uçlar hiçbir zaman 403 dönmüyordu.
     """
     from fastapi import HTTPException, Depends, Request
     from pydantic import BaseModel
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     @api_router.get("/satellite/providers/status")
-    async def satellite_providers_status(user=Depends(current_user)):
+    async def satellite_providers_status(user=Depends(current_user), _feat=Depends(require_feature("gis"))):
         """Ayarlar/Uydu ekranının hangi yeteneğin GERÇEK mi DEMO mu
         çalıştığını göstermesi için (Integration Center kartlarının yanında)."""
         result = {}
@@ -505,7 +510,8 @@ def register_satellite_routes(api_router, db, current_user, require_permission, 
         return result
 
     @api_router.get("/satellite/fire-alerts/{parcel_id}")
-    async def fire_alerts(parcel_id: str, days: int = 3, user=Depends(current_user)):
+    async def fire_alerts(parcel_id: str, days: int = 3, user=Depends(current_user),
+                           _feat=Depends(require_feature("gis"))):
         parcel = await db.parcels.find_one({"id": parcel_id}, {"_id": 0})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")
@@ -531,7 +537,8 @@ def register_satellite_routes(api_router, db, current_user, require_permission, 
 
     @api_router.post("/satellite/tasking-request")
     async def tasking_request(body: TaskingRequestBody, request: Request,
-                               user=Depends(require_permission("field_ops:view"))):
+                               user=Depends(require_permission("field_ops:view")),
+                               _feat=Depends(require_feature("gis"))):
         parcel = await db.parcels.find_one({"id": body.parcel_id}, {"_id": 0})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")
@@ -550,7 +557,7 @@ def register_satellite_routes(api_router, db, current_user, require_permission, 
         return {"parcel_id": body.parcel_id, "provider": provider.name, **result}
 
     @api_router.get("/satellite/tasking-quota")
-    async def tasking_quota_status(user=Depends(current_user)):
+    async def tasking_quota_status(user=Depends(current_user), _feat=Depends(require_feature("gis"))):
         """1.3 — Aylık VHR tasking kotası + tenant abonelik seviyesi (kademeli kalite)."""
         q = await _tasking_quota(db)
         tier = await resolve_tenant_satellite_tier(db)
@@ -558,5 +565,5 @@ def register_satellite_routes(api_router, db, current_user, require_permission, 
                 "tier": tier, "tasking_allowed": SATELLITE_TIERS.get(tier, {}).get("tasking", False)}
 
     @api_router.get("/satellite/tasking-requests")
-    async def list_tasking_requests(user=Depends(current_user)):
+    async def list_tasking_requests(user=Depends(current_user), _feat=Depends(require_feature("gis"))):
         return await db.satellite_tasking_requests.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)

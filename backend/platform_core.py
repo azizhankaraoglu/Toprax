@@ -48,12 +48,50 @@ from pydantic import BaseModel
 from typing import Optional, Dict, List
 import migrations_engine as _migrations_engine
 
+# SON HAL (2026-07-23, mimari düzeltme) — bu sözlük ARTIK TEK KAYNAK.
+# Önceden burada 5, god_mode.py'de (MODULE_TOGGLE_LABELS) ayrı ve KISMEN
+# ÇAKIŞAN (ai/gis/lms ortak, geri kalanı farklı) 29 anahtar vardı — aynı
+# `feature_flags` koleksiyonunu iki farklı "katalog" üzerinden yönetmek
+# hem kafa karıştırıyordu hem de bir bug'a yol açtı: `/feature-flags`
+# (aşağıda, nav'ın gizleme mantığının okuduğu TEK endpoint) sadece BU
+# sözlükteki anahtarları döndürüyordu — god_mode.py'nin 29 anahtarının
+# çoğu bu listede YOKTU, yani bir modül God Mode'dan kapatılsa bile
+# frontend nav'ı bunu asla öğrenemiyordu (backend 403 dönse de menüde
+# görünmeye devam ediyordu). Artık god_mode.py kendi sözlüğünü TANIMLAMAZ,
+# buradan import eder (bkz. o dosyadaki import satırı) — tek kaynak, tek
+# doğru.
 FEATURE_FLAG_LABELS = {
-    "ai": "Yapay Zeka (AI Copilot / Hastalık Tespiti)",
+    "ai": "Yapay Zeka (AI Copilot / Hastalık Tespiti / AI Bilgi Kütüphanesi)",
     "drone": "Drone Entegrasyonu",
     "whatsapp": "WhatsApp Kanalı",
     "lms": "Eğitim Merkezi (Farmer LMS)",
     "gis": "Coğrafi Bilgi Sistemi (Harita Paneli / Uydu)",
+    "farmer": "Çiftçi Yönetimi",
+    "parcel": "Parsel / GIS Veri Girişi",
+    "production": "Üretim Sezonu",
+    "factory": "Fabrika / Kantar Operasyonları",
+    "ufyd": "UFYD (Destek / Ledger / Hakediş)",
+    "communication": "İletişim Merkezi",
+    "contracts": "Sözleşmeler",
+    "planting": "Ekim Kaydı & Ekim Karar Motoru",
+    "irrigation": "Sulama & Kaynak Yönetimi",
+    "operations": "Operasyon Yönetimi",
+    "soil": "Toprak Analizleri",
+    "remote_sensing": "Uydu / NDVI / Uzaktan Algılama",
+    "field_ops": "Saha Operasyonları / Görev Yönetimi",
+    "automation": "Otomasyon Kuralları",
+    "forms": "Formlar & Anket",
+    "logistics": "Lojistik & Randevu",
+    "reports": "Raporlar (Verimlilik / Çiftçi Karne / Saha Raporları)",
+    "invoicing": "E-Fatura / İrsaliye",
+    "admin_areas": "İdari Alanlar",
+    "organization": "Organizasyon Hiyerarşisi",
+    "approvals": "Onay Zincirleri / Onay Bekleyenlerim",
+    "case_management": "Bize Ulaşın (Destek Talepleri)",
+    "integration_hub": "Integration Hub",
+    "developer_portal": "Geliştirici Portalı",
+    "experience_profiles": "Experience Profile",
+    "audit": "Audit Log",
 }
 
 HEALTH_STATUS_LABELS = {"saglikli": "Sağlıklı", "uyari": "Uyarı", "hata": "Hata", "kurulu_degil": "Kurulu Değil"}
@@ -193,8 +231,23 @@ async def _integration_status(db, itype: str) -> dict:
 def register_platform_core_routes(api_router, db, current_user, require_permission, log_audit):
 
     # ---------------- Feature Flags ----------------
+    # SON HAL (2026-07-23, bug düzeltmesi) — bu uç BİLİNÇLİ OLARAK
+    # require_permission("platform_core:view") YERİNE sade current_user
+    # kullanır: Layout.jsx sidebar'da hangi modülün açık/kapalı olduğunu
+    # görmek için TÜM oturum açmış kullanıcılar bu uca ihtiyaç duyar (saha
+    # personeli, kantar personeli, toprak personeli, çiftçi — bunların
+    # HİÇBİRİNDE platform_core:view izni yok, bkz. permissions.py). Önceden
+    # bu uç onlar için 403 dönüyordu, Layout.jsx sessizce yutuyordu
+    # (.catch(() => {})), flagsByKey hep {} kalıyordu, yani kapatılan bir
+    # modül ilce_yoneticisi/ziraat_muhendisi ALTINDAKİ hiçbir rol için asla
+    # menüden gizlenmiyordu. "Görüntüle" (view) izni burada YÖNETİM
+    # ekranına (PlatformCore.jsx'in Feature Flags sekmesi) erişimi değil,
+    # ham aç/kapa durumunu okumayı ifade ediyordu — iki farklı kavram
+    # aynı permission'a bağlanmıştı. Asıl yönetim uçları (seed-defaults,
+    # PUT) hâlâ platform_core:manage/view ile korunuyor, sadece bu OKUMA
+    # ucu serbestleşti.
     @api_router.get("/feature-flags")
-    async def list_feature_flags(user=Depends(require_permission("platform_core:view"))):
+    async def list_feature_flags(user=Depends(current_user)):
         docs = await db.feature_flags.find({}, {"_id": 0}).to_list(100)
         by_key = {d["key"]: d for d in docs}
         return [

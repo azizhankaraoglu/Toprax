@@ -155,7 +155,13 @@ class DeliveryCodeConfirm(BaseModel):
     code: str
 
 
-def register_support_routes(api_router, db, current_user, require_permission, log_audit):
+def register_support_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    # parametresini HİÇ ALMIYORDU — UFYD zincirinin BİRİNCİ halkası
+    # (Destek Talebi/IT-18) God Mode'dan "ufyd" modülü kapatılsa bile HİÇBİR
+    # ZAMAN 403 dönmüyordu (server.py çağrı satırı da require_feature'ı
+    # geçmiyordu). Artık diğer register_X_routes ile AYNI kalıp.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     async def _handle_approval_decided(db, event_type, payload):
         """(IT-07b) approval.py'nin yayınladığı SADECE process="support_request"
@@ -210,6 +216,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
     async def list_support_types(
         include_inactive: bool = False,
         user=Depends(require_permission("support:catalog_view")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         filt = {} if include_inactive else {"is_active": True}
         return await db.support_types.find(filt, {"_id": 0}).sort("name", 1).to_list(200)
@@ -218,6 +225,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
     async def create_support_type(
         body: SupportTypeCreate, request: Request,
         user=Depends(require_permission("support:catalog_manage")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         doc = body.model_dump()
         doc["id"] = str(uuid.uuid4())
@@ -233,6 +241,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
     async def update_support_type(
         type_id: str, body: SupportTypeUpdate, request: Request,
         user=Depends(require_permission("support:catalog_manage")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         old = await db.support_types.find_one({"id": type_id}, {"_id": 0})
         if not old:
@@ -249,6 +258,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
     @api_router.post("/support-types/seed-defaults")
     async def seed_default_support_types(
         request: Request, user=Depends(require_permission("support:catalog_manage")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         """Idempotent: Mazot/Gübre/Tohum/İlaç/Makine/Sulama/Nakliye/Avans/Diğer — sadece eksik olanlar eklenir."""
         created = []
@@ -278,6 +288,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
         production_cycle_id: Optional[str] = None,
         status: Optional[str] = None,
         user=Depends(require_permission("support:requests_view")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         filt = {}
         if farmer_id:
@@ -289,7 +300,8 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
         return await db.support_requests.find(filt, {"_id": 0}).sort("requested_at", -1).to_list(500)
 
     @api_router.get("/support-requests/{request_id}")
-    async def get_support_request(request_id: str, user=Depends(require_permission("support:requests_view"))):
+    async def get_support_request(request_id: str, user=Depends(require_permission("support:requests_view")),
+                                   _feat=Depends(require_feature("ufyd"))):
         doc = await db.support_requests.find_one({"id": request_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Destek talebi bulunamadı")
@@ -299,6 +311,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
     async def create_support_request(
         body: SupportRequestCreate, request: Request,
         user=Depends(require_permission("support:requests_manage")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         farmer = await db.farmers.find_one({"id": body.farmer_id}, {"_id": 0})
         if not farmer:
@@ -325,6 +338,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
     async def transition_support_request(
         request_id: str, body: SupportRequestTransition, request: Request,
         user=Depends(require_permission("support:requests_manage")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         old = await db.support_requests.find_one({"id": request_id}, {"_id": 0})
         if not old:
@@ -427,6 +441,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
     async def create_delivery_code(
         request_id: str, request: Request,
         user=Depends(require_permission("support:requests_manage")),
+        _feat=Depends(require_feature("ufyd")),
     ):
         req = await db.support_requests.find_one({"id": request_id}, {"_id": 0})
         if not req:
@@ -460,14 +475,14 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
     # /farmer/* tarzı uç burada tanımlanır).
     # =================================================================
     @api_router.get("/portal/support-types")
-    async def portal_list_support_types(user=Depends(current_user)):
+    async def portal_list_support_types(user=Depends(current_user), _feat=Depends(require_feature("ufyd"))):
         """Çiftçi kendi talep formunda seçecek — /support-types (support:catalog_view) ciftci'ye kapalı (bkz. permissions.py "ciftci": [])."""
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi erişebilir")
         return await db.support_types.find({"is_active": True}, {"_id": 0}).sort("name", 1).to_list(200)
 
     @api_router.get("/portal/production-cycles")
-    async def portal_list_my_production_cycles(user=Depends(current_user)):
+    async def portal_list_my_production_cycles(user=Depends(current_user), _feat=Depends(require_feature("ufyd"))):
         """İptal edilmiş sezonlar hariç — yeni bir destek talebi iptal edilmiş bir
         sezona bağlanmamalı (tamamlanmış sezonlar dahil: hasat sonrası nakliye vb.
         destek talepleri hâlâ anlamlı)."""
@@ -480,6 +495,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
     @api_router.get("/portal/support-requests")
     async def portal_list_support_requests(
         production_cycle_id: Optional[str] = None, user=Depends(current_user),
+        _feat=Depends(require_feature("ufyd")),
     ):
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi erişebilir")
@@ -491,6 +507,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
     @api_router.post("/portal/support-requests")
     async def portal_create_support_request(
         body: SupportRequestPortalCreate, request: Request, user=Depends(current_user),
+        _feat=Depends(require_feature("ufyd")),
     ):
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi talep oluşturabilir")
@@ -522,6 +539,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
     @api_router.post("/portal/support-requests/confirm-delivery-code")
     async def portal_confirm_delivery_code(
         body: DeliveryCodeConfirm, request: Request, user=Depends(current_user),
+        _feat=Depends(require_feature("ufyd")),
     ):
         """(IT-39) Çiftçi personelden aldığı teslim kodunu KENDİ cihazından
         girer — bu çağrı `ciftci_onayladi` geçişini (`confirmation_method=

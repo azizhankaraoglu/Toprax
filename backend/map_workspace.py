@@ -32,15 +32,22 @@ class MapWorkspaceSave(BaseModel):
     visible_layers: Optional[List[str]] = None  # IT-15 — açık katman anahtarları, opak
 
 
-def register_map_workspace_routes(api_router, db, current_user, require_permission, log_audit):
+def register_map_workspace_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    # parametresini HİÇ ALMIYORDU — "gis" (Harita Paneli / Uydu) modülü
+    # God Mode'dan kapatılsa bile bu kişisel çalışma alanı uçları hiçbir
+    # zaman 403 dönmüyordu.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     @api_router.get("/map-workspaces/me")
-    async def get_my_map_workspace(user=Depends(require_permission("parcels:view"))):
+    async def get_my_map_workspace(user=Depends(require_permission("parcels:view")),
+                                    _feat=Depends(require_feature("gis"))):
         """Kayıtlı bir çalışma alanı yoksa null döner — frontend varsayılanları kullanır."""
         return await db.map_workspaces.find_one({"user_id": user["id"]}, {"_id": 0})
 
     @api_router.put("/map-workspaces/me")
-    async def save_my_map_workspace(body: MapWorkspaceSave, user=Depends(require_permission("parcels:view"))):
+    async def save_my_map_workspace(body: MapWorkspaceSave, user=Depends(require_permission("parcels:view")),
+                                     _feat=Depends(require_feature("gis"))):
         """Idempotent upsert — kullanıcı başına tek kayıt."""
         existing = await db.map_workspaces.find_one({"user_id": user["id"]}, {"_id": 0})
         updates = body.model_dump()
@@ -54,7 +61,8 @@ def register_map_workspace_routes(api_router, db, current_user, require_permissi
         return doc
 
     @api_router.delete("/map-workspaces/me")
-    async def reset_my_map_workspace(user=Depends(require_permission("parcels:view"))):
+    async def reset_my_map_workspace(user=Depends(require_permission("parcels:view")),
+                                      _feat=Depends(require_feature("gis"))):
         """Kayıtlı çalışma alanını siler — frontend varsayılanlara döner."""
         result = await db.map_workspaces.delete_one({"user_id": user["id"]})
         return {"status": "deleted" if result.deleted_count else "not_found"}

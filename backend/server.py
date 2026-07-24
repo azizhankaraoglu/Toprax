@@ -898,7 +898,8 @@ async def list_farmers(
 
 
 @api_router.get("/farmers/{farmer_id}")
-async def get_farmer_360(farmer_id: str, user=Depends(require_permission("farmers:view"))):
+async def get_farmer_360(farmer_id: str, user=Depends(require_permission("farmers:view")),
+                          _feature=Depends(require_feature("farmer"))):
     """
     Çiftçi 360° GÖRÜNÜM:
     - Çiftçi temel bilgileri
@@ -987,7 +988,7 @@ async def get_farmer_360(farmer_id: str, user=Depends(require_permission("farmer
 
 
 @api_router.post("/farmers")
-async def create_farmer(body: FarmerCreate, user=Depends(current_user)):
+async def create_farmer(body: FarmerCreate, user=Depends(current_user), _feature=Depends(require_feature("farmer"))):
     """Yeni çiftçi ekle (admin yetkisi)"""
     if not is_admin(user):
         raise HTTPException(403, "Yetkiniz yok")
@@ -1017,7 +1018,8 @@ async def create_farmer(body: FarmerCreate, user=Depends(current_user)):
 
 @api_router.put("/farmers/{farmer_id}")
 async def update_farmer(farmer_id: str, body: FarmerUpdate, request: Request,
-                         user=Depends(require_permission("farmers:edit"))):
+                         user=Depends(require_permission("farmers:edit")),
+                         _feature=Depends(require_feature("farmer"))):
     """Çiftçi bilgi güncelle (IT-04: is_admin() yerine granüler farmers:edit izni)"""
     old = await db.farmers.find_one({"id": farmer_id}, {"_id": 0})
     if not old:
@@ -1041,7 +1043,8 @@ async def update_farmer(farmer_id: str, body: FarmerUpdate, request: Request,
 
 @api_router.delete("/farmers/{farmer_id}")
 async def delete_farmer(farmer_id: str, request: Request,
-                        user=Depends(require_permission("farmers:delete"))):
+                        user=Depends(require_permission("farmers:delete")),
+                        _feature=Depends(require_feature("farmer"))):
     """
     Çiftçiyi siler (soft delete, konvansiyon #3). Bağlı aktif parsel/sözleşme
     varsa engellenir — parseldeki 409 deseniyle aynı; önce o kayıtların
@@ -1109,7 +1112,8 @@ async def list_parcels(
 # olmalı — aksi halde Starlette "filter-options"ı bir parcel_id sanır
 # (bkz. CLAUDE.md'nin /parcels/bulk-update route-sırası tuzağı).
 @api_router.get("/parcels/filter-options")
-async def parcel_filter_options(user=Depends(require_permission("parcels:view"))):
+async def parcel_filter_options(user=Depends(require_permission("parcels:view")),
+                                 _feature=Depends(require_feature("parcel"))):
     base = {"is_active": {"$ne": False}}
 
     async def _distinct(field):
@@ -1152,7 +1156,8 @@ async def parcel_filter_options(user=Depends(require_permission("parcels:view"))
 
 
 @api_router.get("/parcels/{parcel_id}")
-async def get_parcel_detail(parcel_id: str, user=Depends(require_permission("parcels:view"))):
+async def get_parcel_detail(parcel_id: str, user=Depends(require_permission("parcels:view")),
+                             _feature=Depends(require_feature("parcel"))):
     """
     Parsel detay sayfası:
     - Parsel bilgisi (harita, alan, toprak)
@@ -1216,7 +1221,8 @@ async def get_parcel_detail(parcel_id: str, user=Depends(require_permission("par
 
 
 @api_router.post("/parcels")
-async def create_parcel(body: ParcelCreate, request: Request, user=Depends(current_user)):
+async def create_parcel(body: ParcelCreate, request: Request, user=Depends(current_user),
+                         _feature=Depends(require_feature("parcel"))):
     """Yeni parsel oluştur (manuel form veya harita çizim aracıyla)"""
     if not is_admin(user):
         raise HTTPException(403, "Yetkiniz yok")
@@ -1298,7 +1304,8 @@ class ParcelBulkUpdateRequest(BaseModel):
 
 @api_router.put("/parcels/bulk-update")
 async def bulk_update_parcels(body: ParcelBulkUpdateRequest, request: Request,
-                               user=Depends(require_permission("parcels:edit"))):
+                               user=Depends(require_permission("parcels:edit")),
+                               _feature=Depends(require_feature("parcel"))):
     """
     IT-15 — çoklu parsel toplu işlem (haritada şekille/tıklayarak seçilen parseller).
     update_parcel ile AYNI iş mantığı (risk_level->risk_label senkronu dahil), sadece
@@ -1338,7 +1345,8 @@ class ParcelBulkDeleteRequest(BaseModel):
 
 @api_router.post("/parcels/bulk-delete")
 async def bulk_delete_parcels(body: ParcelBulkDeleteRequest, request: Request,
-                              user=Depends(require_min_role("fabrika_muduru"))):
+                              user=Depends(require_min_role("fabrika_muduru")),
+                              _feature=Depends(require_feature("parcel"))):
     """
     Çoklu parsel toplu SOFT-delete (#3). Bağlı AKTİF sözleşmesi olan parseller
     silinmez — atlanıp raporlanır (tekil DELETE'in 409 guard'ı ile AYNI kural).
@@ -1368,7 +1376,8 @@ async def bulk_delete_parcels(body: ParcelBulkDeleteRequest, request: Request,
 
 @api_router.put("/parcels/{parcel_id}")
 async def update_parcel(parcel_id: str, body: ParcelUpdate, request: Request,
-                         user=Depends(require_permission("parcels:edit"))):
+                         user=Depends(require_permission("parcels:edit")),
+                         _feature=Depends(require_feature("parcel"))):
     """Parsel bilgilerini günceller (harita üzerinden geometri düzenleme dahil; IT-04: granüler parcels:edit izni)"""
     old = await db.parcels.find_one({"id": parcel_id}, {"_id": 0})
     if not old:
@@ -1403,7 +1412,8 @@ async def update_parcel(parcel_id: str, body: ParcelUpdate, request: Request,
 
 
 @api_router.delete("/parcels/{parcel_id}")
-async def delete_parcel(parcel_id: str, request: Request, user=Depends(require_min_role("fabrika_muduru"))):
+async def delete_parcel(parcel_id: str, request: Request, user=Depends(require_min_role("fabrika_muduru")),
+                         _feature=Depends(require_feature("parcel"))):
     """
     Parseli siler. Bağlı sözleşme/ekim/verim kaydı varsa engellenir —
     veri bütünlüğü için önce o kayıtların kapatılması/taşınması gerekir.
@@ -1445,7 +1455,8 @@ class ParcelSplitRequest(BaseModel):
 
 @api_router.post("/parcels/{parcel_id}/split")
 async def split_parcel(parcel_id: str, body: ParcelSplitRequest, request: Request,
-                        user=Depends(require_min_role("ziraat_muhendisi"))):
+                        user=Depends(require_min_role("ziraat_muhendisi")),
+                        _feature=Depends(require_feature("parcel"))):
     """
     Parseli böler: orijinal parsel silinir (veya arşivlenir), yerine
     verilen geometrilerle N yeni parsel oluşturulur. Sözleşme/ekim geçmişi
@@ -1518,7 +1529,8 @@ class ParcelMergeRequest(BaseModel):
 
 @api_router.post("/parcels/merge")
 async def merge_parcels(body: ParcelMergeRequest, request: Request,
-                         user=Depends(require_min_role("ziraat_muhendisi"))):
+                         user=Depends(require_min_role("ziraat_muhendisi")),
+                         _feature=Depends(require_feature("parcel"))):
     """
     Birden fazla parseli tek parselde birleştirir. Birleştirilecek
     parsellerin AYNI ÇİFTÇİYE ait olması zorunludur (farklı çiftçilerin
@@ -1583,7 +1595,8 @@ class GeoJSONImportRequest(BaseModel):
 
 @api_router.post("/parcels/import-geojson")
 async def import_parcels_geojson(body: GeoJSONImportRequest, request: Request,
-                                  user=Depends(require_min_role("ziraat_muhendisi"))):
+                                  user=Depends(require_min_role("ziraat_muhendisi")),
+                                  _feature=Depends(require_feature("parcel"))):
     """
     GeoJSON FeatureCollection'dan toplu parsel oluşturur. Her feature'ın
     geometry'si Polygon olmalı. properties içinde farmer_id/name/village
@@ -2752,7 +2765,7 @@ register_extra_routes(api_router, db, current_user, is_admin, require_feature)
 # göre genişletildi): yangın alarmı + VHR tasking talebi + sağlayıcı durumu
 # uçları. Mevcut /satellite/ndvi/* uçları extras.py'de KALIYOR (yukarıda).
 from satellite_provider import register_satellite_routes
-register_satellite_routes(api_router, db, current_user, require_permission, log_audit)
+register_satellite_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Saha veri toplama (form builder) modülü
 from forms_module import register_form_routes
@@ -2808,7 +2821,7 @@ register_favorite_routes(api_router, db, current_user, require_permission, log_a
 # Geo Dosya İçe Aktarma (IT-13.5) — SHP/GeoJSON/KML/DXF ayrıştırma +
 # WGS84 koordinat dönüşümü. Sadece AYRIŞTIRIR, kaydetmez (bkz. geo_import.py).
 from geo_import import register_geo_import_routes
-register_geo_import_routes(api_router, db, current_user, require_permission, log_audit)
+register_geo_import_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # İdari Alanlar + Demografi + Layer v1 (IT-13.6) — il/ilçe/mahalle sınır
 # geometrileri, IT-13.5 ile içe aktarılır (sistemde hazır sınır YOK).
@@ -2831,7 +2844,7 @@ register_agronomy_routes(api_router, db, current_user, require_permission, log_a
 # Karne Puanlama Motoru (SON HAL) — rastgele seed skorların yerine gerçek
 # verilerden parametrik ağırlıklı hesap + "neden bu skor?" breakdown'u.
 from karne_engine import register_karne_engine_routes
-register_karne_engine_routes(api_router, db, current_user, require_permission, log_audit)
+register_karne_engine_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Dosya Depolama (IT-04) — basit dosya/resim upload + field_definitions
 # file/image/multifile alan tiplerinin ve "Belgeler" sekmesinin backend'i.
@@ -2841,12 +2854,12 @@ register_storage_routes(api_router, db, current_user, log_audit)
 # Harita Paneli — Kişisel Çalışma Alanı (IT-14) — widget seçimi + harita
 # görünümü + aktif filtrenin kullanıcı başına tek kayıt olarak saklanması.
 from map_workspace import register_map_workspace_routes
-register_map_workspace_routes(api_router, db, current_user, require_permission, log_audit)
+register_map_workspace_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Harita Snapshot (IT-16) — map_workspace'ten AYRI: adlandırılmış, çoklu,
 # paylaşılabilir harita görünümü kayıtları (saved_queries ile aynı kalıp).
 from map_snapshots import register_map_snapshot_routes
-register_map_snapshot_routes(api_router, db, current_user, require_permission, log_audit)
+register_map_snapshot_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Financial Ledger + Cari Hesap (IT-19 / FAZ 7 — UFYD devam) — immutable
 # ledger_entries (sadece POST + reverse, DELETE/PUT YOK); support.py bunu
@@ -2870,18 +2883,18 @@ register_approval_routes(api_router, db, current_user, require_permission, log_a
 # SupportType katalog CRUD + 9 durumlu SupportRequest akışı + çiftçi
 # portalı uçları (current_user role=="ciftci" kontrolü /farmer/* ile aynı desen).
 from support import register_support_routes
-register_support_routes(api_router, db, current_user, require_permission, log_audit)
+register_support_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Hakediş Motoru (IT-20 / FAZ 7 — UFYD devam) — Prim/Kesinti katalog CRUD +
 # /entitlement/calculate (dry-run) + /entitlement/{id}/finalize (Ledger'a
 # yazar, idempotent) + /entitlement/{id} (sonuç sorgulama).
 from entitlement import register_entitlement_routes
-register_entitlement_routes(api_router, db, current_user, require_permission, log_audit)
+register_entitlement_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # İcmal/Mutabakat Belgesi + Finansal Simülasyon + UFYD Dashboard
 # (IT-21 / FAZ 7 — UFYD TAMAMLANIYOR).
 from reconciliation import register_reconciliation_routes
-register_reconciliation_routes(api_router, db, current_user, require_permission, log_audit)
+register_reconciliation_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Saha Operasyonları: İş Emri / Görev / Ziyaret Üçlü Modeli
 # (IT-22 / FAZ 8 — Sprint 8 başlangıcı).
@@ -2924,7 +2937,7 @@ register_api_key_routes(api_router, raw_db, require_permission, log_audit, requi
 # Swagger (/docs) FastAPI varsayilaniyla zaten acik, burada sadece Postman
 # collection indirme + changelog uclari eklenir.
 from dev_portal import register_dev_portal_routes
-register_dev_portal_routes(api_router)
+register_dev_portal_routes(api_router, require_feature)
 
 # PR-15 (ROADMAP-URUNLESTIRME.md): KVKK acik riza kayit mekanizmasi
 # (genel amacli -- bkz. docs/legal/KVKK-AYDINLATMA-METNI.md Bolum 6).
@@ -2934,17 +2947,17 @@ register_consent_routes(api_router, db, current_user, log_audit)
 # Communication Hub: Kanal Provider Pattern + Şablon Yönetimi + Gönderim +
 # Kişi Kartı İletişim Timeline'ı (IT-25 / FAZ 9 başlangıç).
 from communications import register_communication_routes
-register_communication_routes(api_router, db, current_user, require_permission, log_audit)
+register_communication_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Kampanya + Segment (saved_queries üzerinden) + Planlı Gönderim + Onay +
 # Retry/Fallback Zinciri (IT-26 / FAZ 9 devam).
 from campaigns import register_campaign_routes
-register_campaign_routes(api_router, db, current_user, require_permission, log_audit)
+register_campaign_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Event Bus'a bağlı Communication Policy + Tercih Merkezi + Kara Liste
 # (IT-27 / FAZ 9 TAMAMLANDI).
 from communication_policy import register_communication_policy_routes
-register_communication_policy_routes(api_router, db, current_user, require_permission, log_audit)
+register_communication_policy_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
 # Farmer LMS — Eğitim Kataloğu + İçerik Yönetimi + Atama + Durum (IT-29 / FAZ 10 başlangıç).
 from lms import register_lms_routes

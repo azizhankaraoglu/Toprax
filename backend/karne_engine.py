@@ -56,7 +56,12 @@ def _clamp(v: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, v))
 
 
-def register_karne_engine_routes(api_router, db, current_user, require_permission, log_audit):
+def register_karne_engine_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    # parametresini HİÇ ALMIYORDU — server.py'de `/karne/top`+`/karne/bottom`
+    # "reports" bayrağıyla gate'lenmişken, bu dosyanın kendi 5 ucu (ağırlık
+    # parametreleri, geçmiş, breakdown, recompute) hiçbir zaman 403 dönmüyordu.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -228,7 +233,8 @@ def register_karne_engine_routes(api_router, db, current_user, require_permissio
     # UÇLAR
     # -----------------------------------------------------------------
     @api_router.get("/karne/parameters")
-    async def get_karne_parameters(user=Depends(require_permission("farmers:view"))):
+    async def get_karne_parameters(user=Depends(require_permission("farmers:view")),
+                                    _feat=Depends(require_feature("reports"))):
         doc = await db.karne_parameters.find_one({"key": "default"}, {"_id": 0})
         return doc or {"key": "default", "weights": DEFAULT_WEIGHTS,
                        "labels": COMPONENT_LABELS}
@@ -238,7 +244,8 @@ def register_karne_engine_routes(api_router, db, current_user, require_permissio
 
     @api_router.put("/karne/parameters")
     async def update_karne_parameters(body: KarneParamsUpdate, request: Request,
-                                      user=Depends(require_permission("karne:manage"))):
+                                      user=Depends(require_permission("karne:manage")),
+                                      _feat=Depends(require_feature("reports"))):
         unknown = set(body.weights) - set(DEFAULT_WEIGHTS)
         if unknown:
             raise HTTPException(400, f"Bilinmeyen bileşen: {', '.join(unknown)}")
@@ -259,7 +266,8 @@ def register_karne_engine_routes(api_router, db, current_user, require_permissio
 
     @api_router.get("/karne/{farmer_id}/history")
     async def karne_history(farmer_id: str,
-                            user=Depends(require_permission("farmers:view"))):
+                            user=Depends(require_permission("farmers:view")),
+                            _feat=Depends(require_feature("reports"))):
         """SON HAL — karne trendi: her recompute'ta düşülen anlık görüntüler.
         KarneDetail'deki 'skor nasıl değişmiş' grafiğinin veri kaynağı."""
         return await db.karne_history.find(
@@ -268,7 +276,8 @@ def register_karne_engine_routes(api_router, db, current_user, require_permissio
 
     @api_router.get("/karne/{farmer_id}/breakdown")
     async def karne_breakdown(farmer_id: str,
-                              user=Depends(require_permission("farmers:view"))):
+                              user=Depends(require_permission("farmers:view")),
+                              _feat=Depends(require_feature("reports"))):
         """"Neden bu skoru aldı?" — bileşen bileşen CANLI hesap. DB'deki
         karne_points'i DEĞİŞTİRMEZ (o sadece recompute ile yazılır);
         stored_points ile karşılaştırma yanıtta ayrıca döner."""
@@ -286,7 +295,8 @@ def register_karne_engine_routes(api_router, db, current_user, require_permissio
 
     @api_router.post("/karne/recompute")
     async def karne_recompute(request: Request,
-                              user=Depends(require_permission("karne:manage"))):
+                              user=Depends(require_permission("karne:manage")),
+                              _feat=Depends(require_feature("reports"))):
         """TÜM çiftçilerin karne_points/karne_score'unu motorla yeniden yazar.
         İlk çalıştırmada eski (seed) skor `karne_points_seed`e yedeklenir."""
         region_avgs = await _region_polar_averages()

@@ -87,7 +87,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
     # =====================================================================
     
     @api_router.post("/forms")
-    async def create_form(body: FormCreate, user=Depends(current_user)):
+    async def create_form(body: FormCreate, user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """Yeni form oluştur (form builder'dan)"""
         if not is_admin(user):
             raise HTTPException(403, "Form oluşturma yetkisi gerekli")
@@ -132,7 +132,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
         return docs
     
     @api_router.get("/forms/{form_id}")
-    async def get_form(form_id: str, user=Depends(current_user)):
+    async def get_form(form_id: str, user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """Tek form detayı"""
         f = await db.forms.find_one({"id": form_id}, {"_id": 0})
         if not f:
@@ -141,7 +141,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
         return f
 
     @api_router.put("/forms/{form_id}")
-    async def update_form(form_id: str, body: FormUpdate, user=Depends(current_user)):
+    async def update_form(form_id: str, body: FormUpdate, user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """Form güncelle"""
         if not is_admin(user):
             raise HTTPException(403, "Yetkiniz yok")
@@ -152,7 +152,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
         return await db.forms.find_one({"id": form_id}, {"_id": 0})
     
     @api_router.delete("/forms/{form_id}")
-    async def delete_form(form_id: str, user=Depends(current_user)):
+    async def delete_form(form_id: str, user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         if not is_admin(user):
             raise HTTPException(403, "Yetkiniz yok")
         await db.forms.delete_one({"id": form_id})
@@ -165,7 +165,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
     # =====================================================================
     
     @api_router.post("/forms/{form_id}/assign")
-    async def assign_form(form_id: str, body: FormAssign, user=Depends(current_user)):
+    async def assign_form(form_id: str, body: FormAssign, user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """Form belirli çiftçilere/kullanıcılara atanır + bildirim gönderir"""
         if not is_admin(user):
             raise HTTPException(403, "Yetkiniz yok")
@@ -255,7 +255,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
                 "users": len(user_ids), "messages_sent": sent}
 
     @api_router.get("/forms/{form_id}/assignments")
-    async def list_form_assignments(form_id: str, user=Depends(current_user)):
+    async def list_form_assignments(form_id: str, user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """#8 — kime atandı + durum (admin görünürlüğü)."""
         if not is_admin(user):
             raise HTTPException(403, "Yetkiniz yok")
@@ -279,15 +279,17 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
     # =====================================================================
     
     @api_router.get("/public/forms/{token}")
-    async def get_public_form(token: str):
-        """Public form — login gerekmez"""
+    async def get_public_form(token: str, _feat=Depends(require_feature("forms"))):
+        """Public form — login gerekmez. `require_feature` burada `current_user`'a
+        bağlı DEĞİLDİR (tenant_context zaten subdomain/header'dan çözülür) — bu
+        yüzden anonim erişimde de tenant modül kapalıysa 404/403 ile örtülür."""
         form = await db.forms.find_one({"public_token": token, "share_mode": "public"}, {"_id": 0})
         if not form:
             raise HTTPException(404, "Form bulunamadı veya yayında değil")
         return form
     
     @api_router.post("/public/forms/{token}/submit")
-    async def submit_public_form(token: str, body: FormResponseSubmit):
+    async def submit_public_form(token: str, body: FormResponseSubmit, _feat=Depends(require_feature("forms"))):
         """Public form yanıtı"""
         form = await db.forms.find_one({"public_token": token, "share_mode": "public"})
         if not form:
@@ -314,7 +316,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
     # =====================================================================
     
     @api_router.post("/forms/{form_id}/submit")
-    async def submit_form(form_id: str, body: FormResponseSubmit, user=Depends(current_user)):
+    async def submit_form(form_id: str, body: FormResponseSubmit, user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """Form yanıtı (login'li kullanıcı)"""
         form = await db.forms.find_one({"id": form_id})
         if not form:
@@ -348,7 +350,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
         return {"status": "ok", "response_id": doc["id"]}
     
     @api_router.get("/forms/{form_id}/responses")
-    async def list_form_responses(form_id: str, user=Depends(current_user)):
+    async def list_form_responses(form_id: str, user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """Form yanıtlarını listele (admin/yönetici)"""
         if not is_admin(user):
             raise HTTPException(403, "Yetkiniz yok")
@@ -362,7 +364,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
     # =====================================================================
     
     @api_router.get("/forms/{form_id}/analytics")
-    async def form_analytics(form_id: str, user=Depends(current_user)):
+    async def form_analytics(form_id: str, user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """
         Form yanıtlarından otomatik widget'lar:
         - Toplam yanıt sayısı
@@ -470,7 +472,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
     # =====================================================================
     
     @api_router.get("/farmer/my-forms")
-    async def my_assigned_forms(user=Depends(current_user)):
+    async def my_assigned_forms(user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """Çiftçinin atanmış formları"""
         if user.get("role") != "ciftci":
             raise HTTPException(403, "Sadece çiftçi")
@@ -491,7 +493,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
     # =====================================================================
     
     @api_router.post("/admin/seed-forms")
-    async def seed_demo_forms(user=Depends(current_user)):
+    async def seed_demo_forms(user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """Demo formlar yükle
 
         P0 güvenlik düzeltmesi: bu uç önceden kimlik doğrulaması

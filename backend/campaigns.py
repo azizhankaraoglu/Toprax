@@ -140,7 +140,11 @@ async def _execute_campaign(db, user: dict, campaign: dict) -> dict:
     return {"total": len(recipient_ids), "sent": sent, "failed": failed}
 
 
-def register_campaign_routes(api_router, db, current_user, require_permission, log_audit):
+def register_campaign_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    # parametresini HİÇ ALMIYORDU — "communication" modülü God Mode'dan
+    # kapatılsa bile kampanya uçları hiçbir zaman 403 dönmüyordu.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     async def _handle_approval_decided(db, event_type, payload):
         """(IT-07b) approval.py'den SADECE process="campaign_publish" kararlarını
@@ -165,23 +169,27 @@ def register_campaign_routes(api_router, db, current_user, require_permission, l
     subscribe("approval_decided", _handle_approval_decided)
 
     @api_router.get("/campaigns")
-    async def list_campaigns(status: Optional[str] = None, user=Depends(require_permission("communications:campaigns_view"))):
+    async def list_campaigns(status: Optional[str] = None, user=Depends(require_permission("communications:campaigns_view")),
+                              _feat=Depends(require_feature("communication"))):
         filt = {"status": status} if status else {}
         return await db.campaigns.find(filt, {"_id": 0}).sort("created_at", -1).to_list(200)
 
     @api_router.get("/campaigns/{campaign_id}")
-    async def get_campaign(campaign_id: str, user=Depends(require_permission("communications:campaigns_view"))):
+    async def get_campaign(campaign_id: str, user=Depends(require_permission("communications:campaigns_view")),
+                            _feat=Depends(require_feature("communication"))):
         doc = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Kampanya bulunamadı")
         return doc
 
     @api_router.get("/campaigns/{campaign_id}/results")
-    async def campaign_results(campaign_id: str, user=Depends(require_permission("communications:campaigns_view"))):
+    async def campaign_results(campaign_id: str, user=Depends(require_permission("communications:campaigns_view")),
+                                _feat=Depends(require_feature("communication"))):
         return await db.communications.find({"campaign_id": campaign_id}, {"_id": 0}).sort("sent_at", -1).to_list(2000)
 
     @api_router.post("/campaigns")
-    async def create_campaign(body: CampaignCreate, request: Request, user=Depends(require_permission("communications:campaigns_manage"))):
+    async def create_campaign(body: CampaignCreate, request: Request, user=Depends(require_permission("communications:campaigns_manage")),
+                               _feat=Depends(require_feature("communication"))):
         invalid_channels = [c for c in body.channel_chain if c not in CHANNELS]
         if invalid_channels:
             raise HTTPException(400, f"Bilinmeyen kanal(lar): {invalid_channels}")
@@ -206,7 +214,8 @@ def register_campaign_routes(api_router, db, current_user, require_permission, l
 
     @api_router.put("/campaigns/{campaign_id}")
     async def update_campaign(campaign_id: str, body: CampaignUpdate, request: Request,
-                               user=Depends(require_permission("communications:campaigns_manage"))):
+                               user=Depends(require_permission("communications:campaigns_manage")),
+                               _feat=Depends(require_feature("communication"))):
         old = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Kampanya bulunamadı")
@@ -226,7 +235,8 @@ def register_campaign_routes(api_router, db, current_user, require_permission, l
 
     @api_router.post("/campaigns/{campaign_id}/approve")
     async def approve_campaign(campaign_id: str, request: Request,
-                                user=Depends(require_permission("communications:campaigns_approve"))):
+                                user=Depends(require_permission("communications:campaigns_approve")),
+                                _feat=Depends(require_feature("communication"))):
         old = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Kampanya bulunamadı")
@@ -253,7 +263,8 @@ def register_campaign_routes(api_router, db, current_user, require_permission, l
 
     @api_router.put("/campaigns/{campaign_id}/transition")
     async def transition_campaign(campaign_id: str, body: CampaignTransition, request: Request,
-                                   user=Depends(require_permission("communications:campaigns_manage"))):
+                                   user=Depends(require_permission("communications:campaigns_manage")),
+                                   _feat=Depends(require_feature("communication"))):
         old = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Kampanya bulunamadı")
@@ -291,7 +302,8 @@ def register_campaign_routes(api_router, db, current_user, require_permission, l
         return new
 
     @api_router.post("/campaigns/run-scheduled")
-    async def run_scheduled_campaigns(request: Request, user=Depends(require_permission("communications:campaigns_manage"))):
+    async def run_scheduled_campaigns(request: Request, user=Depends(require_permission("communications:campaigns_manage")),
+                                       _feat=Depends(require_feature("communication"))):
         """
         "Zamanı gelmiş kampanyaları çalıştır" tick'i — gerçek bir OS cron/
         Celery beat KURULU DEĞİL (bkz. modül docstring'i), bu uç prod'da bir

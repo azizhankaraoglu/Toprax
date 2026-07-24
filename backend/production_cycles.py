@@ -116,7 +116,8 @@ def register_production_cycle_routes(api_router, db, current_user, require_permi
         return await db.production_cycles.find(filt, {"_id": 0}).sort("year", -1).to_list(1000)
 
     @api_router.get("/production-cycles/{cycle_id}")
-    async def get_production_cycle(cycle_id: str, user=Depends(require_permission("production_cycles:view"))):
+    async def get_production_cycle(cycle_id: str, user=Depends(require_permission("production_cycles:view")),
+                                    _feat=Depends(require_feature("production"))):
         """
         Sezon detayı: kendisi + sahibi çiftçi/parsel (ParcelDetail'in `GET
         /parcels/{id}` kalıbıyla tutarlı — ilişkili çekirdek varlıklar
@@ -143,6 +144,7 @@ def register_production_cycle_routes(api_router, db, current_user, require_permi
     async def create_production_cycle(
         body: ProductionCycleCreate, request: Request,
         user=Depends(require_permission("production_cycles:create")),
+        _feat=Depends(require_feature("production")),
     ):
         farmer = await db.farmers.find_one({"id": body.farmer_id}, {"_id": 0})
         if not farmer:
@@ -177,6 +179,7 @@ def register_production_cycle_routes(api_router, db, current_user, require_permi
     async def update_production_cycle(
         cycle_id: str, body: ProductionCycleUpdate, request: Request,
         user=Depends(require_permission("production_cycles:edit")),
+        _feat=Depends(require_feature("production")),
     ):
         old = await db.production_cycles.find_one({"id": cycle_id}, {"_id": 0})
         if not old:
@@ -194,6 +197,7 @@ def register_production_cycle_routes(api_router, db, current_user, require_permi
     async def update_production_cycle_status(
         cycle_id: str, body: ProductionCycleStatusUpdate, request: Request,
         user=Depends(require_permission("production_cycles:edit")),
+        _feat=Depends(require_feature("production")),
     ):
         old = await db.production_cycles.find_one({"id": cycle_id}, {"_id": 0})
         if not old:
@@ -241,6 +245,7 @@ def register_production_cycle_routes(api_router, db, current_user, require_permi
     @api_router.post("/production-cycles/migrate-existing")
     async def migrate_existing_records(
         request: Request, user=Depends(require_permission("production_cycles:create")),
+        _feat=Depends(require_feature("production")),
     ):
         """
         Idempotent migrasyon: `production_cycle_id` alanı HENÜZ olmayan

@@ -179,7 +179,12 @@ async def _handle_policy_event(db, event_type: str, payload: dict) -> None:
                 )
 
 
-def register_communication_policy_routes(api_router, db, current_user, require_permission, log_audit):
+def register_communication_policy_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    # parametresini HİÇ ALMIYORDU — "communication" modülü God Mode'dan
+    # kapatılsa bile bu uçların hiçbiri 403 dönmüyordu.
+    require_feature = require_feature or (lambda key: (lambda: True))
+
     for event_type in EVENT_CONTACT_RESOLVERS:
         subscribe(event_type, _handle_policy_event)
 
@@ -187,17 +192,20 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
     # COMMUNICATION POLICY
     # =================================================================
     @api_router.get("/communication-policies/event-types")
-    async def list_policy_event_types(user=Depends(require_permission("communications:view"))):
+    async def list_policy_event_types(user=Depends(require_permission("communications:view")),
+                                       _feat=Depends(require_feature("communication"))):
         from event_bus import EVENT_TYPES
         return [{"key": k, "label": EVENT_TYPES.get(k, k)} for k in EVENT_CONTACT_RESOLVERS]
 
     @api_router.get("/communication-policies")
-    async def list_policies(user=Depends(require_permission("communications:view"))):
+    async def list_policies(user=Depends(require_permission("communications:view")),
+                             _feat=Depends(require_feature("communication"))):
         return await db.communication_policies.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
     @api_router.post("/communication-policies")
     async def create_policy(body: CommunicationPolicyCreate, request: Request,
-                             user=Depends(require_permission("communications:policies_manage"))):
+                             user=Depends(require_permission("communications:policies_manage")),
+                             _feat=Depends(require_feature("communication"))):
         if body.event_type not in EVENT_CONTACT_RESOLVERS:
             raise HTTPException(400, f"Bilinmeyen/desteklenmeyen event_type: {body.event_type}")
         invalid_channels = [c for c in body.channels if c not in CHANNELS]
@@ -215,7 +223,8 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
 
     @api_router.put("/communication-policies/{policy_id}")
     async def update_policy(policy_id: str, body: CommunicationPolicyUpdate, request: Request,
-                             user=Depends(require_permission("communications:policies_manage"))):
+                             user=Depends(require_permission("communications:policies_manage")),
+                             _feat=Depends(require_feature("communication"))):
         old = await db.communication_policies.find_one({"id": policy_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Politika bulunamadı")
@@ -235,13 +244,15 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
     # KONU 1.4 — ONAY BEKLEYEN BİLDİRİMLER (Seçenek A akışı)
     # =================================================================
     @api_router.get("/communication-policies/pending-approvals")
-    async def list_pending_notifications(user=Depends(require_permission("communications:view"))):
+    async def list_pending_notifications(user=Depends(require_permission("communications:view")),
+                                          _feat=Depends(require_feature("communication"))):
         return await db.pending_notifications.find(
             {"status": "onay_bekliyor"}, {"_id": 0}).sort("created_at", -1).to_list(200)
 
     @api_router.post("/communication-policies/pending-approvals/{item_id}/approve")
     async def approve_pending_notification(item_id: str, request: Request,
-                                            user=Depends(require_permission("communications:policies_manage"))):
+                                            user=Depends(require_permission("communications:policies_manage")),
+                                            _feat=Depends(require_feature("communication"))):
         item = await db.pending_notifications.find_one({"id": item_id}, {"_id": 0})
         if not item:
             raise HTTPException(404, "Onay bekleyen bildirim bulunamadı")
@@ -276,7 +287,8 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
 
     @api_router.post("/communication-policies/pending-approvals/{item_id}/reject")
     async def reject_pending_notification(item_id: str, request: Request,
-                                           user=Depends(require_permission("communications:policies_manage"))):
+                                           user=Depends(require_permission("communications:policies_manage")),
+                                           _feat=Depends(require_feature("communication"))):
         item = await db.pending_notifications.find_one({"id": item_id}, {"_id": 0})
         if not item:
             raise HTTPException(404, "Onay bekleyen bildirim bulunamadı")
@@ -291,12 +303,14 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
     # KARA LİSTE (KVKK)
     # =================================================================
     @api_router.get("/communications/blacklist")
-    async def list_blacklist(user=Depends(require_permission("communications:blacklist_manage"))):
+    async def list_blacklist(user=Depends(require_permission("communications:blacklist_manage")),
+                              _feat=Depends(require_feature("communication"))):
         return await db.communication_blacklist.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
 
     @api_router.post("/communications/blacklist")
     async def add_to_blacklist(body: BlacklistCreate, request: Request,
-                                user=Depends(require_permission("communications:blacklist_manage"))):
+                                user=Depends(require_permission("communications:blacklist_manage")),
+                                _feat=Depends(require_feature("communication"))):
         existing = await db.communication_blacklist.find_one(
             {"contact_type": body.contact_type, "contact_id": body.contact_id}, {"_id": 0},
         )
@@ -313,7 +327,8 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
 
     @api_router.delete("/communications/blacklist/{entry_id}")
     async def remove_from_blacklist(entry_id: str, request: Request,
-                                     user=Depends(require_permission("communications:blacklist_manage"))):
+                                     user=Depends(require_permission("communications:blacklist_manage")),
+                                     _feat=Depends(require_feature("communication"))):
         old = await db.communication_blacklist.find_one({"id": entry_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Kayıt bulunamadı")
@@ -326,7 +341,8 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
     # =================================================================
     @api_router.get("/communications/preferences/{contact_type}/{contact_id}")
     async def get_preferences(contact_type: str, contact_id: str,
-                               user=Depends(require_permission("communications:preferences_manage"))):
+                               user=Depends(require_permission("communications:preferences_manage")),
+                               _feat=Depends(require_feature("communication"))):
         pref = await db.communication_preferences.find_one(
             {"contact_type": contact_type, "contact_id": contact_id}, {"_id": 0},
         )
@@ -339,7 +355,8 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
 
     @api_router.put("/communications/preferences/{contact_type}/{contact_id}")
     async def set_preferences(contact_type: str, contact_id: str, body: PreferenceUpdate, request: Request,
-                               user=Depends(require_permission("communications:preferences_manage"))):
+                               user=Depends(require_permission("communications:preferences_manage")),
+                               _feat=Depends(require_feature("communication"))):
         updates = {k: v for k, v in body.model_dump().items() if v is not None}
         updates["contact_type"] = contact_type
         updates["contact_id"] = contact_id
@@ -358,7 +375,7 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
     # TERCİH MERKEZİ — çiftçi self-servisi (/portal/*, support.py kalıbı)
     # =================================================================
     @api_router.get("/portal/communication-preferences")
-    async def portal_get_preferences(user=Depends(current_user)):
+    async def portal_get_preferences(user=Depends(current_user), _feat=Depends(require_feature("communication"))):
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi erişebilir")
         pref = await db.communication_preferences.find_one(
@@ -372,7 +389,8 @@ def register_communication_policy_routes(api_router, db, current_user, require_p
         }
 
     @api_router.put("/portal/communication-preferences")
-    async def portal_set_preferences(body: PreferenceUpdate, request: Request, user=Depends(current_user)):
+    async def portal_set_preferences(body: PreferenceUpdate, request: Request, user=Depends(current_user),
+                                      _feat=Depends(require_feature("communication"))):
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi erişebilir")
         updates = {k: v for k, v in body.model_dump().items() if v is not None}

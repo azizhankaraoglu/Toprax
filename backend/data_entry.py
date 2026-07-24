@@ -96,7 +96,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/contracts")
     async def create_contract(body: ContractCreate, request: Request,
-                               user=Depends(require_permission("contracts:create"))):
+                               user=Depends(require_permission("contracts:create")), _feat=Depends(require_feature("contracts"))):
         parcel = await db.parcels.find_one({"id": body.parcel_id}, {"_id": 0})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")
@@ -156,7 +156,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.get("/contracts/{contract_id}")
     async def get_contract_detail(contract_id: str,
-                                  user=Depends(require_permission("contracts:view"))):
+                                  user=Depends(require_permission("contracts:view")), _feat=Depends(require_feature("contracts"))):
         """Sözleşme Detay sayfasının (SON HAL — /sozlesmeler/:id) veri kaynağı.
         ParcelDetail'in GET /parcels/{id} kalıbıyla aynı: ana kayıt + gömülü
         farmer/parcel özetleri + bağlı ekim kayıtları + (sezon bağlıysa)
@@ -196,7 +196,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/contracts/{contract_id}")
     async def update_contract(contract_id: str, body: ContractUpdate, request: Request,
-                               user=Depends(require_permission("contracts:edit"))):
+                               user=Depends(require_permission("contracts:edit")), _feat=Depends(require_feature("contracts"))):
         old = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Sözleşme bulunamadı")
@@ -221,7 +221,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/contracts/{contract_id}/deviation-decision")
     async def contract_deviation_decision(contract_id: str, body: DeviationDecision, request: Request,
-                                          user=Depends(require_permission("contracts:edit"))):
+                                          user=Depends(require_permission("contracts:edit")), _feat=Depends(require_feature("contracts"))):
         """#7 — Kota→alan sapması nedeniyle 'onay_bekliyor'da bekleyen sözleşmeyi
         yetkili (ziraat mühendisi/bölge sorumlusu; contracts:edit) onaylar/reddeder.
         Onay → 'taslak' (geçerli sözleşme); Red → 'iptal'."""
@@ -247,7 +247,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.delete("/contracts/{contract_id}")
     async def delete_contract(contract_id: str, request: Request,
-                               user=Depends(require_permission("contracts:delete"))):
+                               user=Depends(require_permission("contracts:delete")), _feat=Depends(require_feature("contracts"))):
         # BULGU 1 (Kritik) düzeltmesi: fiziksel silme YAPILMAZ. CLAUDE.md
         # Bölüm 4 Konvansiyon #3 gereği çekirdek/finansal-yakın kayıtlar
         # is_active=False ile pasife alınır; audit izi + kayıt gövdesi DB'de
@@ -343,7 +343,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/plantings")
     async def create_planting(body: PlantingCreate, request: Request,
-                               user=Depends(require_permission("plantings:create"))):
+                               user=Depends(require_permission("plantings:create")), _feat=Depends(require_feature("planting"))):
         parcel = await db.parcels.find_one({"id": body.parcel_id}, {"_id": 0})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")
@@ -363,7 +363,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/plantings/{planting_id}")
     async def update_planting(planting_id: str, body: PlantingUpdate, request: Request,
-                               user=Depends(require_permission("plantings:edit"))):
+                               user=Depends(require_permission("plantings:edit")), _feat=Depends(require_feature("planting"))):
         old = await db.plantings.find_one({"id": planting_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Ekim kaydı bulunamadı")
@@ -376,7 +376,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.delete("/plantings/{planting_id}")
     async def delete_planting(planting_id: str, request: Request,
-                               user=Depends(require_permission("plantings:delete"))):
+                               user=Depends(require_permission("plantings:delete")), _feat=Depends(require_feature("planting"))):
         # Konvansiyon #3 — soft delete (is_active=False); kayıt + audit izi DB'de kalır.
         old = await db.plantings.find_one({"id": planting_id}, {"_id": 0})
         if not old:
@@ -405,7 +405,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/plantings/bulk-create")
     async def bulk_create_plantings(body: PlantingBulkCreate, request: Request,
-                                    user=Depends(require_permission("plantings:create"))):
+                                    user=Depends(require_permission("plantings:create")), _feat=Depends(require_feature("planting"))):
         """Filtreyle seçilmiş ÇOK sayıda parsele tek formda ekim kaydı açar.
         farmer_id her parselden türetilir; parseli bulunamayan id atlanır ve
         yanıtta raporlanır (sessiz veri kaybı yok)."""
@@ -444,7 +444,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/plantings/bulk-delete")
     async def bulk_delete_plantings(body: PlantingBulkDelete, request: Request,
-                                    user=Depends(require_permission("plantings:delete"))):
+                                    user=Depends(require_permission("plantings:delete")), _feat=Depends(require_feature("planting"))):
         """Seçili ekim kayıtlarını topluca pasife alır (soft delete, konvansiyon #3)."""
         if not body.planting_ids:
             raise HTTPException(400, "planting_ids boş olamaz")
@@ -516,7 +516,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/soil-samples")
     async def create_soil_sample(body: SoilSampleAdminCreate, request: Request,
-                                  user=Depends(require_permission("soil:create"))):
+                                  user=Depends(require_permission("soil:create")), _feat=Depends(require_feature("soil"))):
         parcel = await db.parcels.find_one({"id": body.parcel_id}, {"_id": 0})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")
@@ -617,7 +617,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/soil-samples/field")
     async def create_field_soil_sample(body: FieldSoilSampleCreate, request: Request,
-                                       user=Depends(current_user)):
+                                       user=Depends(current_user), _feat=Depends(require_feature("soil"))):
         """#9 — Mobilden numune alımı. Görevi üstlenen personel çağırır; lab
         sonucu YOK, `lab_status="beklemede"` ile açılır. GPS izi + Z
         değerlendirmesi + (varsa) bağlı form yanıtı birlikte saklanır."""
@@ -655,7 +655,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/soil-samples/{sample_id}/lab")
     async def update_soil_lab(sample_id: str, body: SoilLabUpdate, request: Request,
-                              user=Depends(require_permission("soil:create"))):
+                              user=Depends(require_permission("soil:create")), _feat=Depends(require_feature("soil"))):
         """#9 — Laboratuvar gönderim/dönüş takibi + sonuç girişi. Sonuç
         girildiğinde (`lab_status="sonuclandi"`) otomasyon event'i yayınlanır."""
         old = await db.soil_samples.find_one({"id": sample_id}, {"_id": 0})
@@ -709,7 +709,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/soil-samples/{sample_id}")
     async def update_soil_sample(sample_id: str, body: SoilSampleAdminUpdate, request: Request,
-                                 user=Depends(require_permission("soil:edit"))):
+                                 user=Depends(require_permission("soil:edit")), _feat=Depends(require_feature("soil"))):
         old = await db.soil_samples.find_one({"id": sample_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Toprak analizi bulunamadı")
@@ -722,7 +722,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.delete("/soil-samples/{sample_id}")
     async def delete_soil_sample(sample_id: str, request: Request,
-                                 user=Depends(require_permission("soil:delete"))):
+                                 user=Depends(require_permission("soil:delete")), _feat=Depends(require_feature("soil"))):
         old = await db.soil_samples.find_one({"id": sample_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Toprak analizi bulunamadı")
@@ -773,7 +773,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/irrigation/events/bulk-create")
     async def bulk_create_irrigation(body: IrrigationBulkCreate, request: Request,
-                                     user=Depends(require_permission("irrigation:create"))):
+                                     user=Depends(require_permission("irrigation:create")), _feat=Depends(require_feature("irrigation"))):
         """Filtreyle seçilmiş ÇOK parsele tek formda sulama kaydı açar.
         water_m3 her parsele AYNEN yazılır (parsel başına miktar)."""
         if not body.parcel_ids:
@@ -810,7 +810,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/irrigation/events/{event_id}")
     async def update_irrigation_event(event_id: str, body: IrrigationEventAdminUpdate, request: Request,
-                                      user=Depends(require_permission("irrigation:edit"))):
+                                      user=Depends(require_permission("irrigation:edit")), _feat=Depends(require_feature("irrigation"))):
         old = await db.irrigation_events.find_one({"id": event_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Sulama kaydı bulunamadı")
@@ -823,7 +823,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.delete("/irrigation/events/{event_id}")
     async def delete_irrigation_event(event_id: str, request: Request,
-                                      user=Depends(require_permission("irrigation:delete"))):
+                                      user=Depends(require_permission("irrigation:delete")), _feat=Depends(require_feature("irrigation"))):
         old = await db.irrigation_events.find_one({"id": event_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Sulama kaydı bulunamadı")
@@ -855,7 +855,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/operations/machines")
     async def create_machine(body: MachineCreate, request: Request,
-                              user=Depends(require_permission("operations:machines_manage"))):
+                              user=Depends(require_permission("operations:machines_manage")), _feat=Depends(require_feature("operations"))):
         doc = body.model_dump()
         doc["id"] = str(uuid.uuid4())
         await db.machines.insert_one(doc)
@@ -865,7 +865,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/operations/machines/{machine_id}")
     async def update_machine(machine_id: str, body: MachineUpdate, request: Request,
-                              user=Depends(require_permission("operations:machines_manage"))):
+                              user=Depends(require_permission("operations:machines_manage")), _feat=Depends(require_feature("operations"))):
         old = await db.machines.find_one({"id": machine_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Makine bulunamadı")
@@ -878,7 +878,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.delete("/operations/machines/{machine_id}")
     async def delete_machine(machine_id: str, request: Request,
-                              user=Depends(require_permission("operations:machines_manage"))):
+                              user=Depends(require_permission("operations:machines_manage")), _feat=Depends(require_feature("operations"))):
         old = await db.machines.find_one({"id": machine_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Makine bulunamadı")
@@ -912,7 +912,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/operations/workers")
     async def create_worker(body: WorkerCreate, request: Request,
-                             user=Depends(require_permission("operations:workers_manage"))):
+                             user=Depends(require_permission("operations:workers_manage")), _feat=Depends(require_feature("operations"))):
         doc = body.model_dump()
         doc["id"] = str(uuid.uuid4())
         await db.workers.insert_one(doc)
@@ -922,7 +922,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/operations/workers/{worker_id}")
     async def update_worker(worker_id: str, body: WorkerUpdate, request: Request,
-                             user=Depends(require_permission("operations:workers_manage"))):
+                             user=Depends(require_permission("operations:workers_manage")), _feat=Depends(require_feature("operations"))):
         old = await db.workers.find_one({"id": worker_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "İşçi bulunamadı")
@@ -935,7 +935,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.delete("/operations/workers/{worker_id}")
     async def delete_worker(worker_id: str, request: Request,
-                             user=Depends(require_permission("operations:workers_manage"))):
+                             user=Depends(require_permission("operations:workers_manage")), _feat=Depends(require_feature("operations"))):
         old = await db.workers.find_one({"id": worker_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "İşçi bulunamadı")
@@ -989,7 +989,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/operations/tasks/{task_id}")
     async def update_task(task_id: str, body: TaskUpdate, request: Request,
-                           user=Depends(require_permission("operations:tasks_manage"))):
+                           user=Depends(require_permission("operations:tasks_manage")), _feat=Depends(require_feature("operations"))):
         old = await db.tasks.find_one({"id": task_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Görev bulunamadı")
@@ -1002,7 +1002,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.delete("/operations/tasks/{task_id}")
     async def delete_task(task_id: str, request: Request,
-                           user=Depends(require_permission("operations:tasks_manage"))):
+                           user=Depends(require_permission("operations:tasks_manage")), _feat=Depends(require_feature("operations"))):
         old = await db.tasks.find_one({"id": task_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Görev bulunamadı")
@@ -1035,7 +1035,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/logistics/appointments")
     async def create_appointment(body: AppointmentCreate, request: Request,
-                                  user=Depends(require_permission("logistics:create"))):
+                                  user=Depends(require_permission("logistics:create")), _feat=Depends(require_feature("logistics"))):
         farmer = await db.farmers.find_one({"id": body.farmer_id}, {"_id": 0})
         if not farmer:
             raise HTTPException(404, "Çiftçi bulunamadı")
@@ -1052,7 +1052,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/logistics/appointments/{appt_id}")
     async def update_appointment(appt_id: str, body: AppointmentUpdate, request: Request,
-                                  user=Depends(require_permission("logistics:create"))):
+                                  user=Depends(require_permission("logistics:create")), _feat=Depends(require_feature("logistics"))):
         old = await db.appointments.find_one({"id": appt_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Randevu bulunamadı")
@@ -1065,7 +1065,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.delete("/logistics/appointments/{appt_id}")
     async def delete_appointment(appt_id: str, request: Request,
-                                 user=Depends(require_permission("logistics:delete"))):
+                                 user=Depends(require_permission("logistics:delete")), _feat=Depends(require_feature("logistics"))):
         old = await db.appointments.find_one({"id": appt_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Randevu bulunamadı")
@@ -1133,7 +1133,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.put("/kantar/records/{record_id}")
     async def update_kantar_record(record_id: str, body: KantarRecordUpdate, request: Request,
-                                   user=Depends(require_permission("kantar:edit"))):
+                                   user=Depends(require_permission("kantar:edit")), _feat=Depends(require_feature("factory"))):
         old = await db.kantar_records.find_one({"id": record_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Kantar kaydı bulunamadı")
@@ -1153,7 +1153,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.delete("/kantar/records/{record_id}")
     async def delete_kantar_record(record_id: str, request: Request,
-                                   user=Depends(require_permission("kantar:delete"))):
+                                   user=Depends(require_permission("kantar:delete")), _feat=Depends(require_feature("factory"))):
         # Kantar kaydı hakedişe (entitlement) girdi olur — konvansiyon #3 gereği
         # soft delete; silinen kayıt entitlement hesabından da düşer (is_active filtresi).
         old = await db.kantar_records.find_one({"id": record_id}, {"_id": 0})
@@ -1178,7 +1178,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/e-belge/invoices")
     async def create_einvoice(body: EInvoiceCreate, request: Request,
-                               user=Depends(require_permission("ebelge:create"))):
+                               user=Depends(require_permission("ebelge:create")), _feat=Depends(require_feature("invoicing"))):
         farmer = await db.farmers.find_one({"id": body.farmer_id}, {"_id": 0})
         if not farmer:
             raise HTTPException(404, "Çiftçi bulunamadı")
@@ -1211,7 +1211,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/e-belge/irsaliyeler")
     async def create_irsaliye(body: IrsaliyeCreate, request: Request,
-                               user=Depends(require_permission("ebelge:create"))):
+                               user=Depends(require_permission("ebelge:create")), _feat=Depends(require_feature("invoicing"))):
         farmer = await db.farmers.find_one({"id": body.farmer_id}, {"_id": 0})
         if not farmer:
             raise HTTPException(404, "Çiftçi bulunamadı")
@@ -1316,7 +1316,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
 
     @api_router.post("/drone/missions")
     async def create_drone_mission(body: DroneMissionCreate, request: Request,
-                                    user=Depends(require_permission("drone:manage"))):
+                                    user=Depends(require_permission("drone:manage")), _feat=Depends(require_feature("drone"))):
         parcel = await db.parcels.find_one({"id": body.parcel_id}, {"_id": 0})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")

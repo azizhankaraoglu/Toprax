@@ -14,15 +14,18 @@ const TABS = [
   { id: "health", label: "Sistem Sağlığı", icon: HeartPulse },
 ];
 
-// SON HAL (2026-07-23) — god_mode.py'nin MODULE_TOGGLE_LABELS'ıyla BİREBİR
-// eşleşmeli (sıra burada gösterim sırası, kaynak liste backend'de). Yeni
-// bir modül eklendiğinde HER İKİ dosyada da güncellenmesi gerekir.
+// SON HAL (2026-07-23, mimari düzeltme) — kaynak liste artık TEK yerde:
+// backend/platform_core.py FEATURE_FLAG_LABELS (god_mode.py oradan import
+// eder). Burada sadece GÖSTERİM SIRASI kontrol edilir — yeni bir modül
+// eklendiğinde SADECE platform_core.py güncellenir, burada bir satır
+// eklemek istersen sırayı belirlemek içindir (eklemesen de modül backend'den
+// gelir ama listenin SONUNA düşer, bkz. aşağıdaki .find() null-guard).
 const MODULE_ORDER = [
   "farmer", "parcel", "contracts", "planting", "irrigation", "operations", "soil",
-  "production", "remote_sensing", "gis", "ai",
+  "production", "remote_sensing", "gis", "ai", "drone",
   "field_ops", "automation", "forms", "logistics", "factory",
   "reports", "ufyd", "invoicing",
-  "communication",
+  "communication", "whatsapp",
   "lms",
   "admin_areas", "organization", "approvals", "case_management",
   "integration_hub", "developer_portal", "experience_profiles", "audit",

@@ -239,10 +239,15 @@ def _parse_dxf(content: bytes, source_epsg: Optional[int]) -> List[Dict[str, Any
     return features
 
 
-def register_geo_import_routes(api_router, db, current_user, require_permission, log_audit):
+def register_geo_import_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
+    # MİMARİ DÜZELTME (2026-07-24): bu fonksiyon önceden `require_feature`
+    # parametresini HİÇ ALMIYORDU. Parsel geometri import'u FEATURE_FLAG_
+    # LABELS'ta "parcel" bayrağının kapsadığı alan ("Parsel / GIS Veri
+    # Girişi") — bu yüzden `gis` değil `parcel` ile gate'lenir.
+    require_feature = require_feature or (lambda key: (lambda: True))
 
     @api_router.get("/geo-import/epsg-codes")
-    async def list_common_epsg_codes(user=Depends(current_user)):
+    async def list_common_epsg_codes(user=Depends(current_user), _feat=Depends(require_feature("parcel"))):
         return COMMON_EPSG_CODES
 
     @api_router.post("/geo-import/parse")
@@ -250,6 +255,7 @@ def register_geo_import_routes(api_router, db, current_user, require_permission,
         file: UploadFile = File(...),
         source_epsg: Optional[int] = Form(None),
         user=Depends(require_permission("parcels:import_geojson")),
+        _feat=Depends(require_feature("parcel")),
     ):
         """
         Dosyayı ayrıştırır, WGS84'e çevirir, SONUCU DÖNER — hiçbir şey

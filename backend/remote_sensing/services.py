@@ -112,12 +112,14 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
 
     # ---- Tarama Politikaları (Karar 2) --------------------------------------
     @api_router.get("/remote-sensing/policies")
-    async def rs_list_policies(user=Depends(require_permission("remote_sensing:view"))):
+    async def rs_list_policies(user=Depends(require_permission("remote_sensing:view")),
+                                _feat=Depends(require_feature("remote_sensing"))):
         return await db.remote_sensing_policies.find({}, {"_id": 0}).sort("priority", -1).to_list(500)
 
     @api_router.post("/remote-sensing/policies")
     async def rs_create_policy(body: TaramaPolicy, request: Request,
-                               user=Depends(require_permission("remote_sensing:settings"))):
+                               user=Depends(require_permission("remote_sensing:settings")),
+                               _feat=Depends(require_feature("remote_sensing"))):
         doc = body.model_dump()
         doc["id"] = str(uuid.uuid4())
         doc["created_at"] = _now()
@@ -129,7 +131,8 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
 
     @api_router.put("/remote-sensing/policies/{policy_id}")
     async def rs_update_policy(policy_id: str, body: TaramaPolicy, request: Request,
-                               user=Depends(require_permission("remote_sensing:settings"))):
+                               user=Depends(require_permission("remote_sensing:settings")),
+                               _feat=Depends(require_feature("remote_sensing"))):
         upd = body.model_dump(exclude_unset=True)
         upd.pop("id", None)
         res = await db.remote_sensing_policies.update_one({"id": policy_id}, {"$set": upd})
@@ -141,7 +144,8 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
 
     @api_router.delete("/remote-sensing/policies/{policy_id}")
     async def rs_delete_policy(policy_id: str, request: Request,
-                               user=Depends(require_permission("remote_sensing:settings"))):
+                               user=Depends(require_permission("remote_sensing:settings")),
+                               _feat=Depends(require_feature("remote_sensing"))):
         # Soft delete (CLAUDE.md konvansiyon #3).
         res = await db.remote_sensing_policies.update_one({"id": policy_id}, {"$set": {"is_active": False}})
         if res.matched_count == 0:
@@ -151,14 +155,16 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
         return {"ok": True}
 
     @api_router.get("/remote-sensing/uncovered-parcels")
-    async def rs_uncovered(user=Depends(require_permission("remote_sensing:view"))):
+    async def rs_uncovered(user=Depends(require_permission("remote_sensing:view")),
+                            _feat=Depends(require_feature("remote_sensing"))):
         """"Politikasız Parseller" — kapsam dışı kalan parsel uyarı listesi."""
         return await find_uncovered_parcels(db)
 
     # ---- Manuel Senaryo ("Uydu Analizi Güncelle") ----------------------------
     @api_router.post("/remote-sensing/manual-sync")
     async def rs_manual_sync(body: dict, request: Request,
-                             user=Depends(require_permission("remote_sensing:manual_sync"))):
+                             user=Depends(require_permission("remote_sensing:manual_sync")),
+                             _feat=Depends(require_feature("remote_sensing"))):
         """Tekli/çoklu parsel için anlık analiz — Tarama Politikası'nı BYPASS
         eder, tenant kotasına 'manuel' işaretlenir (normal taramadan pahalı)."""
         parcel_ids = body.get("parcel_ids") or ([body["parcel_id"]] if body.get("parcel_id") else [])
@@ -184,7 +190,8 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
     # ---- Ekili/Söküm durumu toplu yeniden-hesaplama (#2) ---------------------
     @api_router.post("/remote-sensing/recompute-crop-status")
     async def rs_recompute_crop_status(request: Request,
-                                       user=Depends(require_permission("remote_sensing:manual_sync"))):
+                                       user=Depends(require_permission("remote_sensing:manual_sync")),
+                                       _feat=Depends(require_feature("remote_sensing"))):
         """TÜM aktif parseller için ekili/söküm durumunu (manuel ekim + son
         NDVI'dan, EOSDA çağrısı YAPMADAN) yeniden hesaplar — Dashboard'u besler."""
         from .crop_status import recompute_all
@@ -196,7 +203,8 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
     # ---- Scheduler (otomatik tarama turu) ------------------------------------
     @api_router.post("/remote-sensing/scheduler/run")
     async def rs_run_scheduler(request: Request,
-                               user=Depends(require_permission("remote_sensing:automatic_sync"))):
+                               user=Depends(require_permission("remote_sensing:automatic_sync")),
+                               _feat=Depends(require_feature("remote_sensing"))):
         result = await run_scheduler_tick(db, _provider_factory)
         await log_audit(db, user, action="scheduler_run", entity="remote_sensing",
                         entity_id="tick", new_value=result, request=request)
@@ -205,32 +213,37 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
     # ---- Task kuyruğu --------------------------------------------------------
     @api_router.get("/remote-sensing/tasks")
     async def rs_list_tasks(limit: int = 100,
-                            user=Depends(require_permission("remote_sensing:view"))):
+                            user=Depends(require_permission("remote_sensing:view")),
+                            _feat=Depends(require_feature("remote_sensing"))):
         return await db.remote_sensing_tasks.find({}, {"_id": 0}).sort("created_at", -1).to_list(limit)
 
     # ---- Monitoring ----------------------------------------------------------
     @api_router.get("/remote-sensing/monitoring")
-    async def rs_monitoring(user=Depends(require_permission("remote_sensing:view"))):
+    async def rs_monitoring(user=Depends(require_permission("remote_sensing:view")),
+                             _feat=Depends(require_feature("remote_sensing"))):
         return await get_monitoring_summary(db)
 
     # ---- Parsel Time Series + Görüntü arşivi ---------------------------------
     @api_router.get("/remote-sensing/parcels/{parcel_id}/timeseries")
     async def rs_timeseries(parcel_id: str,
-                            user=Depends(require_permission("remote_sensing:statistics"))):
+                            user=Depends(require_permission("remote_sensing:statistics")),
+                            _feat=Depends(require_feature("remote_sensing"))):
         stats = await db.remote_sensing_statistics.find(
             {"parcel_id": parcel_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
         return {"parcel_id": parcel_id, "statistics": stats}
 
     @api_router.get("/remote-sensing/parcels/{parcel_id}/images")
     async def rs_images(parcel_id: str, include_inactive: bool = False,
-                        user=Depends(require_permission("remote_sensing:images"))):
+                        user=Depends(require_permission("remote_sensing:images")),
+                        _feat=Depends(require_feature("remote_sensing"))):
         q = {"parcel_id": parcel_id}
         if not include_inactive:
             q["is_active"] = True
         return await db.remote_sensing_images.find(q, {"_id": 0}).sort("capture_date", -1).to_list(200)
 
     @api_router.get("/remote-sensing/images/file/{stored_name}")
-    async def rs_image_file(stored_name: str, request: Request, token: str = Query(None)):
+    async def rs_image_file(stored_name: str, request: Request, token: str = Query(None),
+                             _feat=Depends(require_feature("remote_sensing"))):
         """Yerel diske kaydedilmiş uydu görüntüsünü (PNG) sunar. <img src>
         özel header gönderemediği için ?token= de kabul edilir (storage.py'nin
         dosya-indirme deseniyle AYNI: JWT imza/aktiflik + tenant kontrolü)."""
@@ -262,7 +275,8 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
     # ---- AI Yorumlama (EOSDA/NDVI verisini anlamlandırır) --------------------
     @api_router.post("/remote-sensing/parcels/{parcel_id}/interpret")
     async def rs_interpret(parcel_id: str,
-                           user=Depends(require_permission("remote_sensing:statistics"))):
+                           user=Depends(require_permission("remote_sensing:statistics")),
+                           _feat=Depends(require_feature("remote_sensing"))):
         """En güncel NDVI istatistiğini alır, kural-bazlı bir yorum üretir ve AI
         servisi (Ayarlar › Entegrasyonlar › AI) yapılandırılmışsa onunla
         zenginleştirir — 'tarlanız susuz' gibi gerekçeli, çiftçi-dostu çıktı."""
