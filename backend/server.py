@@ -310,6 +310,12 @@ register_audit_routes(api_router, db, current_user, is_admin, require_permission
 # Ayarlar / Entegrasyonlar modülü (SMS, Email, Planet Labs, AI Servisi)
 register_integration_routes(api_router, db, current_user, is_admin, log_audit=log_audit, require_permission=require_permission)
 
+# Resmi Sistem Entegrasyonları (Denetim Faz 3) — MERNİS kimlik doğrulama +
+# TAKBİS tapu sorgu. integrations.py'nin config'ini gov_providers.py'nin
+# factory'si üzerinden okur.
+from gov_integration_routes import register_gov_routes
+register_gov_routes(api_router, db, current_user, require_permission, require_feature, log_audit)
+
 # Veri Giriş modülü (Sprint 4a) — sözleşme, ekim, toprak, sulama, operasyon,
 # lojistik, kantar, e-belge, IoT, drone, parsel düzenleme
 from data_entry import register_data_entry_routes

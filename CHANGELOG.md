@@ -2,6 +2,60 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [Yayınlanmamış] — Faz 3: MERNİS + TAKBİS Entegrasyonları (2026-07-24, Build 24072026-1800)
+
+### Eklendi
+- Yeni `backend/gov_providers.py` — `satellite_provider.py`/`channel_providers.py`
+  ile aynı ABC+factory kalıbı: `IdentityProvider` (MERNİS/KPS) +
+  `CadastreProvider` (TAKBİS). `validate_tc_checksum()` gerçek TC Kimlik No
+  algoritmasıyla (resmi 11-hane formülü) doğrulama yapar. `DemoMernisProvider`/
+  `DemoTakbisProvider` CRC32-tohumlu deterministik demo veri üretir
+  (`DemoSatelliteProvider` ile aynı teknik); `RealMernisProvider` KPS
+  `TCKimlikNoDogrula` SOAP 1.1 zarfını elle kurar (`zeep` bağımlılığı
+  eklenmedi), `RealTakbisProvider` kurumsal REST/SOAP servisine bağlanır.
+  Gerçek sağlayıcılar sadece kimlik bilgisi (`username`/`password`/
+  `service_url`) girilip `mock_mode` kapatılınca devreye girer — mevcut
+  eosda/sentinel_hub mock-capable deseniyle birebir.
+- `integrations.py`: `SECRET_FIELDS`/`MOCK_CAPABLE_TYPES`'a `mernis`/`takbis`
+  eklendi; `_has_credentials`, yıkıcı olmayan health probe'ları
+  (`_probe_mernis`/`_probe_takbis`) ve `/integrations/{mernis,takbis}/test`
+  uçları eklendi — mevcut Ayarlar > Entegrasyonlar akışıyla (maskeleme,
+  demo→aktif otomatik geçiş, health-check) tam uyumlu.
+- `platform_core.py FEATURE_FLAG_LABELS`'a `mernis`/`takbis` eklendi — God
+  Mode'un modül aç/kapa listesi (`MODULE_TOGGLE_LABELS = FEATURE_FLAG_LABELS`
+  referansı sayesinde) otomatik olarak bu iki modülü de kapsıyor.
+- Yeni `backend/gov_integration_routes.py` — `POST /gov/mernis/verify`
+  (`farmers:edit` + feature `mernis`; `farmer_id` verilirse başarılı
+  doğrulamada `Farmer.mernis_verified`/`mernis_verified_at` yazar + audit),
+  `POST /gov/takbis/query` (`parcels:edit` + feature `takbis`; sadece
+  sorgu sonucunu döner, kaydetme çağıranın işi — `geo_import.py`'nin
+  "ayrıştırır ama kaydetmez" felsefesiyle aynı ayrım).
+- Frontend: `FarmerDetail.jsx`'e TC alanının yanına "MERNİS ile Doğrula"
+  mini-formu (doğum yılı + doğrula) + başarılı doğrulamada yeşil "✓ MERNİS
+  Doğrulandı" rozeti; `ParcelDetail.jsx`'in düzenleme moduna "TAKBİS Tapu
+  Sorgu" kutusu (il/ilçe/ada/parsel → malik/nitelik/alan/tapu tarihi
+  gösterimi + `il`/`ilce`/`ada_no`/`parsel_no_tapu`/`area_dekar` alanlarını
+  otomatik doldurur, kullanıcı gözden geçirip Kaydet'e basar); `Extras.jsx`
+  AyarlarEntegrasyon'a MERNİS + TAKBİS kimlik kartları (eosda kartıyla aynı
+  düzen: kullanıcı adı/şifre/servis URL'i + demo mod checkbox'ı + Test Et).
+
+### Doğrulama
+- Backend: `py_compile` + pyflakes (0 undefined name) + 47 pytest yeşil.
+- Gerçek TC checksum algoritması bilinen geçerli/geçersiz TC no'larla
+  doğrulandı; demo sağlayıcıların deterministik olduğu (aynı girdi → aynı
+  çıktı) doğrulandı.
+- **Canlı mongo'ya bağlı boot ile uçtan uca:** `/gov/mernis/verify` gerçek
+  bir çiftçiye `farmer_id` ile çağrıldı — `mernis_verified:true` +
+  `mernis_verified_at` DB'ye yazıldığı `GET /farmers/{id}` ile ve audit
+  log'daki old/new değerleriyle doğrulandı; geçersiz checksum'lı TC no
+  `verified:false` ile reddedildi. `/gov/takbis/query` gerçek bir
+  il/ilçe/ada/parsel ile çağrılıp tutarlı (deterministik) tapu verisi
+  döndürdüğü doğrulandı. `PUT /integrations/mernis` ve `/takbis` ile
+  kimlik bilgisi kaydedilip `mock_mode` açıkken DEMO, kapatılınca gerçek
+  kimlik bilgisiyle otomatik AKTİF'e geçtiği (`active`/`is_demo` alanları)
+  doğrulandı; `/health` ve `/test` uçları mock modda başarıyla çalıştı.
+  Test verisi (mernis/takbis config'leri) doğrulama sonrası boşaltıldı.
+
 ## [Yayınlanmamış] — Denetim Düzeltmeleri Faz 2 (2026-07-24, Build 24072026-1600)
 
 ### Değişti (A6 — server.py modülerleştirme)

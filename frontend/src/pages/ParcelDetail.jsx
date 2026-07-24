@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "@/api";
 import { MapContainer, TileLayer, Polygon } from "react-leaflet";
-import { ArrowLeft, MapPin, Droplets, FlaskConical, Sprout, Award, Satellite, Radio, Plane, Pencil, Check, X, Plus, Calendar, Trash2 } from "lucide-react";
+import { ArrowLeft, MapPin, Droplets, FlaskConical, Sprout, Award, Satellite, Radio, Plane, Pencil, Check, X, Plus, Calendar, Trash2, Landmark } from "lucide-react";
 import DynamicFieldsSection from "@/components/DynamicFieldsSection";
 import DocumentsTab from "@/components/DocumentsTab";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -47,6 +47,12 @@ export default function ParcelDetail() {
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+
+  // Denetim Faz 3 (TAKBİS) — ada/parsel → tapu bilgisi sorgu mini-formu
+  const [takbisForm, setTakbisForm] = useState({ il: "", ilce: "", ada: "", parsel: "" });
+  const [takbisBusy, setTakbisBusy] = useState(false);
+  const [takbisResult, setTakbisResult] = useState(null);
+  const [takbisMsg, setTakbisMsg] = useState("");
 
   // IT-06 — Üretim Sezonları (ProductionCycle)
   const [cycles, setCycles] = useState([]);
@@ -99,8 +105,41 @@ export default function ParcelDetail() {
       soil_type: data.parcel.soil_type, irrigation: data.parcel.irrigation,
       ...Object.fromEntries(fieldDefs.map((f) => [f.field_key, data.parcel[f.field_key] ?? ""])),
     });
+    setTakbisForm({
+      il: data.parcel.il || "", ilce: data.parcel.ilce || "",
+      ada: data.parcel.ada_no || "", parsel: data.parcel.parsel_no_tapu || "",
+    });
+    setTakbisResult(null);
+    setTakbisMsg("");
     setSaveError("");
     setEditing(true);
+  }
+
+  async function verifyTakbis() {
+    const { il, ilce, ada, parsel } = takbisForm;
+    if (!il || !ilce || !ada || !parsel) {
+      setTakbisMsg("İl/ilçe/ada/parsel alanlarının tümü gerekli.");
+      return;
+    }
+    setTakbisBusy(true);
+    setTakbisMsg("");
+    try {
+      const { data: r } = await api.post("/gov/takbis/query", { il, ilce, ada, parsel });
+      setTakbisResult(r);
+      if (r.found) {
+        setEditForm((f) => ({
+          ...f, il, ilce, ada_no: ada, parsel_no_tapu: parsel,
+          area_dekar: r.alan_m2 ? Number((r.alan_m2 / 1000).toFixed(2)) : f.area_dekar,
+        }));
+        setTakbisMsg("Tapu bilgisi bulundu — alanları gözden geçirip Kaydet'e basın.");
+      } else {
+        setTakbisMsg(r.detail || "Kayıt bulunamadı.");
+      }
+    } catch (err) {
+      setTakbisMsg(err.response?.data?.detail || "TAKBİS sorgusu başarısız.");
+    } finally {
+      setTakbisBusy(false);
+    }
   }
 
   function cancelEdit() {
@@ -443,6 +482,46 @@ export default function ParcelDetail() {
                     </select>
                   </div>
                 </div>
+              </div>
+              {/* Denetim Faz 3 (TAKBİS) — ada/parsel → tapu bilgisi sorgusu */}
+              <div className="border border-[var(--border)] rounded-lg p-3" data-testid="takbis-query-box">
+                <div className="text-xs font-medium text-[var(--primary)] mb-2 flex items-center gap-1.5">
+                  <Landmark size={13}/> TAKBİS Tapu Sorgu
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
+                  <div>
+                    <label className="text-[10px] text-[var(--text-dim)] mb-1 block">İl</label>
+                    <input className="input text-xs py-1" value={takbisForm.il}
+                           onChange={(e) => setTakbisForm((f) => ({ ...f, il: e.target.value }))} data-testid="takbis-il" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[var(--text-dim)] mb-1 block">İlçe</label>
+                    <input className="input text-xs py-1" value={takbisForm.ilce}
+                           onChange={(e) => setTakbisForm((f) => ({ ...f, ilce: e.target.value }))} data-testid="takbis-ilce" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[var(--text-dim)] mb-1 block">Ada No</label>
+                    <input className="input text-xs py-1" value={takbisForm.ada}
+                           onChange={(e) => setTakbisForm((f) => ({ ...f, ada: e.target.value }))} data-testid="takbis-ada" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[var(--text-dim)] mb-1 block">Parsel No</label>
+                    <input className="input text-xs py-1" value={takbisForm.parsel}
+                           onChange={(e) => setTakbisForm((f) => ({ ...f, parsel: e.target.value }))} data-testid="takbis-parsel" />
+                  </div>
+                  <button className="btn btn-ghost text-xs py-1.5" onClick={verifyTakbis} disabled={takbisBusy} data-testid="takbis-query-submit">
+                    {takbisBusy ? "Sorgulanıyor…" : "TAKBİS Sorgula"}
+                  </button>
+                </div>
+                {takbisMsg && <div className="text-[11px] text-[var(--text-dim)] mt-2">{takbisMsg}</div>}
+                {takbisResult?.found && (
+                  <div className="text-[11px] mt-2 grid grid-cols-2 md:grid-cols-4 gap-2" data-testid="takbis-result">
+                    <div><span className="text-[var(--text-dim)]">Malik:</span> {takbisResult.malik}</div>
+                    <div><span className="text-[var(--text-dim)]">Nitelik:</span> {takbisResult.nitelik}</div>
+                    <div><span className="text-[var(--text-dim)]">Alan:</span> {takbisResult.alan_m2} m²</div>
+                    <div><span className="text-[var(--text-dim)]">Tapu Tarihi:</span> {takbisResult.tapu_tarihi}</div>
+                  </div>
+                )}
               </div>
               <DynamicFieldsSection
                 module="parcels"

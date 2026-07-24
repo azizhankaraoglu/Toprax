@@ -67,6 +67,13 @@ SECRET_FIELDS = {
     # EOSDA — Integration Center'a yeni entegrasyon tipi. Auth OAuth DEĞİL,
     # sabit x-api-key; api_key/client_secret/access_token maskelenir.
     "eosda": {"api_key", "client_secret", "access_token"},
+    # (Denetim Faz 3, 2026-07-24) Resmi Sistem Entegrasyonları — MERNİS
+    # (KPS kimlik doğrulama) + TAKBİS (tapu/parsel sorgu). İkisi de kurumsal
+    # sözleşme gerektirir, bu yüzden eosda/sentinel_hub ile AYNI mock-capable
+    # deseni: gerçek kimlik bilgisi girilip mock_mode kapatılana kadar demo
+    # sağlayıcı (bkz. gov_providers.py) devrede kalır.
+    "mernis": {"password"},
+    "takbis": {"password"},
 }
 
 VALID_TYPES = set(SECRET_FIELDS.keys())
@@ -76,7 +83,7 @@ VALID_TYPES = set(SECRET_FIELDS.keys())
 # ailesinin tamamı bu deseni paylaşır (bkz. satellite_provider.py,
 # remote_sensing/providers/__init__.py). SMS/Email/AI'da ayrı bir "mock"
 # kavramı yoktur — onlar kimlik bilgisi + enabled olunca zaten aktiftir.
-MOCK_CAPABLE_TYPES = {"planet_labs", "sentinel_hub", "nasa_firms", "up42", "eosda"}
+MOCK_CAPABLE_TYPES = {"planet_labs", "sentinel_hub", "nasa_firms", "up42", "eosda", "mernis", "takbis"}
 
 
 def _is_filled(config: dict, key: str) -> bool:
@@ -114,6 +121,9 @@ def _has_credentials(itype: str, config: dict, provider: Optional[str]) -> bool:
         return _is_filled(config, "map_key")
     if itype in ("sentinel_hub", "up42"):
         return _is_filled(config, "client_id") and _is_filled(config, "client_secret")
+    if itype in ("mernis", "takbis"):
+        return (_is_filled(config, "username") and _is_filled(config, "password")
+                and _is_filled(config, "service_url"))
     return False
 
 
@@ -467,6 +477,35 @@ def _probe_sms_reachability(provider: str, cfg: dict, timeout: int) -> Tuple[boo
         return False, f"Bağlantı hatası: {e}"
 
 
+def _probe_mernis(cfg: dict, timeout: int) -> Tuple[bool, str]:
+    """MERNİS (KPS) kimlik bilgisi/erişilebilirlik kontrolü — gerçek bir
+    TC No sorgulamaz (yıkıcı olmayan health-check), sadece servis URL'ine
+    erişilebilirliği kontrol eder."""
+    if not cfg.get("username") or not cfg.get("password") or not cfg.get("service_url"):
+        return False, "username/password/service_url eksik"
+    if cfg.get("mock_mode", True):
+        return True, "[MOCK MOD] Kimlik bilgisi girilmiş görünüyor. Gerçek doğrulama için 'mock_mode' kapatılmalı."
+    try:
+        resp = requests.head(cfg["service_url"], timeout=timeout)
+        return resp.status_code < 500, f"MERNİS servis erişilebilir (HTTP {resp.status_code})"
+    except Exception as e:
+        return False, f"Bağlantı hatası: {e}"
+
+
+def _probe_takbis(cfg: dict, timeout: int) -> Tuple[bool, str]:
+    """TAKBİS kimlik bilgisi/erişilebilirlik kontrolü — gerçek bir parsel
+    sorgulamaz, sadece servis URL'ine erişilebilirliği kontrol eder."""
+    if not cfg.get("username") or not cfg.get("password") or not cfg.get("service_url"):
+        return False, "username/password/service_url eksik"
+    if cfg.get("mock_mode", True):
+        return True, "[MOCK MOD] Kimlik bilgisi girilmiş görünüyor. Gerçek doğrulama için 'mock_mode' kapatılmalı."
+    try:
+        resp = requests.head(cfg["service_url"], timeout=timeout)
+        return resp.status_code < 500, f"TAKBİS servis erişilebilir (HTTP {resp.status_code})"
+    except Exception as e:
+        return False, f"Bağlantı hatası: {e}"
+
+
 def _probe_email_connection(cfg: dict, timeout: int) -> Tuple[bool, str]:
     """SMTP sunucusuna bağlanıp kimlik doğrular, e-posta GÖNDERMEZ."""
     host = cfg.get("host")
@@ -688,6 +727,10 @@ def register_integration_routes(api_router, db, current_user, is_admin, log_audi
             ok, message = _with_retry(lambda: _probe_up42(cfg, timeout), retry_count)
         elif itype == "eosda":
             ok, message = _with_retry(lambda: _probe_eosda(cfg, timeout), retry_count)
+        elif itype == "mernis":
+            ok, message = _with_retry(lambda: _probe_mernis(cfg, timeout), retry_count)
+        elif itype == "takbis":
+            ok, message = _with_retry(lambda: _probe_takbis(cfg, timeout), retry_count)
         elif itype == "ai_service":
             ok, message = _with_retry(lambda: _probe_ai_service(provider, cfg, timeout), retry_count)
         else:
@@ -858,6 +901,42 @@ def register_integration_routes(api_router, db, current_user, is_admin, log_audi
         if log_audit:
             await log_audit(db, user, action="test_integration", entity="integration",
                              entity_id="eosda", new_value={"ok": ok, "message": message}, request=request)
+        if not ok:
+            raise HTTPException(502, message)
+        return {"status": "ok", "message": message}
+
+    @api_router.post("/integrations/mernis/test")
+    async def test_mernis(request: Request, user=Depends(current_user)):
+        await _check_manage(user)
+        doc = await db.integrations.find_one({"type": "mernis"}, {"_id": 0})
+        cfg = (doc or {}).get("config", {})
+        if not cfg.get("username") or not cfg.get("password") or not cfg.get("service_url"):
+            raise HTTPException(400, "Önce MERNİS kullanıcı adı/şifre/servis URL'i girilmeli")
+        timeout = _resolve_timeout(doc)
+        retry_count = _resolve_retry(doc)
+        ok, message = _with_retry(lambda: _probe_mernis(cfg, timeout), retry_count)
+        await _record_test_result("mernis", ok, message)
+        if log_audit:
+            await log_audit(db, user, action="test_integration", entity="integration",
+                             entity_id="mernis", new_value={"ok": ok, "message": message}, request=request)
+        if not ok:
+            raise HTTPException(502, message)
+        return {"status": "ok", "message": message}
+
+    @api_router.post("/integrations/takbis/test")
+    async def test_takbis(request: Request, user=Depends(current_user)):
+        await _check_manage(user)
+        doc = await db.integrations.find_one({"type": "takbis"}, {"_id": 0})
+        cfg = (doc or {}).get("config", {})
+        if not cfg.get("username") or not cfg.get("password") or not cfg.get("service_url"):
+            raise HTTPException(400, "Önce TAKBİS kullanıcı adı/şifre/servis URL'i girilmeli")
+        timeout = _resolve_timeout(doc)
+        retry_count = _resolve_retry(doc)
+        ok, message = _with_retry(lambda: _probe_takbis(cfg, timeout), retry_count)
+        await _record_test_result("takbis", ok, message)
+        if log_audit:
+            await log_audit(db, user, action="test_integration", entity="integration",
+                             entity_id="takbis", new_value={"ok": ok, "message": message}, request=request)
         if not ok:
             raise HTTPException(502, message)
         return {"status": "ok", "message": message}

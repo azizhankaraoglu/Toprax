@@ -92,6 +92,9 @@ FEATURE_FLAG_LABELS = {
     "developer_portal": "Geliştirici Portalı",
     "experience_profiles": "Experience Profile",
     "audit": "Audit Log",
+    # (Denetim Faz 3, 2026-07-24) Resmi Sistem Entegrasyonları
+    "mernis": "MERNİS Kimlik Doğrulama",
+    "takbis": "TAKBİS Tapu Sorgu",
 }
 
 HEALTH_STATUS_LABELS = {"saglikli": "Sağlıklı", "uyari": "Uyarı", "hata": "Hata", "kurulu_degil": "Kurulu Değil"}

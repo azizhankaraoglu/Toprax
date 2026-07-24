@@ -16,7 +16,7 @@ import api from "@/api";
 import {
   Settings, Key, MessageSquare, Mail, Wifi, Save, Upload, Camera, Loader2,
   Brain, Receipt, FileSpreadsheet, Scale, Activity, Satellite, MapPin, CheckCircle2,
-  Radio, Plane
+  Radio, Plane, ShieldCheck, Landmark
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { QuickAddPanel } from "@/components/QuickAdd";
@@ -490,6 +490,90 @@ export function AyarlarEntegrasyon() {
           </div>
           {saved.eosda && <div className="text-xs text-[var(--primary)] mt-2 flex items-center gap-2"><CheckCircle2 size={14}/> Kaydedildi</div>}
           <TestBadge itype="eosda"/>
+        </div>
+
+        {/* ============ MERNİS (Denetim Faz 3) ============ */}
+        <div className="card p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400"><ShieldCheck size={20}/></div>
+            <div>
+              <div className="flex items-center gap-2"><h3 className="font-display text-lg">MERNİS Kimlik Doğrulama</h3><StatusBadge itype="mernis"/></div>
+              <p className="text-xs text-[var(--text-dim)]">KPS (Kimlik Paylaşımı Sistemi) — TC No doğrulama</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <input className="input" placeholder="Kullanıcı Adı"
+                   value={forms.mernis?.config?.username || ""}
+                   onChange={(e) => setField("mernis", "username", e.target.value)} data-testid="mernis-username-input"/>
+            <input className="input" type="password" placeholder="Şifre"
+                   value={forms.mernis?.config?.password || ""}
+                   onChange={(e) => setField("mernis", "password", e.target.value)} data-testid="mernis-password-input"/>
+            <input className="input" placeholder="Servis URL'i"
+                   value={forms.mernis?.config?.service_url || ""}
+                   onChange={(e) => setField("mernis", "service_url", e.target.value)} data-testid="mernis-url-input"/>
+            <p className="text-[11px] text-[var(--text-dim)]">
+              Kurumsal KPS erişimi resmi sözleşme gerektirir. Kimlik bilgisi girilip <b>Kaydet</b>'e
+              basılana ve demo modu kapatılana kadar sistem deterministik demo veriyle çalışır.
+            </p>
+            <label className="flex items-center gap-2 text-xs text-[var(--text-dim)] mt-1">
+              <input type="checkbox" checked={forms.mernis?.config?.mock_mode ?? false}
+                     onChange={(e) => setField("mernis", "mock_mode", e.target.checked)} data-testid="mernis-mock-toggle"/>
+              Demo (mock) verisiyle çalıştır — gerçek KPS'e bağlanmaz
+            </label>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button onClick={() => save("mernis")} disabled={saving.mernis} className="btn btn-ghost">
+              <Save size={14}/> {saving.mernis ? "Kaydediliyor…" : "Kaydet"}
+            </button>
+            <button onClick={() => test("mernis")} disabled={testing.mernis} className="btn btn-primary">
+              {testing.mernis ? <Loader2 size={14} className="animate-spin"/> : <Wifi size={14}/>}
+              {testing.mernis ? "Test ediliyor…" : "Bağlantıyı Test Et"}
+            </button>
+          </div>
+          {saved.mernis && <div className="text-xs text-[var(--primary)] mt-2 flex items-center gap-2"><CheckCircle2 size={14}/> Kaydedildi</div>}
+          <TestBadge itype="mernis"/>
+        </div>
+
+        {/* ============ TAKBİS (Denetim Faz 3) ============ */}
+        <div className="card p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-400"><Landmark size={20}/></div>
+            <div>
+              <div className="flex items-center gap-2"><h3 className="font-display text-lg">TAKBİS Tapu Sorgu</h3><StatusBadge itype="takbis"/></div>
+              <p className="text-xs text-[var(--text-dim)]">Ada/parsel → tapu bilgisi (malik, alan, nitelik)</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <input className="input" placeholder="Kullanıcı Adı"
+                   value={forms.takbis?.config?.username || ""}
+                   onChange={(e) => setField("takbis", "username", e.target.value)} data-testid="takbis-username-input"/>
+            <input className="input" type="password" placeholder="Şifre"
+                   value={forms.takbis?.config?.password || ""}
+                   onChange={(e) => setField("takbis", "password", e.target.value)} data-testid="takbis-password-input"/>
+            <input className="input" placeholder="Servis URL'i"
+                   value={forms.takbis?.config?.service_url || ""}
+                   onChange={(e) => setField("takbis", "service_url", e.target.value)} data-testid="takbis-url-input"/>
+            <p className="text-[11px] text-[var(--text-dim)]">
+              Kurumsal TAKBİS erişimi resmi sözleşme gerektirir. Kimlik bilgisi girilip <b>Kaydet</b>'e
+              basılana ve demo modu kapatılana kadar sistem deterministik demo veriyle çalışır.
+            </p>
+            <label className="flex items-center gap-2 text-xs text-[var(--text-dim)] mt-1">
+              <input type="checkbox" checked={forms.takbis?.config?.mock_mode ?? false}
+                     onChange={(e) => setField("takbis", "mock_mode", e.target.checked)} data-testid="takbis-mock-toggle"/>
+              Demo (mock) verisiyle çalıştır — gerçek TAKBİS'e bağlanmaz
+            </label>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button onClick={() => save("takbis")} disabled={saving.takbis} className="btn btn-ghost">
+              <Save size={14}/> {saving.takbis ? "Kaydediliyor…" : "Kaydet"}
+            </button>
+            <button onClick={() => test("takbis")} disabled={testing.takbis} className="btn btn-primary">
+              {testing.takbis ? <Loader2 size={14} className="animate-spin"/> : <Wifi size={14}/>}
+              {testing.takbis ? "Test ediliyor…" : "Bağlantıyı Test Et"}
+            </button>
+          </div>
+          {saved.takbis && <div className="text-xs text-[var(--primary)] mt-2 flex items-center gap-2"><CheckCircle2 size={14}/> Kaydedildi</div>}
+          <TestBadge itype="takbis"/>
         </div>
 
       </div>

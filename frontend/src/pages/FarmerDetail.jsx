@@ -26,7 +26,7 @@ import Breadcrumb from "@/components/Breadcrumb";
 import FavoriteButton from "@/components/FavoriteButton";
 import { pushRecentlyViewed } from "@/lib/recentlyViewed";
 import { QuickAddPanel } from "@/components/QuickAdd";
-import { Zap, History, MessageCircle } from "lucide-react";
+import { Zap, History, MessageCircle, ShieldCheck, ShieldAlert } from "lucide-react";
 import VisitHistory from "@/components/VisitHistory";
 import CommunicationTab from "@/components/CommunicationTab";
 import { getBasemapUrl } from "@/lib/theme";
@@ -50,6 +50,12 @@ export default function FarmerDetail() {
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+
+  // Denetim Faz 3 (MERNİS) — TC doğrulama mini-formu
+  const [mernisOpen, setMernisOpen] = useState(false);
+  const [mernisYear, setMernisYear] = useState("");
+  const [mernisBusy, setMernisBusy] = useState(false);
+  const [mernisMsg, setMernisMsg] = useState("");
 
   // Sayfa yüklendiğinde 360° datayı çek
   useEffect(() => {
@@ -90,6 +96,33 @@ export default function FarmerDetail() {
       setSaveError(err.response?.data?.detail || "Kaydedilemedi, alanları kontrol edin.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function verifyMernis() {
+    if (!mernisYear || String(mernisYear).length !== 4) {
+      setMernisMsg("Doğum yılını 4 haneli girin (ör. 1985).");
+      return;
+    }
+    setMernisBusy(true);
+    setMernisMsg("");
+    const parts = (data.farmer.full_name || "").trim().split(/\s+/);
+    const ad = parts.slice(0, -1).join(" ") || parts[0] || "";
+    const soyad = parts.length > 1 ? parts[parts.length - 1] : "";
+    try {
+      const { data: r } = await api.post("/gov/mernis/verify", {
+        tc_no: data.farmer.tc_no, ad, soyad, dogum_yili: Number(mernisYear), farmer_id: id,
+      });
+      setMernisMsg(r.detail);
+      if (r.verified) {
+        const fresh = await api.get(`/farmers/${id}`);
+        setData(fresh.data);
+        setMernisOpen(false);
+      }
+    } catch (err) {
+      setMernisMsg(err.response?.data?.detail || "MERNİS doğrulaması başarısız.");
+    } finally {
+      setMernisBusy(false);
     }
   }
 
@@ -156,7 +189,35 @@ export default function FarmerDetail() {
           <div className="text-[10px] text-[var(--text-dim)] tracking-widest uppercase">İLETİŞİM</div>
           <div className="flex items-center gap-2"><Phone size={14} className="text-[var(--text-dim)]"/>{farmer.phone}</div>
           <div className="flex items-center gap-2"><Mail size={14} className="text-[var(--text-dim)]"/>{farmer.email || "—"}</div>
-          <div className="text-xs text-[var(--text-dim)] font-mono">TC: {farmer.tc_no}</div>
+          <div className="text-xs text-[var(--text-dim)] font-mono flex items-center gap-2 flex-wrap">
+            TC: {farmer.tc_no}
+            {farmer.mernis_verified ? (
+              <span className="badge badge-a text-[10px] inline-flex items-center gap-1" data-testid="mernis-verified-badge">
+                <ShieldCheck size={11}/> MERNİS Doğrulandı
+              </span>
+            ) : (
+              <button
+                className="btn btn-ghost text-[11px] px-2 py-0.5 inline-flex items-center gap-1"
+                onClick={() => setMernisOpen((v) => !v)}
+                data-testid="mernis-verify-toggle"
+              >
+                <ShieldAlert size={11}/> MERNİS ile Doğrula
+              </button>
+            )}
+          </div>
+          {mernisOpen && !farmer.mernis_verified && (
+            <div className="flex items-center gap-2 mt-1" data-testid="mernis-verify-form">
+              <input
+                type="number" placeholder="Doğum yılı" className="input text-xs py-1 w-24"
+                value={mernisYear} onChange={(e) => setMernisYear(e.target.value)}
+                data-testid="mernis-year-input"
+              />
+              <button className="btn btn-primary text-[11px] px-2 py-1" onClick={verifyMernis} disabled={mernisBusy} data-testid="mernis-verify-submit">
+                {mernisBusy ? "Doğrulanıyor…" : "Doğrula"}
+              </button>
+            </div>
+          )}
+          {mernisMsg && <div className="text-[11px] text-[var(--text-dim)] mt-1">{mernisMsg}</div>}
           {/* #6 — SORUMLU (köyden miras) */}
           <div className="pt-2 mt-2 border-t border-[var(--border)]">
             <div className="text-[10px] text-[var(--text-dim)] tracking-widest uppercase mb-1">SORUMLU PERSONEL</div>
