@@ -2,6 +2,34 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [Yayınlanmamış] — Denetim Düzeltmeleri Faz 2 (2026-07-24, Build 24072026-1600)
+
+### Değişti (A6 — server.py modülerleştirme)
+- `server.py` **3273 → 684 satır**. Endpoint blokları BİREBİR (davranış
+  değişikliği YOK) 6 yeni modüle taşındı, `register_X_routes(...)` konvansiyonu
+  ve **route kayıt sırası korunarak** (register çağrısı bloğun orijinal
+  konumundan yapılır — Starlette route-order tuzağı):
+  - `auth_routes.py` (login/refresh/me/public-contact)
+  - `farmer_routes.py` (/farmer/* portalı + Çiftçi CRUD)
+  - `parcel_routes.py` (Parsel CRUD + geo işlemler + import)
+  - `dashboard_routes.py` (dashboard/bildirim/bölge/lojistik/karne)
+  - `listing_routes.py` (toprak/sözleşme/ekim/sulama/operasyon/analitik listeleri)
+  - `seed_routes.py` (/admin/seed + /, /health, /roles)
+- Doğrulama: `py_compile` + `import server` (509 route) + pyflakes (0 undefined
+  name) + 47 pytest yeşil + **gerçek mongo'ya bağlı canlı boot** ile taşınan her
+  modülden temsili endpoint'lerin gerçekten çalıştığı (login → /farmers arama +
+  detay + mask, /parcels detay, /dashboard/overview, /regions cache) 200/403 ile
+  teyit edildi.
+
+### Düzeltildi (A3 regresyonu — canlı boot'ta yakalandı)
+- `server.py current_user`: kullanıcı DB araması `db.users` (tenant-scoped) →
+  `raw_db.users`. Faz 0'daki fail-closed değişikliği, tenant_id=None taşıyan
+  platform_admin hesabının kullanıcı kaydını bulamamasına ve HER authenticated
+  isteğin 401'e düşmesine yol açıyordu. Kimlik JWT ile imzalı user_id'den
+  çekildiği için çapraz-tenant sızıntı yok; asıl veri sorguları hâlâ scoped
+  `db`'den geçer. **Bu regresyon yalnız gerçek boot + curl ile görülebilirdi;
+  unit testler yakalamadı.**
+
 ## [Yayınlanmamış] — Denetim Düzeltmeleri Faz 1 (2026-07-24, Build 24072026-1400)
 
 ### Eklendi
