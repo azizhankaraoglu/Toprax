@@ -29,11 +29,18 @@ def _now() -> str:
 
 async def create_task(db, parcel_id: str, task_type: str, indices: List[str],
                       date_range_days: int = 365, trigger: str = "manual",
-                      priority: int = 0) -> dict:
-    """Yeni RS task'ı kuyruğa alır (state=queued). Worker sonra claim eder."""
+                      priority: int = 0, provider_override: Optional[str] = None) -> dict:
+    """Yeni RS task'ı kuyruğa alır (state=queued). Worker sonra claim eder.
+
+    Denetim Faz 5: `provider_override` artık gerçekten SAKLANIR (önceden
+    TaramaPolicy.provider_override alanı var olduğu halde hiçbir zaman
+    task dokümanına yazılmıyordu — process_pending_tasks'ın okuduğu
+    `task.get("provider_override")` her zaman None dönüyordu, yani bir
+    politika farklı bir sağlayıcı seçse bile hiç etkisi olmuyordu)."""
     doc = {
         "id": str(uuid.uuid4()),
         "provider": "eosda",
+        "provider_override": provider_override,
         "parcel_id": parcel_id,
         "task_type": task_type,
         "indices": indices,

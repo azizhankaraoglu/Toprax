@@ -30,9 +30,19 @@ export default function RemoteSensingPanel({ parcelId }) {
   const [interp, setInterp] = useState(null);
   const [interpBusy, setInterpBusy] = useState(false);
 
+  const [s2Busy, setS2Busy] = useState(false);
+  const [s2Msg, setS2Msg] = useState("");
+
   const load = () => {
     api.get("/remote-sensing/providers/status").then((r) => setStatus(r.data)).catch(() => {});
-    api.get(`/remote-sensing/parcels/${parcelId}/timeseries`).then((r) => setStats(r.data.statistics || [])).catch(() => setStats([]));
+    // Denetim Faz 5 — birincil NDVI grafiği/slider'ı EOSDA istatistiğine
+    // dayanır (bilinçli tercih: iki farklı sağlayıcının NDVI serisini
+    // birleştirmek yerine, mevcut çalışan grafik AYNEN korunur; Sentinel-2
+    // sadece kendi görüntüsünü aynı zaman çizgisine "son bilinen görüntü"
+    // deseniyle ekler — bkz. curImgS2 aşağıda).
+    api.get(`/remote-sensing/parcels/${parcelId}/timeseries`).then((r) =>
+      setStats((r.data.statistics || []).filter((s) => s.provider !== "sentinel2"))
+    ).catch(() => setStats([]));
     api.get(`/remote-sensing/parcels/${parcelId}/images`).then((r) => setImages(r.data || [])).catch(() => setImages([]));
   };
   useEffect(load, [parcelId]);
@@ -45,9 +55,15 @@ export default function RemoteSensingPanel({ parcelId }) {
 
   // Görüntüler tarihe göre sıralı — seçili tarihte görüntü YOKSA o tarihten
   // ÖNCEKİ en yeni görüntü gösterilir ("son bilinen görüntü"), aksi halde tek
-  // bir tarih dışında hep "görüntü yok" görünürdü.
+  // bir tarih dışında hep "görüntü yok" görünürdü. EOSDA (sol) ve Sentinel-2
+  // (sağ) görüntüleri `provider` alanına göre AYRI listelerdir.
   const sortedImages = useMemo(
-    () => images.filter((im) => im.capture_date && im.stored_name)
+    () => images.filter((im) => im.capture_date && im.stored_name && im.provider !== "sentinel2")
+                .slice().sort((a, b) => (a.capture_date || "").localeCompare(b.capture_date || "")),
+    [images]
+  );
+  const sortedImagesS2 = useMemo(
+    () => images.filter((im) => im.capture_date && im.stored_name && im.provider === "sentinel2")
                 .slice().sort((a, b) => (a.capture_date || "").localeCompare(b.capture_date || "")),
     [images]
   );
@@ -62,7 +78,16 @@ export default function RemoteSensingPanel({ parcelId }) {
     }
     return found || null;
   }, [cur, sortedImages]);
+  const curImgS2 = useMemo(() => {
+    if (!cur?.date) return null;
+    let found = null;
+    for (const im of sortedImagesS2) {
+      if ((im.capture_date || "") <= cur.date) found = im; else break;
+    }
+    return found || null;
+  }, [cur, sortedImagesS2]);
   const imgIsExact = curImg && curImg.capture_date === cur?.date;
+  const imgIsExactS2 = curImgS2 && curImgS2.capture_date === cur?.date;
 
   // Slider EN GÜNCEL tarihte açılsın (uydu görüntüsü de en yeni tarihte olur).
   useEffect(() => {
@@ -108,11 +133,28 @@ export default function RemoteSensingPanel({ parcelId }) {
     }
   }
 
+  async function runSentinel2Fetch() {
+    setS2Busy(true);
+    setS2Msg("");
+    try {
+      const { data } = await api.post("/remote-sensing/sentinel2/fetch", { parcel_id: parcelId });
+      setS2Msg(`Sentinel-2 görüntüsü güncellendi: ${data.queued ?? 0} görev kuyruğa alındı, ${data.processed ?? 0} işlendi.`);
+      load();
+    } catch (err) {
+      setS2Msg(err.response?.data?.detail || "Sentinel-2 görüntüsü alınamadı.");
+    } finally {
+      setS2Busy(false);
+    }
+  }
+
   // Yerel diske kaydedilmiş PNG'yi (stored_name) kendi güvenli ucumuzdan sun.
   // (EOSDA'nın imzalı result_url'i geçici/çapraz-köken olduğundan doğrudan
   // kullanılmaz.)
   const imgSrc = curImg?.stored_name
     ? `${BACKEND_URL || ""}/api/remote-sensing/images/file/${curImg.stored_name}?token=${localStorage.getItem("token") || ""}`
+    : null;
+  const imgSrcS2 = curImgS2?.stored_name
+    ? `${BACKEND_URL || ""}/api/remote-sensing/images/file/${curImgS2.stored_name}?token=${localStorage.getItem("token") || ""}`
     : null;
 
   return (
@@ -120,16 +162,22 @@ export default function RemoteSensingPanel({ parcelId }) {
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Satellite size={18} className="text-[var(--primary)]" />
-          <h3 className="font-display text-lg">Uzaktan Algılama (EOSDA)</h3>
+          <h3 className="font-display text-lg">Uzaktan Algılama (EOSDA + Sentinel-2)</h3>
           {status && (
             <span className={`badge ${status.is_real ? "badge-a" : "badge-neutral"}`}>
               {status.is_real ? "GERÇEK" : "MOCK"}
             </span>
           )}
         </div>
-        <button onClick={runUpdate} disabled={busy} className="btn btn-primary text-xs" data-testid="rs-update">
-          <RefreshCw size={14} className={busy ? "animate-spin" : ""} /> {busy ? "Çalışıyor…" : "Uydu Analizini Güncelle"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={runUpdate} disabled={busy} className="btn btn-primary text-xs" data-testid="rs-update">
+            <RefreshCw size={14} className={busy ? "animate-spin" : ""} /> {busy ? "Çalışıyor…" : "Uydu Analizini Güncelle"}
+          </button>
+          <button onClick={runSentinel2Fetch} disabled={s2Busy} className="btn btn-ghost text-xs" data-testid="rs-s2-fetch"
+                  title="Sentinel-2 (Copernicus) — ücretsiz, ~5 günde bir yeni görüntü">
+            <RefreshCw size={14} className={s2Busy ? "animate-spin" : ""} /> {s2Busy ? "Çalışıyor…" : "Yeni Görüntü Getir (Sentinel-2)"}
+          </button>
+        </div>
       </div>
 
       {status && !status.enabled && (
@@ -138,6 +186,7 @@ export default function RemoteSensingPanel({ parcelId }) {
         </div>
       )}
       {msg && <div className="text-xs text-[var(--text-dim)] mb-3">{msg}</div>}
+      {s2Msg && <div className="text-xs text-[var(--text-dim)] mb-3">{s2Msg}</div>}
 
       {series.length === 0 ? (
         <div className="text-sm text-[var(--text-dim)] py-6 text-center border border-dashed border-[var(--border)] rounded-lg">
@@ -175,45 +224,72 @@ export default function RemoteSensingPanel({ parcelId }) {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Görüntü / placeholder */}
-              <div className="aspect-video rounded-lg overflow-hidden border border-[var(--border)] flex items-center justify-center relative"
-                   style={{ background: `${ndviColor(cur?.ndvi)}22` }}>
-                {imgSrc && !imgError ? (
-                  <>
-                    <img src={imgSrc} alt={curImg?.capture_date} className="w-full h-full object-cover" onError={() => setImgError(true)} />
-                    <div className="absolute bottom-0 left-0 right-0 text-[10px] px-2 py-1 bg-black/60 text-white">
-                      {imgIsExact ? `Uydu görüntüsü · ${curImg.capture_date}`
-                                  : `Son bilinen görüntü · ${curImg.capture_date} (seçili tarih: ${cur?.date})`}
-                      {curImg?.cloud_pct != null && ` · bulut %${curImg.cloud_pct}`}
+              {/* Sol: EOSDA görüntüsü */}
+              <div>
+                <div className="text-[10px] text-[var(--text-dim)] uppercase tracking-wider mb-1">EOSDA</div>
+                <div className="aspect-video rounded-lg overflow-hidden border border-[var(--border)] flex items-center justify-center relative"
+                     style={{ background: `${ndviColor(cur?.ndvi)}22` }}>
+                  {imgSrc && !imgError ? (
+                    <>
+                      <img src={imgSrc} alt={curImg?.capture_date} className="w-full h-full object-cover" onError={() => setImgError(true)} />
+                      <div className="absolute bottom-0 left-0 right-0 text-[10px] px-2 py-1 bg-black/60 text-white">
+                        {imgIsExact ? `Uydu görüntüsü · ${curImg.capture_date}`
+                                    : `Son bilinen görüntü · ${curImg.capture_date} (seçili tarih: ${cur?.date})`}
+                        {curImg?.cloud_pct != null && ` · bulut %${curImg.cloud_pct}`}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center p-4">
+                      <ImageIcon size={28} className="mx-auto mb-1" style={{ color: ndviColor(cur?.ndvi) }} />
+                      <div className="text-xs text-[var(--text-dim)]">
+                        {status && !status.is_real
+                          ? "MOCK modda gerçek raster gelmez — EOSDA gerçek moda alınmalı"
+                          : images.length === 0
+                            ? "Bu parsel için henüz uydu görüntüsü indirilmedi — “Uydu Analizini Güncelle”ye basın (render ~1-2 dk sürer)."
+                            : "Seçili tarihten önce görüntü yok — slider'ı sağa (daha yeni tarihe) çekin."}
+                      </div>
                     </div>
-                  </>
-                ) : (
-                  <div className="text-center p-4">
-                    <ImageIcon size={28} className="mx-auto mb-1" style={{ color: ndviColor(cur?.ndvi) }} />
-                    <div className="text-xs text-[var(--text-dim)]">
-                      {status && !status.is_real
-                        ? "MOCK modda gerçek raster gelmez — EOSDA gerçek moda alınmalı"
-                        : images.length === 0
-                          ? "Bu parsel için henüz uydu görüntüsü indirilmedi — “Uydu Analizini Güncelle”ye basın (render ~1-2 dk sürer)."
-                          : "Seçili tarihten önce görüntü yok — slider'ı sağa (daha yeni tarihe) çekin."}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
-              {/* O günkü değerler */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ background: ndviColor(cur?.ndvi) }} />
-                  <div className="font-display text-2xl">NDVI {cur?.ndvi ?? "—"}</div>
-                  <span className="text-xs" style={{ color: ndviColor(cur?.ndvi) }}>{ndviLabel(cur?.ndvi)}</span>
+              {/* Sağ: Sentinel-2 (Copernicus, ücretsiz, ~5 günde bir yenilenir) — NDVI renk haritası, 30 m tampon ile kırpılmış */}
+              <div>
+                <div className="text-[10px] text-[var(--text-dim)] uppercase tracking-wider mb-1">Sentinel-2 · Copernicus</div>
+                <div className="aspect-video rounded-lg overflow-hidden border border-[var(--border)] flex items-center justify-center relative bg-[var(--surface)]">
+                  {imgSrcS2 ? (
+                    <>
+                      <img src={imgSrcS2} alt={curImgS2?.capture_date} className="w-full h-full object-cover" />
+                      <div className="absolute bottom-0 left-0 right-0 text-[10px] px-2 py-1 bg-black/60 text-white">
+                        {imgIsExactS2 ? `Sentinel-2 · ${curImgS2.capture_date}`
+                                      : `Son bilinen görüntü · ${curImgS2.capture_date} (seçili tarih: ${cur?.date})`}
+                        {curImgS2?.cloud_pct != null && ` · bulut %${curImgS2.cloud_pct}`}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center p-4">
+                      <ImageIcon size={28} className="mx-auto mb-1 text-[var(--text-dim)]" />
+                      <div className="text-xs text-[var(--text-dim)]">
+                        Bu parsel için henüz Sentinel-2 görüntüsü yok — "Yeni Görüntü Getir (Sentinel-2)"ye basın.
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {cur?.ndre != null && <div className="text-xs text-[var(--text-dim)]">NDRE: {cur.ndre}</div>}
-                <div className="text-xs text-[var(--text-dim)] flex items-center gap-1">
-                  <CloudSun size={13} /> Bulut: %{cur?.cloud_pct ?? "—"}
-                </div>
-                {curImg?.satellite && <div className="text-xs text-[var(--text-dim)]">Uydu: {curImg.satellite}</div>}
               </div>
+            </div>
+
+            {/* O günkü değerler — Denetim Faz 5: grafiğin/görüntülerin ALTINA bilgi satırı olarak taşındı */}
+            <div className="flex flex-wrap items-center gap-4 mt-3 pt-3 border-t border-[var(--border)]">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ background: ndviColor(cur?.ndvi) }} />
+                <div className="font-display text-xl">NDVI {cur?.ndvi ?? "—"}</div>
+                <span className="text-xs" style={{ color: ndviColor(cur?.ndvi) }}>{ndviLabel(cur?.ndvi)}</span>
+              </div>
+              {cur?.ndre != null && <div className="text-xs text-[var(--text-dim)]">NDRE: {cur.ndre}</div>}
+              <div className="text-xs text-[var(--text-dim)] flex items-center gap-1">
+                <CloudSun size={13} /> Bulut: %{cur?.cloud_pct ?? "—"}
+              </div>
+              {curImg?.satellite && <div className="text-xs text-[var(--text-dim)]">Uydu: {curImg.satellite}</div>}
             </div>
           </div>
 

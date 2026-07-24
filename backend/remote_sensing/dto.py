@@ -34,6 +34,10 @@ class TaskState(str, Enum):
 class ScanFrequency(str, Enum):
     GUNLUK = "gunluk"
     IKI_GUNDE_BIR = "iki_gunde_bir"
+    # Denetim Faz 5 — Sentinel-2'nin gerçek yeniden ziyaret süresi ~5 gün
+    # (ekvatorda 10 gün, orta enlemlerde iki uydunun (S2A+S2B) birleşimiyle
+    # ~5 gün) — mevcut haftalık/2-günlük seçenekler bunu tam karşılamıyordu.
+    BES_GUNDE_BIR = "bes_gunde_bir"
     HAFTADA_BIR = "haftada_bir"
     AYDA_BIR = "ayda_bir"
     MANUEL_ONLY = "manuel_only"
@@ -44,6 +48,7 @@ class ScanFrequency(str, Enum):
 FREQUENCY_DAYS = {
     ScanFrequency.GUNLUK: 1,
     ScanFrequency.IKI_GUNDE_BIR: 2,
+    ScanFrequency.BES_GUNDE_BIR: 5,
     ScanFrequency.HAFTADA_BIR: 7,
     ScanFrequency.AYDA_BIR: 30,
     ScanFrequency.MANUEL_ONLY: None,   # otomatik taranmaz

@@ -110,7 +110,17 @@ async def run_scheduler_tick(db, provider_factory) -> Dict:
             continue
         await create_task(db, parcel_id=parcel["id"], task_type="statistics",
                           indices=policy.get("indices", ["ndvi"]),
-                          trigger="scheduled", priority=policy.get("priority", 0))
+                          trigger="scheduled", priority=policy.get("priority", 0),
+                          provider_override=policy.get("provider_override"))
+        # Denetim Faz 5 — sentinel2 politikaları GÖRÜNTÜ ister (istatistiğin
+        # yanı sıra); eosda'nın varsayılan akışında görüntü ayrı bir manuel
+        # tetikleme gerektirir, sentinel2 politikasında ise "5 günde bir
+        # otomatik yeni görüntü" ifadesi ancak download task'ı da kuyruğa
+        # girerse gerçek anlam kazanır.
+        if policy.get("provider_override") == "sentinel2":
+            await create_task(db, parcel_id=parcel["id"], task_type="download",
+                              indices=["ndvi"], trigger="scheduled",
+                              priority=policy.get("priority", 0), provider_override="sentinel2")
         enqueued += 1
     result = await process_pending_tasks(db, provider_factory)
     uncovered = await find_uncovered_parcels(db)

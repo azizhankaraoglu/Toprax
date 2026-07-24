@@ -187,6 +187,33 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
                         new_value={"count": len(parcel_ids), "trigger": "manual"}, request=request)
         return {"queued": len(created), **result}
 
+    # ---- Sentinel-2 manuel görüntü getirme (Denetim Faz 5) --------------------
+    @api_router.post("/remote-sensing/sentinel2/fetch")
+    async def rs_sentinel2_fetch(body: dict, request: Request,
+                                 user=Depends(require_permission("remote_sensing:manual_sync")),
+                                 _feat=Depends(require_feature("remote_sensing"))):
+        """"Yeni Görüntü Getir" — manual-sync ile AYNI mantık, SADECE
+        provider_override="sentinel2" ile (EOSDA'ya dokunmaz, ayrı bir görüntü
+        + NDVI istatistiği üretir). ~5 günde bir otomatik tazelenme için
+        Tarama Politikası'na `provider_override:"sentinel2"` + sıklık
+        `bes_gunde_bir` ile bağlanabilir (scheduler.py bu politikayı
+        işlerken hem statistics hem download task'ı otomatik kuyruğa alır)."""
+        parcel_id = body.get("parcel_id")
+        if not parcel_id:
+            raise HTTPException(400, "parcel_id gerekli")
+        created = [
+            await create_task(db, parcel_id=parcel_id, task_type="statistics",
+                              indices=["ndvi"], trigger="manual", priority=100,
+                              provider_override="sentinel2"),
+            await create_task(db, parcel_id=parcel_id, task_type="download",
+                              indices=["ndvi"], trigger="manual", priority=100,
+                              provider_override="sentinel2"),
+        ]
+        result = await process_pending_tasks(db, _provider_factory)
+        await log_audit(db, user, action="sentinel2_fetch", entity="remote_sensing",
+                        entity_id=parcel_id, new_value={"trigger": "manual"}, request=request)
+        return {"queued": len(created), **result}
+
     # ---- Ekili/Söküm durumu toplu yeniden-hesaplama (#2) ---------------------
     @api_router.post("/remote-sensing/recompute-crop-status")
     async def rs_recompute_crop_status(request: Request,

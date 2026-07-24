@@ -10,10 +10,12 @@ ABC kırılmaz.
 """
 from .base import IRemoteSensingProvider
 from .eosda import EOSDAProvider
+from .sentinel2 import Sentinel2Provider
 from .placeholders import PlanetProvider, AirbusProvider, UP42RSProvider
 
 _PROVIDERS = {
     "eosda": EOSDAProvider,
+    "sentinel2": Sentinel2Provider,
     "planet": PlanetProvider,
     "airbus": AirbusProvider,
     "up42": UP42RSProvider,
@@ -25,6 +27,19 @@ async def get_remote_sensing_provider(db, tenant_id: str = None,
     """Tenant'ın aktif RS sağlayıcısını döner. provider_override (Tarama
     Politikası) verilmişse onu dener; yoksa varsayılan EOSDA."""
     itype = provider_override or "eosda"
+
+    if itype == "sentinel2":
+        # Denetim Faz 5 — YENİ bir entegrasyon tipi EKLENMEDİ, mevcut
+        # `sentinel_hub` (Ayarlar > Entegrasyonlar) kimlik bilgisi aynen
+        # kullanılır (satellite_provider.SentinelHubProvider ile AYNI CDSE hesabı).
+        doc = await db.integrations.find_one({"type": "sentinel_hub"}, {"_id": 0})
+        cfg = (doc or {}).get("config", {})
+        enabled = bool(doc and doc.get("enabled"))
+        mock_mode = cfg.get("mock_mode", True)
+        real = enabled and cfg.get("client_id") and cfg.get("client_secret") and not mock_mode
+        return Sentinel2Provider(client_id=cfg.get("client_id"), client_secret=cfg.get("client_secret"),
+                                 mock_mode=not real)
+
     doc = await db.integrations.find_one({"type": "eosda"}, {"_id": 0})
     cfg = (doc or {}).get("config", {})
     enabled = bool(doc and doc.get("enabled"))
@@ -38,4 +53,4 @@ async def get_remote_sensing_provider(db, tenant_id: str = None,
     return cls()
 
 
-__all__ = ["IRemoteSensingProvider", "EOSDAProvider", "get_remote_sensing_provider"]
+__all__ = ["IRemoteSensingProvider", "EOSDAProvider", "Sentinel2Provider", "get_remote_sensing_provider"]

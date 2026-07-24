@@ -2,6 +2,65 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [Yayınlanmamış] — Faz 5: Sentinel-2 Parsel Görüntüsü (2026-07-24, Build 24072026-2200)
+
+### Eklendi
+- Yeni `backend/remote_sensing/providers/sentinel2.py` — `IRemoteSensingProvider`
+  arayüzüne bağlı `Sentinel2Provider`. CDSE (Copernicus Data Space, ücretsiz)
+  Process API + Statistics API SENKRONDUR — EOSDA'nın 3-adımlı async task
+  modeline `request_image_download`/`request_statistics` içinde işi hemen
+  bitirip sonucu örnek-seviyesi bir cache'e (`task_id → bytes/series`) gömüp
+  `get_task_status`'un anında "completed" dönmesiyle uyarlandı — `tasks.py`/
+  `scheduler.py` TEK SATIR değişmeden mevcut kuyruk mimarisine bağlandı.
+  30 m tampon `pyproj` ile parselin UTM diliminde hesaplanır (shapely YOK);
+  gerçek kırpma CDSE'nin kendi `geometry` parametresiyle sunucu tarafında
+  yapılır. Görüntü NDVI renk haritalı (kırmızı→sarı→yeşil) PNG — EOSDA'nın
+  true-color görüntüsünü tekrarlamak yerine tamamlayıcı bir ürün. Demo mod
+  CRC32-tohumlu deterministik gradyan (Pillow — zaten proje bağımlılığı,
+  yeni paket eklenmedi).
+- **Kimlik bilgisi — yeni entegrasyon tipi YOK:** mevcut `sentinel_hub`
+  entegrasyonundaki (Ayarlar > Entegrasyonlar) `client_id`/`client_secret`
+  aynen kullanılır (`satellite_provider.SentinelHubProvider` ile aynı CDSE
+  hesabı). `providers/__init__.py` factory'sine `"sentinel2"` eklendi.
+- `remote_sensing/dto.py`: `ScanFrequency.BES_GUNDE_BIR` (5 gün) — Sentinel-2'nin
+  gerçek yeniden-ziyaret süresine en yakın seçenek (mevcut 2/7/30 gün
+  seçenekleri yetersizdi).
+- `remote_sensing/tasks.py`: `create_task()` artık `provider_override`'ı
+  GERÇEKTEN task dokümanına yazıyor — **bulunan bir hata**: bu alan
+  `TaramaPolicy`'de vardı ama hiçbir zaman task'a aktarılmıyordu,
+  `process_pending_tasks`'ın okuduğu `task.get("provider_override")` her
+  zaman `None` dönüyordu (politika farklı bir sağlayıcı seçse bile etkisiz
+  kalıyordu). `scheduler.py` artık `provider_override="sentinel2"` olan
+  politikalar için hem `statistics` hem `download` task'ı otomatik kuyruğa
+  alıyor (tek `statistics` yeterli değildi — görüntü ayrı task_type).
+- Yeni `POST /remote-sensing/sentinel2/fetch {parcel_id}` — "Yeni Görüntü
+  Getir" manuel tetikleme (istatistik + görüntü tek çağrıda).
+- Frontend `RemoteSensingPanel.jsx` yeniden düzenlendi: sol slot EOSDA
+  görüntüsü (değişmedi), **sağ slot artık Sentinel-2 görüntüsü** (aynı
+  "seçili tarihe ≤ son bilinen görüntü" deseniyle, ayrı `provider` alanına
+  göre filtrelenmiş); NDVI/NDRE/bulut/uydu bilgi satırı görüntülerin ALTINA
+  taşındı; "Yeni Görüntü Getir (Sentinel-2)" butonu eklendi. **Bilinçli
+  sadeleştirme:** birincil NDVI grafiği/slider'ı hâlâ SADECE EOSDA
+  istatistiğine dayanır (iki farklı sağlayıcının NDVI serisini birleştirmek
+  yerine mevcut çalışan grafik korundu) — Sentinel-2 görüntüsü aynı zaman
+  çizgisine "son bilinen görüntü" deseniyle bağımsız eklenir.
+
+### Doğrulama
+- Backend: py_compile + pyflakes (yeni dosyalarda 0 uyarı) + 47 pytest yeşil.
+- 30 m tampon fonksiyonu birim test edildi (bbox gerçekten genişliyor);
+  demo PNG üretimi birim test edildi (gerçek/geçerli PNG magic byte'ları).
+- **Gerçek mongo'ya bağlı canlı boot ile uçtan uca (demo mod, CDSE kimlik
+  bilgisi bu ortamda yok):** `POST /remote-sensing/sentinel2/fetch` gerçek
+  bir parselde çağrıldı — 2 görev kuyruğa alındı ve işlendi (istatistik: 74
+  nokta, ort NDVI 0.515; görüntü: 1 sahne, 1 kaydedildi); `remote_sensing_
+  images`'a `provider:"sentinel2"` ile GERÇEK bir kayıt yazıldığı, dosyanın
+  diske kaydedildiği ve `GET /remote-sensing/images/file/{name}?token=`
+  ucundan 200 + geçerli PNG (magic byte doğrulandı, 41889 bayt) olarak
+  servis edildiği doğrulandı; `bes_gunde_bir` + `provider_override:
+  "sentinel2"` ile bir Tarama Politikası oluşturulup doğru kaydedildiği
+  doğrulandı. Test verisi (sentinel2 görüntü/istatistik/task/politika
+  kayıtları) MongoDB'den temizlendi.
+
 ## [Yayınlanmamış] — Faz 4: Ollama Hibrit Yerel LLM (2026-07-24, Build 24072026-2000)
 
 ### Eklendi
