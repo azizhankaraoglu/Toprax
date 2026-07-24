@@ -2,6 +2,69 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [Yayınlanmamış] — Faz 8: Rol Bazlı Offline (2026-07-24, Build 24072026-2359)
+
+Denetim raporunun kullanıcı tarafından onaylanan 8 maddesinden #2: "hangi
+fonksiyonlar hangi rolde offline çalışmalı" — proje zaten IT-35/36/37/38/39
+ile önemli bir offline altyapısına (`lib/offlineQueue.js`, `MobilDashboard.
+jsx`) sahipti; bu faz İKİ gerçek boşluğu kapattı: (1) kuyruktaki bir isteğin
+sunucuya ULAŞIP işlendiği HALDE yanıtın kaybolması durumunda TEKRAR
+gönderilip kaydın İKİ KEZ yazılması riski, (2) plan'ın "eksik formlar"
+listesindeki destek talebi/kantar/toprak örneği'nin offline kuyruğa hiç
+bağlı olmaması.
+
+### Eklendi
+- Yeni `backend/idempotency.py` — `X-Idempotency-Key` header'ına göre
+  "bu istek daha önce işlendi mi" kontrolü; varsa kaydedilmiş yanıtı
+  AYNEN döner (yeni yazma YAPMAZ). Geriye dönük uyumlu: header yoksa
+  (eski istemciler) sessizce devre dışı. `idempotency_keys` koleksiyonu
+  7 gün TTL index'li.
+- İdempotency 7 uca eklendi: `POST /visits`, `PUT /tasks/{id}/transition`
+  (replay artık "bu durum terminaldir" 400'üne çarpmaz), `POST /soil-
+  samples/field`, `POST /kantar/records`, `POST /farmer/irrigation`,
+  `POST /portal/support-requests`, `POST /forms/{id}/submit`.
+- `lib/offlineQueue.js`: her kuyruğa eklenen isteğe `makeIdempotencyKey()`
+  ile benzersiz bir anahtar atanır — İLK (çevrimiçi) denemeden İTİBAREN
+  sabit tutulur (`MobilDashboard.jsx`'in TÜM yazma akışları güncellendi),
+  `flush()` tekrar denemede AYNI anahtarı gönderir.
+- `MobilDashboard.jsx`'e İKİ YENİ offline akış: "Yeni Destek Talebi"
+  (çiftçi, `/portal/support-requests` — önceden sadece `QUICK_ACTION_
+  LABELS`'ta rozet olarak vardı, GERÇEK bir form YOKTU) ve "Kantar
+  Tartımı" (kantar_personeli, `/kantar/records`, `Extras.jsx`'teki
+  masaüstü `KantarHizliGiris` ile AYNI alan şeması + `/search` ile canlı
+  çiftçi arama) — kantar personelinin sahada field_task'ı olmadığından
+  (sabit konumlu iş) generic görev akışına hiç girmiyordu, kendi bölümü
+  yoktu. `saveSoilSample` de (önceden offline fallback'i HİÇ yoktu) artık
+  kuyruğa düşüyor.
+- `experience_profile.py`: `ROLE_OFFLINE_DEFAULTS` + idempotent `POST
+  /experience-profiles/seed-role-defaults` — plan'ın rol×offline-yetenek
+  matrisini 5 Experience Profile'a yazar (`offline_sync_rules` alanı
+  IT-34'ten beri opak/boştu, bu fazın İLK gerçek içeriği).
+- `docs/offline-test-kontrol-listesi.md` — rol×aksiyon manuel test matrisi.
+
+### Bilinçli kapsam notları
+- Okuma-tarafı önbellek (`lib/offlineStore.js`, "günün verisi") bu
+  iterasyona ALINMADI — yazma tarafının (veri kaybı riski taşıyan)
+  kuyruklanması önceliklendirildi; sayfa açılışında bir kez veri çekilmiş
+  olması hâlâ gerekiyor.
+
+### Doğrulama
+- `py_compile`+`pyflakes` (0 uyarı) + 50 pytest yeşil (3 yeni idempotency
+  testi: replay tek kayıt, header'sız istemci devre dışı, farklı uçlar
+  çapraz cevap dönmez).
+- **Gerçek Docker deployment'ta uçtan uca doğrulandı:** gerçek bir görev
+  üzerinde `POST /visits`'e AYNI `X-Idempotency-Key` ile 2 istek atıldı —
+  ikisi de AYNI `id`'yi döndü, DB'de TEK kayıt oluştu (2 değil); `PUT
+  /tasks/{id}/transition`'a aynı geçiş idempotency anahtarıYLA 2 kez
+  gönderildi — ikisi de 200 (anahtarSIZ 3. deneme doğru şekilde 400 ile
+  reddedildi, mekanizmanın gerçekten iş yaptığının kanıtı). **Gerçek
+  tarayıcıda:** kantar_personeli girişiyle "Kantar Tartımı" formu (çiftçi
+  arama → seç → plaka/brüt/dara/polar → kaydet) uçtan uca çalıştı
+  ("Tartım kaydedildi — net 9.30 t."); ciftci girişiyle "Yeni Destek
+  Talebi" formu (üretim sezonu + destek tipi + miktar) uçtan uca çalıştı
+  ("Destek talebi oluşturuldu."), `POST /portal/support-requests` 200
+  döndü. Konsolda hiç hata yok. Test verisi temizlendi.
+
 ## [Yayınlanmamış] — Faz 7: Harita Stüdyosu (2026-07-24, Build 24072026-2345)
 
 ### Eklendi

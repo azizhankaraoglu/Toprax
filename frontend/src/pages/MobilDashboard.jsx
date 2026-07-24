@@ -41,7 +41,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import api from "@/api";
-import { enqueue, flush, getAll as getQueuedItems } from "@/lib/offlineQueue";
+import { enqueue, flush, getAll as getQueuedItems, makeIdempotencyKey } from "@/lib/offlineQueue";
 import AnnouncementPopup from "@/components/AnnouncementPopup";
 import {
   Wifi, WifiOff, LayoutDashboard, ListChecks, Camera, MapPin, CloudUpload,
@@ -221,6 +221,14 @@ export default function MobilDashboard() {
   const [ndviParcelId, setNdviParcelId] = useState("");
   const [ndviResult, setNdviResult] = useState(null);
   const [myVisits, setMyVisits] = useState([]);
+  // Denetim Faz 8 — "destek talebi" QUICK_ACTION_LABELS'ta sadece rozet
+  // olarak vardı, gerçek bir oluşturma formu YOKTU (bkz. IT-38'in kapsam
+  // notu — sadece 4 self-servis akışı vardı). Offline yetenek matrisinin
+  // "çiftçi: sulama girişi, destek talebi" satırını tamamlamak için eklendi.
+  const [supportCycles, setSupportCycles] = useState([]);
+  const [supportTypes, setSupportTypes] = useState([]);
+  const [supportForm, setSupportForm] = useState({ production_cycle_id: "", support_type_id: "", requested_amount: "" });
+  const [supportBusy, setSupportBusy] = useState(false);
 
   // --- IT-39: teslim kodu ---
   const [deliverableRequests, setDeliverableRequests] = useState([]);
@@ -235,6 +243,17 @@ export default function MobilDashboard() {
   const [soilNotes, setSoilNotes] = useState("");
   const [soilResult, setSoilResult] = useState(null);
   const [soilBusy, setSoilBusy] = useState(false);
+
+  // Denetim Faz 8 — offline yetenek matrisinin "kantar_personeli: kantar
+  // kaydı (kuyruklu)" satırı — kantar personelinin sahada field_task'ı
+  // olmadığından (sabit konumlu bir iş) generic görev akışına girmiyordu,
+  // mobil dashboard'da kendi bölümü yoktu. `Extras.jsx`'teki masaüstü
+  // `KantarHizliGiris`'in AYNI alan şeması (`/kantar/records`) kullanılır.
+  const isKantar = user.role === "kantar_personeli";
+  const [kantarQuery, setKantarQuery] = useState("");
+  const [kantarResults, setKantarResults] = useState([]);
+  const [kantarForm, setKantarForm] = useState({ farmer: null, truck_plate: "", brut_ton: "", dara_ton: "", polar_oran: "" });
+  const [kantarBusy, setKantarBusy] = useState(false);
   const soilWatchRef = useRef(null);
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) || null;
@@ -270,20 +289,33 @@ export default function MobilDashboard() {
     if (!selectedTask || soilBusy) return;
     setSoilBusy(true);
     setSoilResult(null);
+    if (soilTracking) toggleSoilTracking();
+    const payload = {
+      parcel_id: selectedTask.parcel_id,
+      field_task_id: selectedTask.id,
+      gps_track: soilTrack,
+      depth_cm: soilDepth ? Number(soilDepth) : null,
+      notes: soilNotes || null,
+      form_response: Object.keys(formAnswers || {}).length ? formAnswers : null,
+    };
+    const idemKey = makeIdempotencyKey();
     try {
-      if (soilTracking) toggleSoilTracking();
-      const { data } = await api.post("/soil-samples/field", {
-        parcel_id: selectedTask.parcel_id,
-        field_task_id: selectedTask.id,
-        gps_track: soilTrack,
-        depth_cm: soilDepth ? Number(soilDepth) : null,
-        notes: soilNotes || null,
-        form_response: Object.keys(formAnswers || {}).length ? formAnswers : null,
-      });
+      if (!navigator.onLine) throw new Error("offline");
+      const { data } = await api.post("/soil-samples/field", payload, { headers: { "X-Idempotency-Key": idemKey } });
       setSoilResult(data.track_eval || { note: "Numune kaydedildi." });
       setSoilTrack([]); setSoilDepth(""); setSoilNotes("");
     } catch (err) {
-      setSoilResult({ z_ok: false, note: err.response?.data?.detail || "Numune kaydedilemedi." });
+      // Denetim Faz 8 — daha önce sadece hata gösteriliyordu, offline kuyruğa
+      // hiç düşmüyordu (saha toprak örneği alma tam da offline yapılan bir
+      // eylem — GPS izi zaten çevrimdışı toplanıyor).
+      if (!navigator.onLine || err.message === "offline" || !err.response) {
+        await enqueue({ method: "post", url: "/soil-samples/field", body: payload, idempotency_key: idemKey });
+        setSoilResult({ note: "Bağlantı yok — numune cihazda saklandı, bağlantı gelince gönderilecek." });
+        setSoilTrack([]); setSoilDepth(""); setSoilNotes("");
+        refreshQueueCount();
+      } else {
+        setSoilResult({ z_ok: false, note: err.response?.data?.detail || "Numune kaydedilemedi." });
+      }
     } finally {
       setSoilBusy(false);
     }
@@ -326,6 +358,8 @@ export default function MobilDashboard() {
     if (isFarmer) {
       api.get("/farmer/my-dashboard").then((r) => setFarmerDashboard(r.data)).catch(() => {});
       api.get("/portal/visits").then((r) => setMyVisits(r.data)).catch(() => {});
+      api.get("/portal/production-cycles").then((r) => setSupportCycles(r.data)).catch(() => {});
+      api.get("/portal/support-types").then((r) => setSupportTypes(r.data)).catch(() => {});
     } else {
       api.get("/support-requests", { params: { status: "teslim_edildi" } }).then((r) => setDeliverableRequests(r.data)).catch(() => {});
     }
@@ -377,14 +411,18 @@ export default function MobilDashboard() {
     setBusy(true);
     setSubmitMsg("");
     const payload = { status, reason: reason || null };
+    // Denetim Faz 8 — anahtar İLK (çevrimiçi) denemeden İTİBAREN sabit tutulur:
+    // istek sunucuya ulaşıp işlense bile yanıt kaybolursa (ör. bağlantı o an
+    // koparsa), kuyruğa aynı anahtarla düşer ve backend tekrarı fark eder.
+    const idemKey = makeIdempotencyKey();
     try {
       if (!navigator.onLine) throw new Error("offline");
-      const { data } = await api.put(`/tasks/${selectedTaskId}/transition`, payload);
+      const { data } = await api.put(`/tasks/${selectedTaskId}/transition`, payload, { headers: { "X-Idempotency-Key": idemKey } });
       setTasks((prev) => prev.map((t) => (t.id === selectedTaskId ? data : t)));
       setSubmitMsg(`Durum güncellendi: ${TASK_STATUS_LABELS[status] || status}`);
     } catch (err) {
       if (!navigator.onLine || err.message === "offline" || !err.response) {
-        await enqueue({ method: "put", url: `/tasks/${selectedTaskId}/transition`, body: payload });
+        await enqueue({ method: "put", url: `/tasks/${selectedTaskId}/transition`, body: payload, idempotency_key: idemKey });
         applyLocalStatus(selectedTaskId, status);
         setSubmitMsg("Bağlantı yok — durum değişikliği cihazda saklandı, bağlantı gelince gönderilecek.");
         refreshQueueCount();
@@ -405,23 +443,25 @@ export default function MobilDashboard() {
     const visitPayload = { task_id: selectedTaskId, gps_start: gps || null, photos, notes: notes || null };
     const checklistUpdates = checklist.map((c) => ({ item: c.item, done: c.done }));
     const isOffline = !navigator.onLine;
+    const visitKey = makeIdempotencyKey();
+    const transitionKey = makeIdempotencyKey();
 
     try {
       if (isOffline) throw new Error("offline");
-      await api.post("/visits", visitPayload);
+      await api.post("/visits", visitPayload, { headers: { "X-Idempotency-Key": visitKey } });
       for (const c of checklistUpdates) {
         await api.put(`/tasks/${selectedTaskId}/checklist`, c);
       }
-      const { data } = await api.put(`/tasks/${selectedTaskId}/transition`, { status: "tamamlandi" });
+      const { data } = await api.put(`/tasks/${selectedTaskId}/transition`, { status: "tamamlandi" }, { headers: { "X-Idempotency-Key": transitionKey } });
       setTasks((prev) => prev.map((t) => (t.id === selectedTaskId ? data : t)));
       setSubmitMsg("Görev tamamlandı — ziyaret ve checklist kaydedildi.");
     } catch (err) {
       if (isOffline || err.message === "offline" || !err.response) {
-        await enqueue({ method: "post", url: "/visits", body: visitPayload });
+        await enqueue({ method: "post", url: "/visits", body: visitPayload, idempotency_key: visitKey });
         for (const c of checklistUpdates) {
           await enqueue({ method: "put", url: `/tasks/${selectedTaskId}/checklist`, body: c });
         }
-        await enqueue({ method: "put", url: `/tasks/${selectedTaskId}/transition`, body: { status: "tamamlandi" } });
+        await enqueue({ method: "put", url: `/tasks/${selectedTaskId}/transition`, body: { status: "tamamlandi" }, idempotency_key: transitionKey });
         setTasks((prev) => prev.map((t) => (
           t.id === selectedTaskId ? { ...t, status: "tamamlandi", checklist } : t
         )));
@@ -454,14 +494,15 @@ export default function MobilDashboard() {
       if (f.type === "gps") answers[f.id] = formGps;
     }
     const payload = { form_id: selectedForm.id, answers, gps_lat: formGps?.lat ?? null, gps_lng: formGps?.lng ?? null };
+    const idemKey = makeIdempotencyKey();
     try {
       if (!navigator.onLine) throw new Error("offline");
-      await api.post(`/forms/${selectedForm.id}/submit`, payload);
+      await api.post(`/forms/${selectedForm.id}/submit`, payload, { headers: { "X-Idempotency-Key": idemKey } });
       setSubmitMsg("Form gönderildi.");
       setSelectedFormId(""); setFormAnswers({}); setFormGps(null);
     } catch (err) {
       if (!navigator.onLine || err.message === "offline" || !err.response) {
-        await enqueue({ method: "post", url: `/forms/${selectedForm.id}/submit`, body: payload });
+        await enqueue({ method: "post", url: `/forms/${selectedForm.id}/submit`, body: payload, idempotency_key: idemKey });
         setSubmitMsg("Bağlantı yok — form cihazda saklandı, bağlantı gelince gönderilecek.");
         setSelectedFormId(""); setFormAnswers({}); setFormGps(null);
         refreshQueueCount();
@@ -480,14 +521,15 @@ export default function MobilDashboard() {
     setIrrigationBusy(true);
     setSubmitMsg("");
     const payload = { ...irrigationForm, water_m3: Number(irrigationForm.water_m3) };
+    const idemKey = makeIdempotencyKey();
     try {
       if (!navigator.onLine) throw new Error("offline");
-      await api.post("/farmer/irrigation", payload);
+      await api.post("/farmer/irrigation", payload, { headers: { "X-Idempotency-Key": idemKey } });
       setSubmitMsg("Sulama kaydı eklendi.");
       setIrrigationForm({ parcel_id: "", date: new Date().toISOString().slice(0, 10), method: "damla", water_m3: "" });
     } catch (err) {
       if (!navigator.onLine || err.message === "offline" || !err.response) {
-        await enqueue({ method: "post", url: "/farmer/irrigation", body: payload });
+        await enqueue({ method: "post", url: "/farmer/irrigation", body: payload, idempotency_key: idemKey });
         setSubmitMsg("Bağlantı yok — sulama kaydı cihazda saklandı, bağlantı gelince gönderilecek.");
         refreshQueueCount();
       } else {
@@ -495,6 +537,75 @@ export default function MobilDashboard() {
       }
     } finally {
       setIrrigationBusy(false);
+    }
+  }
+
+  async function submitSupportRequest(e) {
+    e.preventDefault();
+    if (supportBusy || !supportForm.production_cycle_id || !supportForm.support_type_id || !supportForm.requested_amount) return;
+    setSupportBusy(true);
+    setSubmitMsg("");
+    const payload = { ...supportForm, requested_amount: Number(supportForm.requested_amount) };
+    const idemKey = makeIdempotencyKey();
+    try {
+      if (!navigator.onLine) throw new Error("offline");
+      await api.post("/portal/support-requests", payload, { headers: { "X-Idempotency-Key": idemKey } });
+      setSubmitMsg("Destek talebi oluşturuldu.");
+      setSupportForm({ production_cycle_id: "", support_type_id: "", requested_amount: "" });
+    } catch (err) {
+      if (!navigator.onLine || err.message === "offline" || !err.response) {
+        await enqueue({ method: "post", url: "/portal/support-requests", body: payload, idempotency_key: idemKey });
+        setSubmitMsg("Bağlantı yok — destek talebi cihazda saklandı, bağlantı gelince gönderilecek.");
+        setSupportForm({ production_cycle_id: "", support_type_id: "", requested_amount: "" });
+        refreshQueueCount();
+      } else {
+        setSubmitMsg("Hata: " + (err.response?.data?.detail || "Talep oluşturulamadı"));
+      }
+    } finally {
+      setSupportBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isKantar || kantarQuery.trim().length < 2) { setKantarResults([]); return; }
+    const t = setTimeout(() => {
+      api.get("/search", { params: { q: kantarQuery, limit: 6 } })
+        .then((r) => setKantarResults(r.data.results?.farmers?.items || []))
+        .catch(() => setKantarResults([]));
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kantarQuery]);
+
+  async function submitKantar(e) {
+    e.preventDefault();
+    const brut = Number(kantarForm.brut_ton), dara = Number(kantarForm.dara_ton), polar = Number(kantarForm.polar_oran);
+    if (kantarBusy || !kantarForm.farmer || !kantarForm.truck_plate.trim() || !brut || !dara || dara >= brut || !polar) return;
+    setKantarBusy(true);
+    setSubmitMsg("");
+    const payload = {
+      farmer_id: kantarForm.farmer.id, truck_plate: kantarForm.truck_plate.trim().toUpperCase(),
+      brut_ton: brut, dara_ton: dara, polar_oran: polar, kalite: "B",
+    };
+    const idemKey = makeIdempotencyKey();
+    try {
+      if (!navigator.onLine) throw new Error("offline");
+      await api.post("/kantar/records", payload, { headers: { "X-Idempotency-Key": idemKey } });
+      setSubmitMsg(`Tartım kaydedildi — net ${(brut - dara).toFixed(2)} t.`);
+      setKantarForm({ farmer: null, truck_plate: "", brut_ton: "", dara_ton: "", polar_oran: "" });
+      setKantarQuery("");
+    } catch (err) {
+      if (!navigator.onLine || err.message === "offline" || !err.response) {
+        await enqueue({ method: "post", url: "/kantar/records", body: payload, idempotency_key: idemKey });
+        setSubmitMsg("Bağlantı yok — tartım cihazda saklandı, bağlantı gelince gönderilecek.");
+        setKantarForm({ farmer: null, truck_plate: "", brut_ton: "", dara_ton: "", polar_oran: "" });
+        setKantarQuery("");
+        refreshQueueCount();
+      } else {
+        setSubmitMsg("Hata: " + (err.response?.data?.detail || "Tartım kaydedilemedi"));
+      }
+    } finally {
+      setKantarBusy(false);
     }
   }
 
@@ -598,6 +709,46 @@ export default function MobilDashboard() {
           ))}
         </div>
       </div>
+
+      {/* Denetim Faz 8 — kantar personelinin sahada field_task'ı olmadığından
+          (sabit konumlu iş) generic Görevlerim akışına girmiyor, kendi
+          tartım giriş formu var — offline yetenek matrisinin "kantar_
+          personeli: kantar kaydı (kuyruklu)" satırı. */}
+      {isKantar && (
+        <div className="card p-4 mb-4" data-testid="kantar-mobile-panel">
+          <h3 className="text-sm font-medium mb-3 flex items-center gap-2"><Truck size={14} className="text-[var(--primary)]"/>Kantar Tartımı</h3>
+          <form onSubmit={submitKantar} className="space-y-2">
+            <div className="relative">
+              <input className="input text-sm" placeholder="Çiftçi ara (üye no, ad)..." value={kantarQuery}
+                     onChange={(e) => { setKantarQuery(e.target.value); setKantarForm((f) => ({ ...f, farmer: null })); }}
+                     data-testid="kantar-farmer-search"/>
+              {kantarResults.length > 0 && !kantarForm.farmer && (
+                <div className="absolute z-10 w-full bg-[var(--surface)] border border-[var(--border)] rounded-lg mt-1 max-h-40 overflow-y-auto">
+                  {kantarResults.map((f) => (
+                    <button key={f.id} type="button" className="block w-full text-left px-3 py-1.5 text-sm hover:bg-[var(--surface-2)]"
+                            onClick={() => { setKantarForm((p) => ({ ...p, farmer: f })); setKantarQuery(`${f.full_name} (${f.member_no || "—"})`); setKantarResults([]); }}>
+                      {f.full_name} {f.member_no && `— ${f.member_no}`}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <input className="input text-sm" placeholder="Plaka" value={kantarForm.truck_plate}
+                   onChange={(e) => setKantarForm((p) => ({ ...p, truck_plate: e.target.value }))} data-testid="kantar-plate"/>
+            <div className="flex gap-2">
+              <input type="number" step="0.01" min="0" className="input text-sm flex-1" placeholder="Brüt (ton)"
+                     value={kantarForm.brut_ton} onChange={(e) => setKantarForm((p) => ({ ...p, brut_ton: e.target.value }))} data-testid="kantar-brut"/>
+              <input type="number" step="0.01" min="0" className="input text-sm flex-1" placeholder="Dara (ton)"
+                     value={kantarForm.dara_ton} onChange={(e) => setKantarForm((p) => ({ ...p, dara_ton: e.target.value }))} data-testid="kantar-dara"/>
+            </div>
+            <input type="number" step="0.01" min="0" max="100" className="input text-sm" placeholder="Polar oranı (%)"
+                   value={kantarForm.polar_oran} onChange={(e) => setKantarForm((p) => ({ ...p, polar_oran: e.target.value }))} data-testid="kantar-polar"/>
+            <button type="submit" disabled={kantarBusy || !kantarForm.farmer} className="btn btn-primary w-full text-xs" data-testid="kantar-submit">
+              Tartımı Kaydet
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* (IT-36) Görev Yaşam Döngüsü — sadece saha/personel rolleri (çiftçinin
           field_ops:view izni yok, GET /tasks zaten 403 döner). */}
@@ -815,6 +966,25 @@ export default function MobilDashboard() {
               <input type="number" step="0.1" min="0" className="input text-sm" required placeholder="Su miktarı (m³)"
                 value={irrigationForm.water_m3} onChange={(e) => setIrrigationForm((p) => ({ ...p, water_m3: e.target.value }))} />
               <button type="submit" disabled={irrigationBusy} className="btn btn-primary w-full text-xs" data-testid="irrigation-submit">Kaydet</button>
+            </form>
+          </div>
+
+          <div className="card p-4 mb-4" data-testid="farmer-support-panel">
+            <h3 className="text-sm font-medium mb-3 flex items-center gap-2"><FileText size={14} className="text-[var(--primary)]"/>Yeni Destek Talebi</h3>
+            <form onSubmit={submitSupportRequest} className="space-y-2">
+              <select className="input text-sm" required value={supportForm.production_cycle_id}
+                onChange={(e) => setSupportForm((p) => ({ ...p, production_cycle_id: e.target.value }))} data-testid="support-cycle-select">
+                <option value="">Üretim sezonu seç...</option>
+                {supportCycles.map((c) => <option key={c.id} value={c.id}>{c.year} — {c.season || c.crop || "Sezon"}</option>)}
+              </select>
+              <select className="input text-sm" required value={supportForm.support_type_id}
+                onChange={(e) => setSupportForm((p) => ({ ...p, support_type_id: e.target.value }))} data-testid="support-type-select">
+                <option value="">Destek tipi seç...</option>
+                {supportTypes.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.unit})</option>)}
+              </select>
+              <input type="number" step="0.1" min="0" className="input text-sm" required placeholder="Talep edilen miktar"
+                value={supportForm.requested_amount} onChange={(e) => setSupportForm((p) => ({ ...p, requested_amount: e.target.value }))} />
+              <button type="submit" disabled={supportBusy} className="btn btn-primary w-full text-xs" data-testid="support-submit">Talep Oluştur</button>
             </form>
           </div>
 

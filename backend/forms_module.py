@@ -15,7 +15,7 @@ Anket vari, GPS+foto+video destekli form sistemi.
 Alan tipleri:
 - text, textarea, number, select, multiselect, yesno, rating, date, gps, photo, video, signature
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -347,12 +347,21 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
     # =====================================================================
     
     @api_router.post("/forms/{form_id}/submit")
-    async def submit_form(form_id: str, body: FormResponseSubmit, user=Depends(current_user), _feat=Depends(require_feature("forms"))):
-        """Form yanıtı (login'li kullanıcı)"""
+    async def submit_form(form_id: str, body: FormResponseSubmit, request: Request,
+                           user=Depends(current_user), _feat=Depends(require_feature("forms"))):
+        """Form yanıtı (login'li kullanıcı).
+
+        Denetim Faz 8 — mobil PWA'nın offline kuyruğu (offlineQueue.js) aynı
+        yanıtı iki kez yazmasın diye idempotency korumalı."""
+        from idempotency import get_cached_response, save_response
+        idem_key, cached = await get_cached_response(db, request, "forms_submit")
+        if cached is not None:
+            return cached
+
         form = await db.forms.find_one({"id": form_id})
         if not form:
             raise HTTPException(404, "Form bulunamadı")
-        
+
         doc = {
             "id": str(uuid.uuid4()),
             "form_id": form_id,
@@ -378,8 +387,10 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
         )
         
         doc.pop("_id", None)
-        return {"status": "ok", "response_id": doc["id"]}
-    
+        result = {"status": "ok", "response_id": doc["id"]}
+        await save_response(db, idem_key, "forms_submit", result)
+        return result
+
     @api_router.get("/forms/{form_id}/responses")
     async def list_form_responses(form_id: str, user=Depends(current_user), _feat=Depends(require_feature("forms"))):
         """Form yanıtlarını listele (admin/yönetici)"""

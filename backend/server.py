@@ -665,6 +665,13 @@ async def startup():
         # feature->katman lookup'ı, proje public link erişimi token'la.
         await db.map_layer_features.create_index("layer_id")
         await db.map_layer_features.create_index([("geometry", "2dsphere")])
+
+        # Denetim Faz 8 — Rol Bazlı Offline: idempotency anahtarları 7 gün
+        # sonra otomatik silinir (offlineQueue.js'in senkron kuyruğu kalıcı
+        # olarak büyümesin diye), (key, endpoint) çifti tekrar aramada kullanılır.
+        await raw_db.idempotency_keys.create_index([("key", 1), ("endpoint", 1)])
+        await raw_db.idempotency_keys.create_index("created_at", expireAfterSeconds=7 * 24 * 3600)
+
         # NOT sparse=True: her proje dokümanında public_token alanı AÇIKÇA
         # None olarak set edilir (paylaşılmıyorsa) — sparse index yine de
         # açık null'ları indeksler (MongoDB "sparse ≠ null hariç tutar"),

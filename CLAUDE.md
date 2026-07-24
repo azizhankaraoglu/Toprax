@@ -2348,6 +2348,30 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   login olmadan açılıp haritanın render olduğu doğrulandı. 47/47 pytest
   yeşil. Test verisi temizlendi.
 
+- ✅ **2026-07-24 — Denetim raporu Faz 8 (Rol Bazlı Offline) TAMAMLANDI**
+  (Build 24072026-2359) — denetim raporu onaylanan 8 maddenin SONUNCUSU,
+  tüm plan tamamlandı. Yeni `backend/idempotency.py` (`X-Idempotency-Key`
+  header'ı, 7 gün TTL) 7 uca eklendi (`/visits`, `/tasks/{id}/transition`,
+  `/soil-samples/field`, `/kantar/records`, `/farmer/irrigation`,
+  `/portal/support-requests`, `/forms/{id}/submit`) — `lib/offlineQueue.
+  js`'in (IT-35) internet gelince aynı isteği TEKRAR göndermesi artık
+  duplicate kayıt YARATMIYOR. `offlineQueue.js`'e `makeIdempotencyKey()`;
+  `MobilDashboard.jsx`'in TÜM yazma akışları anahtarı İLK denemeden
+  İTİBAREN sabit taşıyacak şekilde güncellendi. İKİ YENİ mobil offline
+  akış: "Yeni Destek Talebi" (çiftçi) ve "Kantar Tartımı" (kantar_
+  personeli — önceden mobil dashboard'da hiç bölümü yoktu). `experience_
+  profile.py`'ye `ROLE_OFFLINE_DEFAULTS` + idempotent seed-role-defaults
+  ucu (`offline_sync_rules` alanının İLK gerçek içeriği). `docs/offline-
+  test-kontrol-listesi.md` eklendi. **Bilinçli kapsam notu:** okuma-tarafı
+  önbellek (`lib/offlineStore.js`) bu iterasyona alınmadı, yazma tarafı
+  önceliklendirildi. **Gerçek Docker deployment'ta uçtan uca doğrulandı:**
+  `/visits`'e aynı idempotency anahtarıyla 2 istek → AYNI id, DB'de TEK
+  kayıt; `/tasks/{id}/transition` replay'i 400 yerine 200 döndü (anahtarsız
+  3. deneme doğru şekilde 400). **Gerçek tarayıcıda:** kantar_personeli ile
+  Kantar Tartımı formu ve ciftci ile Yeni Destek Talebi formu uçtan uca
+  çalıştı, konsolda hata yok. 50/50 pytest yeşil (3 yeni idempotency
+  testi). Test verisi temizlendi.
+
 ## 7. Çalıştırma
 
 ```bash

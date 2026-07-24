@@ -231,11 +231,19 @@ def register_farmer_routes(api_router, db, current_user, require_permission, req
 
 
     @api_router.post("/farmer/irrigation")
-    async def add_irrigation(body: IrrigationEventCreate, user=Depends(current_user)):
+    async def add_irrigation(body: IrrigationEventCreate, request: Request, user=Depends(current_user)):
         """
         Çiftçi kendi parseline sulama olayı ekler.
         Bu sayede dashboard'lar (genel + bireysel) anlık güncellenir.
+
+        Denetim Faz 8 — offlineQueue.js replay'i aynı sulama kaydını iki kez
+        yazmasın diye idempotency korumalı (bkz. idempotency.py).
         """
+        from idempotency import get_cached_response, save_response
+        idem_key, cached = await get_cached_response(db, request, "farmer_irrigation:create")
+        if cached is not None:
+            return cached
+
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi ekleyebilir")
     
@@ -267,7 +275,8 @@ def register_farmer_routes(api_router, db, current_user, require_permission, req
             "farmer_id": user["farmer_id"],
             "created_at": datetime.now(timezone.utc).isoformat()
         })
-    
+
+        await save_response(db, idem_key, "farmer_irrigation:create", doc)
         return doc
 
 

@@ -84,6 +84,52 @@ class ProfileAssignRequest(BaseModel):
     experience_profile_id: Optional[str] = None   # None = atamayı kaldır
 
 
+# Denetim raporu #2 / Faz 8 — Rol Bazlı Offline: "hangi fonksiyonlar hangi
+# rolde offline çalışmalı" matrisi. `offline_sync_rules` ZATEN opak bir
+# dict alanıydı (IT-34) — bu, o alana yazılan İLK gerçek içerik. Anahtarlar
+# `lib/offlineQueue.js` ile yazılan uçlarla BİREBİR eşleşir; PWA bunu
+# "hangi offline eylem butonlarını göstereyim" kararında kullanabilir
+# (bugün MobilDashboard.jsx rol bazlı zaten doğru bölümleri gösteriyor —
+# bu alan ek bir GÜVENLİK sınırı değil, DOKÜMANTE EDİLMİŞ bir yetenek
+# beyanıdır, backend endpoint'leri kendi yetki/idempotency kontrollerini
+# ZATEN bağımsız yapıyor).
+ROLE_OFFLINE_DEFAULTS = {
+    "ziraat_muhendisi": {
+        "profile_name": "Ziraat Mühendisi (Saha)",
+        "menu_items": ["saha-operasyonlari", "harita-paneli", "ciftciler", "parseller"],
+        "quick_actions": ["gorev-tamamla"],
+        "offline_sync_rules": {
+            "ziyaret": True, "gorev_checklist": True, "gorev_gecis": True,
+            "foto": True, "saha_toprak_orneği": True, "form_gonderimi": True,
+        },
+    },
+    "saha_personeli": {
+        "profile_name": "Saha Personeli",
+        "menu_items": ["saha-operasyonlari", "formlar"],
+        "quick_actions": ["gorev-tamamla"],
+        "offline_sync_rules": {"ziyaret": True, "gorev_checklist": True, "gorev_gecis": True, "foto": True, "form_gonderimi": True},
+    },
+    "toprak_personeli": {
+        "profile_name": "Toprak Personeli",
+        "menu_items": ["saha-operasyonlari", "toprak"],
+        "quick_actions": [],
+        "offline_sync_rules": {"saha_toprak_orneği": True},
+    },
+    "kantar_personeli": {
+        "profile_name": "Kantar Personeli",
+        "menu_items": ["kantar"],
+        "quick_actions": [],
+        "offline_sync_rules": {"kantar_kaydi": True},
+    },
+    "ciftci": {
+        "profile_name": "Çiftçi",
+        "menu_items": ["ciftciler", "parseller"],
+        "quick_actions": ["sulama-ekle", "destek-talebi"],
+        "offline_sync_rules": {"sulama_girisi": True, "destek_talebi": True},
+    },
+}
+
+
 def register_experience_profile_routes(api_router, db, current_user, require_permission, log_audit, require_feature=None):
     # God Mode Modül Yönetimi — "experience_profiles" flag'i kapatılınca liste 403 döner.
     require_feature = require_feature or (lambda key: (lambda: True))
@@ -92,6 +138,35 @@ def register_experience_profile_routes(api_router, db, current_user, require_per
     async def list_experience_profiles(user=Depends(require_permission("experience_profiles:view")),
                                         _feat=Depends(require_feature("experience_profiles"))):
         return await db.experience_profiles.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+    @api_router.post("/experience-profiles/seed-role-defaults")
+    async def seed_role_offline_defaults(request: Request,
+                                          user=Depends(require_permission("experience_profiles:manage")),
+                                          _feat=Depends(require_feature("experience_profiles"))):
+        """Denetim Faz 8 — plan'daki rol×offline-yetenek matrisini (bkz.
+        ROLE_OFFLINE_DEFAULTS) idempotent olarak 5 Experience Profile'a
+        yazar (`support_types`/`task_types` seed'leriyle AYNI `_ensure_*`
+        ailesi — isimden bulunur, varsa atlanır, admin daha sonra elle
+        düzenlerse bu seed onun ÜZERİNE YAZMAZ)."""
+        created = []
+        for role, cfg in ROLE_OFFLINE_DEFAULTS.items():
+            exists = await db.experience_profiles.find_one({"name": cfg["profile_name"]})
+            if exists:
+                continue
+            doc = {
+                "id": str(uuid.uuid4()), "name": cfg["profile_name"],
+                "dashboard_widgets": [], "menu_items": cfg["menu_items"],
+                "quick_actions": cfg["quick_actions"], "map_tools": [], "ai_features": [],
+                "notification_behaviors": {"push": True, "sound": False}, "default_filters": {},
+                "offline_sync_rules": cfg["offline_sync_rules"],
+                "is_active": True, "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_by": user.get("full_name") or user.get("email"),
+            }
+            await db.experience_profiles.insert_one(doc)
+            created.append({"role": role, "profile_name": cfg["profile_name"]})
+        await log_audit(db, user, action="seed", entity="experience_profile", entity_id="role-defaults",
+                         new_value={"created": created}, request=request)
+        return {"status": "ok", "created": created}
 
     @api_router.get("/experience-profiles/{profile_id}")
     async def get_experience_profile(profile_id: str, user=Depends(require_permission("experience_profiles:view")),

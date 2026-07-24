@@ -620,7 +620,15 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
                                        user=Depends(current_user), _feat=Depends(require_feature("soil"))):
         """#9 — Mobilden numune alımı. Görevi üstlenen personel çağırır; lab
         sonucu YOK, `lab_status="beklemede"` ile açılır. GPS izi + Z
-        değerlendirmesi + (varsa) bağlı form yanıtı birlikte saklanır."""
+        değerlendirmesi + (varsa) bağlı form yanıtı birlikte saklanır.
+
+        Denetim Faz 8 — offlineQueue.js replay'i aynı numuneyi İKİ KEZ
+        yazmasın diye idempotency anahtarıyla korunur (bkz. idempotency.py)."""
+        from idempotency import get_cached_response, save_response
+        idem_key, cached = await get_cached_response(db, request, "soil_samples:field")
+        if cached is not None:
+            return cached
+
         parcel = await db.parcels.find_one({"id": body.parcel_id}, {"_id": 0})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")
@@ -651,6 +659,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         if body.visit_id and body.form_response:
             await db.visits.update_one({"id": body.visit_id},
                                        {"$set": {"form_response": body.form_response}})
+        await save_response(db, idem_key, "soil_samples:field", doc)
         return doc
 
     @api_router.put("/soil-samples/{sample_id}/lab")
@@ -1102,6 +1111,13 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
     async def create_kantar_record(body: KantarRecordCreate, request: Request,
                                     user=Depends(require_permission("kantar:create")),
                                     _feat=Depends(require_feature("factory"))):
+        # Denetim Faz 8 — mobil kantar girişi (rol bazlı offline kuyruğu)
+        # aynı tartımı iki kez yazmasın diye idempotency korumalı.
+        from idempotency import get_cached_response, save_response
+        idem_key, cached = await get_cached_response(db, request, "kantar:create")
+        if cached is not None:
+            return cached
+
         farmer = await db.farmers.find_one({"id": body.farmer_id}, {"_id": 0})
         if not farmer:
             raise HTTPException(404, "Çiftçi bulunamadı")
@@ -1119,6 +1135,7 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         await db.kantar_records.insert_one(doc)
         doc.pop("_id", None)
         await log_audit(db, user, action="create", entity="kantar_record", entity_id=doc["id"], new_value=doc, request=request)
+        await save_response(db, idem_key, "kantar:create", doc)
         return doc
 
     class KantarRecordUpdate(BaseModel):

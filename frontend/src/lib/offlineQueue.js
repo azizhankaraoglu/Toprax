@@ -1,5 +1,6 @@
 /**
- * Offline-First Kuyruk (IT-35 / FAZ 12 — Mobil PWA)
+ * Offline-First Kuyruk (IT-35 / FAZ 12 — Mobil PWA; Denetim Faz 8 —
+ * idempotency anahtarı eklendi)
  *
  * ROADMAP'in "görev görüntüleme, form doldurma, fotoğraf çekme, konum
  * kaydı, not alma — internet geldiğinde otomatik senkron" senaryosu için.
@@ -11,8 +12,23 @@
  * olursa (ağ hatası VEYA `navigator.onLine===false`) kuyruğa yazılır,
  * `window`'un `online` event'i VEYA sayfa açılışı bunu tekrar dener.
  *
+ * Denetim Faz 8 — HER kuyruğa eklenen isteğe (`enqueue` çağrıldığı ANDA,
+ * ilk deneme başarısız olduğunda) benzersiz bir `X-Idempotency-Key`
+ * atanır ve `flush()`'ın HER tekrar denemesinde AYNI anahtar gönderilir.
+ * İstek sunucuya ULAŞIP başarıyla işlendiği HALDE yanıt istemciye
+ * dönmezse (bağlantı o anda koptuysa), backend (bkz. `backend/
+ * idempotency.py`) aynı anahtarla gelen ikinci denemeye kaydedilmiş
+ * yanıtı AYNEN döner — aynı ziyaret/numune/talep İKİ KEZ YAZILMAZ.
+ *
  * Kullanım: enqueue({method, url, body}) → flush(apiClient) → getAll()
  */
+export function makeIdempotencyKey() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  // Eski tarayıcı fallback'i (crypto.randomUUID her yerde yok) — rastgelelik
+  // ihtiyacı sadece "aynı istek iki kez gönderilirse anahtarı aynı kalsın"
+  // seviyesinde, kriptografik güç GEREKMEZ.
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 const DB_NAME = "toprax_offline";
 const STORE = "queue";
 
@@ -34,7 +50,10 @@ export async function enqueue(request) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).add({ ...request, queued_at: new Date().toISOString() });
+    tx.objectStore(STORE).add({
+      ...request, queued_at: new Date().toISOString(),
+      idempotency_key: request.idempotency_key || makeIdempotencyKey(),
+    });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -70,7 +89,10 @@ export async function flush(apiClient) {
   let sent = 0;
   for (const item of items) {
     try {
-      await apiClient({ method: item.method, url: item.url, data: item.body });
+      await apiClient({
+        method: item.method, url: item.url, data: item.body,
+        headers: item.idempotency_key ? { "X-Idempotency-Key": item.idempotency_key } : undefined,
+      });
       await remove(item.id);
       sent += 1;
     } catch {

@@ -47,6 +47,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict
 
 from event_bus import publish
+from idempotency import get_cached_response, save_response
 
 DEFAULT_TASK_TYPES = [
     "Çiftçi Ziyareti", "Toprak Numunesi", "Hasat Kontrolü", "Ekim Kontrolü",
@@ -425,6 +426,15 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
     @api_router.put("/tasks/{task_id}/transition")
     async def transition_field_task(task_id: str, body: TaskTransition, request: Request, user=Depends(current_user),
                                      _feat=Depends(require_feature("field_ops"))):
+        # Denetim Faz 8 — offline'da yapılan bir geçiş sunucuya ULAŞIP
+        # işlendiği HALDE yanıt istemciye dönmezse, offlineQueue.js AYNI
+        # geçişi tekrar dener — o an görev ZATEN hedef durumdadır (terminal
+        # veya "allowed" listesinde artık yok), replay yanlışlıkla 400
+        # ("bu durum terminaldir") döndürür. İdempotency anahtarı bunu önler.
+        idem_key, cached = await get_cached_response(db, request, "tasks:transition")
+        if cached is not None:
+            return cached
+
         old = await db.field_tasks.find_one({"id": task_id}, {"_id": 0})
         if not old:
             raise HTTPException(404, "Görev bulunamadı")
@@ -456,6 +466,7 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         new = await db.field_tasks.find_one({"id": task_id}, {"_id": 0})
         await log_audit(db, user, action="status_change", entity="field_task", entity_id=task_id,
                          old_value={"status": current}, new_value={"status": body.status}, request=request)
+        await save_response(db, idem_key, "tasks:transition", new)
         return new
 
     @api_router.put("/tasks/{task_id}/checklist")
@@ -506,6 +517,14 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
     @api_router.post("/visits")
     async def create_visit(body: VisitCreate, request: Request, user=Depends(current_user),
                             _feat=Depends(require_feature("field_ops"))):
+        # Denetim Faz 8 — offlineQueue.js internet gelince aynı isteği TEKRAR
+        # gönderebilir (yanıt istemciye ulaşmadan bağlantı koptuysa); aynı
+        # X-Idempotency-Key ile daha önce yazılmış bir ziyaret varsa onu
+        # AYNEN döner, ikinci bir kayıt YAZMAZ.
+        idem_key, cached = await get_cached_response(db, request, "visits:create")
+        if cached is not None:
+            return cached
+
         task = await db.field_tasks.find_one({"id": body.task_id}, {"_id": 0})
         if not task:
             raise HTTPException(404, "Görev bulunamadı")
@@ -526,6 +545,7 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
         await db.visits.insert_one(doc)
         doc.pop("_id", None)
         await log_audit(db, user, action="create", entity="visit", entity_id=doc["id"], new_value=doc, request=request)
+        await save_response(db, idem_key, "visits:create", doc)
         return doc
 
     @api_router.put("/visits/{visit_id}")

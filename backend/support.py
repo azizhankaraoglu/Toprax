@@ -509,6 +509,13 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
         body: SupportRequestPortalCreate, request: Request, user=Depends(current_user),
         _feat=Depends(require_feature("ufyd")),
     ):
+        # Denetim Faz 8 — mobil PWA'nın offline kuyruğu (offlineQueue.js)
+        # aynı talebi iki kez yazmasın diye idempotency korumalı.
+        from idempotency import get_cached_response, save_response
+        idem_key, cached = await get_cached_response(db, request, "portal_support_requests:create")
+        if cached is not None:
+            return cached
+
         if user.get("role") != "ciftci" or not user.get("farmer_id"):
             raise HTTPException(403, "Sadece çiftçi talep oluşturabilir")
         await _cycle_for_farmer_or_error(body.production_cycle_id, user["farmer_id"], 403)
@@ -534,6 +541,7 @@ def register_support_routes(api_router, db, current_user, require_permission, lo
             f"{user.get('full_name', 'Çiftçi')} '{stype['name']}' için {body.requested_amount} "
             f"{stype['unit']} destek talebi oluşturdu",
         )
+        await save_response(db, idem_key, "portal_support_requests:create", doc)
         return doc
 
     @api_router.post("/portal/support-requests/confirm-delivery-code")
