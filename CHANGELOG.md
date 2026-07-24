@@ -2,6 +2,69 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [Yayınlanmamış] — Faz 7: Harita Stüdyosu (2026-07-24, Build 24072026-2345)
+
+### Eklendi
+- Yeni `backend/map_studio.py` — kişisel harita çalışma alanları. Veri
+  modeli: `map_layers` (stil + popup config), `map_layer_features`
+  (2dsphere index'li gerçek coğrafi kayıtlar), `map_projects` (katmanları
+  birleştiren, kaydedilebilir/yayınlanabilir harita). `HaritaPaneli.jsx`'e
+  BİLİNÇLİ OLARAK DOKUNULMADI — ayrı bir sayfa/ihtiyaç.
+- Dosyadan içe aktarma: `geo_import.py`'nin (IT-13.5) parse fonksiyonları
+  AYNEN kullanılıyor (GeoJSON/KML/KMZ/SHP/DXF) + bu modüle özel yeni bir
+  CSV lat/lon ayrıştırıcı (`_parse_csv_latlon`). `POST /map-layers/{id}/
+  import` sonucu DOĞRUDAN katmana yazar (10 MB/20k feature limitli).
+- Elle çizim: yeni, kendi kendine yeten bir `L.Control.Draw` sarmalayıcısı
+  (`StudioDrawControl`, marker+polyline+polygon) — `MapDrawTools.jsx`
+  (parsel akışlarına özel, marker/polyline desteklemez) YENİDEN
+  KULLANILMADI, paylaşılan bileşene dokunma riski alınmadı.
+- Paylaşım İKİ BAĞIMSIZ boyut (forms_module.py'nin `share_mode` deseniyle
+  AYNI aile): (1) tenant-içi görünürlük `share_scope`: private/org_unit
+  (map_snapshots.py'nin `_user_unit_chain` mantığının küçük bir kopyası)/
+  tenant/users (elle `shared_user_ids`); (2) `is_public` + `public_token`
+  — herkese açık link, login GEREKMEZ. Bir proje aynı anda hem özel hem
+  herkese açık linkli olabilir.
+- İzinler `map_studio: view/create/share` + feature flag `map_studio`.
+- Frontend `pages/HaritaStudyosu.jsx` (`/harita-studyosu`, SAHA & LOJİSTİK
+  grubu) — katman/proje yöneticisi, stil/popup editörü, dosya yükleme,
+  harita üzerinde çizim, yayınla dialogu. Public görüntüleyici
+  `pages/PublicMapViewer.jsx` (`/harita/:token`).
+
+### Bilinçli kapsam notları
+- "Belirli Kullanıcılar" paylaşımı v1'de kullanıcı ID'si elle girilir
+  (report_builder'ın personel alıcı seçimi v1'iyle AYNI sadeleştirme).
+- Ölçüm aracı / adres arama / otomatik lejant kapsam dışı bırakıldı —
+  temel katman/stil/popup/paylaşım akışı önceliklendirildi.
+
+### Doğrulama
+- `py_compile` + `pyflakes` (0 uyarı) + 47 pytest yeşil.
+- **Gerçek Docker deployment'ta uçtan uca doğrulandı:** katman oluşturma/
+  stil/popup config; CSV (lat/lon) + GeoJSON toplu içe aktarma (4 kayıt,
+  feature_count doğru arttı); koordinat sütunu bulunamayan CSV 400 ile
+  reddedildi; proje oluşturma + katman ekleme + kaydetme; `/map-projects/
+  {id}/full` tek istekte proje+katman+feature bundle'ı döndü; herkese açık
+  link paylaşımı sonrası `/public/maps/{token}` Authorization header
+  OLMADAN 200 döndü; feature flag kapatılınca `/map-layers` 403 döndü.
+  **Gerçek tarayıcıda** (leaflet-draw'a DOM üzerinden gerçek mouse event'i
+  gönderilerek) haritaya tıklanıp bir marker çizildi — bu GERÇEKTEN
+  `POST /map-layers/{id}/features`'ı tetikledi (network log'da 200
+  doğrulandı) ve katmanın feature sayısı UI'da 0→1 güncellendi; "Yayınla"
+  dialogundan üretilen link YENİ bir sekmede açılıp (login OLMADAN) gerçek
+  Leaflet haritasının render olduğu, konsolda hiç hata olmadığı
+  doğrulandı. Test verisi temizlendi.
+
+### Bulunan ve düzeltilen bir bug (deploy öncesi, canlıya hiç gitmedi)
+- `map_projects.public_token` için `sparse=True` unique index YANLIŞTI —
+  her proje dokümanı `public_token: None`'ı AÇIKÇA taşıdığından (alan hep
+  "var", sadece null), MongoDB'nin sparse index'i bunu yine de
+  indeksleyip İKİNCİ private proje oluşturulduğunda unique çakışmasıyla
+  patlardı. `partialFilterExpression: {"public_token": {"$type":
+  "string"}}` ile düzeltildi — SADECE gerçek (yayınlanmış) token'lar
+  indekslenir. `docker compose up` sırasında index oluşturma başarıyla
+  tamamlandığı (hata yok) ve ikinci bir private proje oluşturmanın
+  gerçekten sorunsuz çalıştığı (doğrulama script'inde 2 proje art arda
+  oluşturuldu) doğrulandı.
+
 ## [Yayınlanmamış] — Faz 6: Elastik Rapor Modülü (2026-07-24, Build 24072026-2315)
 
 ### Eklendi

@@ -2314,6 +2314,40 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   şablon oluşturuldu ve doğru şekilde listede göründü. 47/47 pytest yeşil.
   Test verisi temizlendi.
 
+- ✅ **2026-07-24 — Denetim raporu Faz 7 (Harita Stüdyosu) TAMAMLANDI**
+  (Build 24072026-2345). Denetim raporunun kullanıcı tarafından onaylanan
+  8 madde arasındaki istek #9. Yeni `backend/map_studio.py` — `map_layers`
+  (stil+popup config) + `map_layer_features` (2dsphere) + `map_projects`
+  (katmanları birleştiren, yayınlanabilir harita). `HaritaPaneli.jsx`'e
+  (widget/zaman makinesi merkezi) DOKUNULMADI — ayrı sayfa/ihtiyaç.
+  Dosyadan içe aktarma `geo_import.py`'nin (IT-13.5) parse fonksiyonlarını
+  AYNEN kullanır + yeni bir CSV lat/lon ayrıştırıcı. Elle çizim için
+  `MapDrawTools.jsx` (parsel akışlarına özel) YENİDEN KULLANILMADI —
+  bu sayfaya özel yeni bir `L.Control.Draw` sarmalayıcısı yazıldı.
+  Paylaşım iki bağımsız boyut: tenant-içi görünürlük (`share_scope`:
+  private/org_unit/tenant/users) + herkese açık link (`is_public`+
+  `public_token`, login gerekmez) — forms_module.py'nin `share_mode`
+  deseniyle aynı aile. İzinler `map_studio:view/create/share` + feature
+  flag `map_studio`. Frontend `pages/HaritaStudyosu.jsx` (`/harita-
+  studyosu`, SAHA & LOJİSTİK grubu) + public görüntüleyici `pages/
+  PublicMapViewer.jsx` (`/harita/:token`). **Bilinçli kapsam notu:**
+  "Belirli Kullanıcılar" paylaşımı v1'de kullanıcı ID'si elle girilir;
+  ölçüm aracı/adres arama/otomatik lejant kapsam dışı. **Deploy öncesi
+  bulunan bug:** `map_projects.public_token`'a `sparse=True` unique index
+  YANLIŞTI (her proje `public_token:None`'ı açıkça taşıdığından sparse
+  yine de indeksler, ikinci private proje unique çakışmasıyla patlardı) —
+  `partialFilterExpression:{"public_token":{"$type":"string"}}` ile
+  düzeltildi, canlıya hiç gitmedi. **Gerçek Docker deployment'ta uçtan
+  uca doğrulandı:** katman/proje CRUD, CSV+GeoJSON toplu içe aktarma,
+  koordinatsız CSV 400, `/map-projects/{id}/full` bundle, herkese açık
+  link auth'suz 200, feature flag kapalıyken 403. **Gerçek tarayıcıda**
+  leaflet-draw'a DOM üzerinden gerçek mouse event'i gönderilerek bir
+  marker çizildi — GERÇEKTEN `POST /map-layers/{id}/features`'ı
+  tetiklediği (network log 200) ve UI'da feature sayısının 0→1
+  güncellendiği doğrulandı; "Yayınla" ile üretilen link yeni sekmede
+  login olmadan açılıp haritanın render olduğu doğrulandı. 47/47 pytest
+  yeşil. Test verisi temizlendi.
+
 ## 7. Çalıştırma
 
 ```bash

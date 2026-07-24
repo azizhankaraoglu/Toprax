@@ -273,6 +273,14 @@ PERMISSION_CATALOG = {
             {"key": "report_builder:schedule", "label": "Periyodik Gönderim Zamanla"},
         ],
     },
+    "map_studio": {
+        "label": "Harita Stüdyosu (Denetim Faz 7)",
+        "permissions": [
+            {"key": "map_studio:view", "label": "Katman/Proje Görüntüle"},
+            {"key": "map_studio:create", "label": "Katman/Proje Oluştur/Düzenle/Sil, Dosya İçe Aktar"},
+            {"key": "map_studio:share", "label": "Projeyi Paylaş (Organizasyon/Kişi/Herkese Açık Link)"},
+        ],
+    },
     "experience_profiles": {
         "label": "Experience Profile (Mobil Persona)",
         "permissions": [
@@ -404,6 +412,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "communications:view", "communications:send",
         "communications:campaigns_view", "communications:campaigns_manage",
         "report_builder:read", "report_builder:create", "report_builder:share", "report_builder:schedule",
+        "map_studio:view", "map_studio:create", "map_studio:share",
         "lms:catalog_view", "lms:catalog_manage", "lms:assign", "lms:groups_manage", "lms:status_view_all",
         "integration_hub:view", "platform_core:view",
         "experience_profiles:view", "experience_profiles:manage",
@@ -448,6 +457,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "communications:view", "communications:send",
         "communications:campaigns_view", "communications:campaigns_manage",
         "report_builder:read", "report_builder:create", "report_builder:share", "report_builder:schedule",
+        "map_studio:view", "map_studio:create", "map_studio:share",
         "lms:catalog_view", "lms:catalog_manage", "lms:assign", "lms:groups_manage", "lms:status_view_all",
         "integration_hub:view", "platform_core:view",
         # Remote Sensing — Ziraat Mühendisi manuel analiz başlatabilir + görüntü/
@@ -476,6 +486,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "automation:view",
         "communications:view",
         "report_builder:read", "report_builder:create", "report_builder:share",
+        "map_studio:view", "map_studio:create", "map_studio:share",
         "lms:catalog_view",
         "cases:view", "cases:create",
     ],
@@ -498,6 +509,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "field_ops:view",
         "automation:view",
         "report_builder:read", "report_builder:create", "report_builder:share",
+        "map_studio:view", "map_studio:create", "map_studio:share",
         "lms:catalog_view",
         "cases:view", "cases:create",
     ],

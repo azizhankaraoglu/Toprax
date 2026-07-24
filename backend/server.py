@@ -509,6 +509,12 @@ register_lms_routes(api_router, db, current_user, require_permission, log_audit,
 from report_builder import register_report_builder_routes
 register_report_builder_routes(api_router, db, current_user, require_permission, log_audit, require_feature, raw_db=raw_db)
 
+# Harita Stüdyosu — kişisel harita çalışma alanları: katman (dosya/elle
+# çizim) + proje + yayınlama (Denetim raporu #9 / Faz 7). raw_db,
+# report_builder.py'nin public link deseniyle AYNI.
+from map_studio import register_map_studio_routes
+register_map_studio_routes(api_router, db, current_user, require_permission, log_audit, require_feature, raw_db=raw_db)
+
 # Integration Hub Formalizasyonu + Webhook Engine (IT-32 / FAZ 11).
 from integration_hub import register_integration_hub_routes
 register_integration_hub_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
@@ -654,6 +660,22 @@ async def startup():
         await raw_db.report_runs.create_index("public_token", unique=True)
         await db.report_schedules.create_index([("active", 1), ("next_run_at", 1)])
 
+        # Denetim Faz 7 — Harita Stüdyosu: katman feature'ları bbox
+        # sorgulanabilir (admin_areas/parcels'taki 2dsphere emsaliyle AYNI),
+        # feature->katman lookup'ı, proje public link erişimi token'la.
+        await db.map_layer_features.create_index("layer_id")
+        await db.map_layer_features.create_index([("geometry", "2dsphere")])
+        # NOT sparse=True: her proje dokümanında public_token alanı AÇIKÇA
+        # None olarak set edilir (paylaşılmıyorsa) — sparse index yine de
+        # açık null'ları indeksler (MongoDB "sparse ≠ null hariç tutar"),
+        # bu da ikinci private proje oluşturulduğunda unique çakışması
+        # yaratırdı. partialFilterExpression ile SADECE gerçek string
+        # değerler indekslenir.
+        await raw_db.map_projects.create_index(
+            "public_token", unique=True,
+            partialFilterExpression={"public_token": {"$type": "string"}},
+        )
+
         # Tenant izolasyonu artık her sorguda tenant_id filtresi kullanıyor —
         # bu alan üzerinde index olmadan koleksiyon taraması yapılır.
         for coll in ["users", "farmers", "parcels", "contracts", "plantings",
@@ -662,7 +684,8 @@ async def startup():
                      "irsaliyeler", "iot_sensors", "drone_missions", "notifications",
                      "audit_logs", "integrations", "regions", "disease_detections",
                      "field_visits", "forms", "yields", "uploads", "production_cycles", "admin_areas",
-                     "report_templates", "report_runs", "report_schedules"]:
+                     "report_templates", "report_runs", "report_schedules",
+                     "map_layers", "map_layer_features", "map_projects"]:
             await raw_db[coll].create_index("tenant_id")
         await raw_db.tenants.create_index("slug", unique=True)
         await raw_db.tenants.create_index("id", unique=True)

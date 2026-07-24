@@ -97,6 +97,8 @@ FEATURE_FLAG_LABELS = {
     "takbis": "TAKBİS Tapu Sorgu",
     # (Denetim Faz 6, 2026-07-24) Elastik Rapor Modülü
     "report_builder": "Rapor Oluşturucu",
+    # (Denetim Faz 7, 2026-07-24) Harita Stüdyosu
+    "map_studio": "Harita Stüdyosu",
 }
 
 HEALTH_STATUS_LABELS = {"saglikli": "Sağlıklı", "uyari": "Uyarı", "hata": "Hata", "kurulu_degil": "Kurulu Değil"}

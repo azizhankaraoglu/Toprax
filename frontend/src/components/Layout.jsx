@@ -7,7 +7,7 @@ import {
   Settings2, BarChart3, Truck, Bell, LogOut, Award, ChevronRight, FlaskConical,
   Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Sparkles,
   UserCog, ShieldCheck, LayoutList, Landmark, Compass, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, ClipboardCheck,
-  Workflow, CheckSquare, Inbox, Radio, FileBarChart2
+  Workflow, CheckSquare, Inbox, Radio, FileBarChart2, Layers
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
 import AnnouncementPopup from "@/components/AnnouncementPopup";
@@ -58,6 +58,7 @@ const navGroups = [
     title: "SAHA & LOJİSTİK",
     items: [
       { to: "/harita-paneli", icon: Compass, label: "Harita Paneli", featureFlag: "gis" },
+      { to: "/harita-studyosu", icon: Layers, label: "Harita Stüdyosu", featureFlag: "map_studio" },
       { to: "/saha-operasyonlari", icon: Kanban, label: "Görev Yönetimi", featureFlag: "field_ops" },
       { to: "/otomasyon-kurallari", icon: Zap, label: "Otomasyon Kuralları", featureFlag: "automation" },
       { to: "/saha", icon: Smartphone, label: "Saha Mobil" },
