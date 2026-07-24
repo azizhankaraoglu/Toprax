@@ -27,7 +27,16 @@ from config_service import ALLOW_DATA_SEEDING
 from platform_core import is_feature_enabled, FEATURE_FLAG_LABELS
 
 
-def register_form_routes(api_router, db, current_user, is_admin, security, require_feature=None):
+def register_form_routes(api_router, db, current_user, is_admin, security, require_feature=None, raw_db=None):
+    # Denetim A3 regresyon düzeltmesi (2026-07-24): tenant_context.py fail-
+    # closed olduktan sonra bu modüldeki İKİ public (token'lı, auth'suz)
+    # uç — get_public_form/submit_public_form — token'ı `db` (scoped) ile
+    # arıyordu; bağlam henüz YOK olduğundan sentinel filtre araya girip
+    # sorgu HER ZAMAN None dönüyordu (tüm public form linkleri 404 verirdi).
+    # Tenant, formun KENDİSİ bulunmadan bilinemez — bu yüzden bu iki uçtaki
+    # İLK arama raw_db ile yapılır, tenant bulununca current_tenant_id
+    # set edilip geri kalan sorgular (varsa) scoped db ile devam eder.
+    _unscoped = raw_db if raw_db is not None else getattr(db, "_real_db", db)
     """Form modülü endpoint'lerini kaydet"""
     # God Mode Modül Yönetimi — "forms" flag'i kapatılınca liste 403 döner.
     require_feature = require_feature or (lambda key: (lambda: True))
@@ -292,7 +301,7 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
         flag'ine göre karar veriliyordu. Doğrusu: önce formu (ve onun GERÇEK
         tenant_id'sini) bul, `current_tenant_id`'yi GEÇİCİ olarak o değere
         set et, ANCAK O ZAMAN flag'i kontrol et."""
-        form = await db.forms.find_one({"public_token": token, "share_mode": "public"}, {"_id": 0})
+        form = await _unscoped.forms.find_one({"public_token": token, "share_mode": "public"}, {"_id": 0})
         if not form:
             raise HTTPException(404, "Form bulunamadı veya yayında değil")
         reset_tok = current_tenant_id.set(form.get("tenant_id"))
@@ -307,29 +316,29 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
     async def submit_public_form(token: str, body: FormResponseSubmit):
         """Public form yanıtı. Aynı MİMARİ DÜZELTME (2026-07-24) burada da
         geçerli — bkz. get_public_form docstring'i."""
-        form = await db.forms.find_one({"public_token": token, "share_mode": "public"})
+        form = await _unscoped.forms.find_one({"public_token": token, "share_mode": "public"})
         if not form:
             raise HTTPException(404, "Form yayında değil")
         reset_tok = current_tenant_id.set(form.get("tenant_id"))
         try:
             if not await is_feature_enabled(db, "forms"):
                 raise HTTPException(403, f"'{FEATURE_FLAG_LABELS.get('forms', 'forms')}' özelliği bu kurum için kapatılmış")
+
+            doc = {
+                "id": str(uuid.uuid4()),
+                "form_id": form["id"],
+                "tenant_id": form.get("tenant_id"),   # context yok (anonim istek) — formun kendi tenant'ından al
+                "answers": body.answers,
+                "gps_lat": body.gps_lat,
+                "gps_lng": body.gps_lng,
+                "submitted_by": "public",
+                "submitter_role": "anonim",
+                "submitter_name": body.answers.get("__name", "Anonim"),
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.form_responses.insert_one(doc)
         finally:
             current_tenant_id.reset(reset_tok)
-
-        doc = {
-            "id": str(uuid.uuid4()),
-            "form_id": form["id"],
-            "tenant_id": form.get("tenant_id"),   # context yok (anonim istek) — formun kendi tenant'ından al
-            "answers": body.answers,
-            "gps_lat": body.gps_lat,
-            "gps_lng": body.gps_lng,
-            "submitted_by": "public",
-            "submitter_role": "anonim",
-            "submitter_name": body.answers.get("__name", "Anonim"),
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.form_responses.insert_one(doc)
         doc.pop("_id", None)
         return {"status": "ok", "response_id": doc["id"]}
     

@@ -302,7 +302,7 @@ register_satellite_routes(api_router, db, current_user, require_permission, log_
 
 # Saha veri toplama (form builder) modülü
 from forms_module import register_form_routes
-register_form_routes(api_router, db, current_user, is_admin, security, require_feature)
+register_form_routes(api_router, db, current_user, is_admin, security, require_feature, raw_db=raw_db)
 
 # Audit log görüntüleme
 register_audit_routes(api_router, db, current_user, is_admin, require_permission=require_permission, require_feature=require_feature)
