@@ -24,6 +24,7 @@ import uuid
 import secrets
 from tenant_context import current_tenant_id
 from config_service import ALLOW_DATA_SEEDING
+from platform_core import is_feature_enabled, FEATURE_FLAG_LABELS
 
 
 def register_form_routes(api_router, db, current_user, is_admin, security, require_feature=None):
@@ -279,22 +280,43 @@ def register_form_routes(api_router, db, current_user, is_admin, security, requi
     # =====================================================================
     
     @api_router.get("/public/forms/{token}")
-    async def get_public_form(token: str, _feat=Depends(require_feature("forms"))):
-        """Public form — login gerekmez. `require_feature` burada `current_user`'a
-        bağlı DEĞİLDİR (tenant_context zaten subdomain/header'dan çözülür) — bu
-        yüzden anonim erişimde de tenant modül kapalıysa 404/403 ile örtülür."""
+    async def get_public_form(token: str):
+        """Public form — login gerekmez, dolayısıyla Authorization header YOK ve
+        tenant_context_middleware `current_tenant_id`'yi hiç set etmez (bkz.
+        server.py). MİMARİ DÜZELTME (2026-07-24): eskiden burada
+        `_feat=Depends(require_feature("forms"))` vardı ama bu, formu (ve
+        onun tenant_id'sini) bilmeden ÖNCE çalışıyordu — `current_tenant_id`
+        None iken TenantScopedCollection HİÇBİR tenant filtresi eklemez, yani
+        `feature_flags.find_one({"key": "forms"})` TÜM tenant'lar arasında
+        filtresiz arıyordu ve Mongo'nun döndürdüğü rastgele bir tenant'ın
+        flag'ine göre karar veriliyordu. Doğrusu: önce formu (ve onun GERÇEK
+        tenant_id'sini) bul, `current_tenant_id`'yi GEÇİCİ olarak o değere
+        set et, ANCAK O ZAMAN flag'i kontrol et."""
         form = await db.forms.find_one({"public_token": token, "share_mode": "public"}, {"_id": 0})
         if not form:
             raise HTTPException(404, "Form bulunamadı veya yayında değil")
+        reset_tok = current_tenant_id.set(form.get("tenant_id"))
+        try:
+            if not await is_feature_enabled(db, "forms"):
+                raise HTTPException(403, f"'{FEATURE_FLAG_LABELS.get('forms', 'forms')}' özelliği bu kurum için kapatılmış")
+        finally:
+            current_tenant_id.reset(reset_tok)
         return form
-    
+
     @api_router.post("/public/forms/{token}/submit")
-    async def submit_public_form(token: str, body: FormResponseSubmit, _feat=Depends(require_feature("forms"))):
-        """Public form yanıtı"""
+    async def submit_public_form(token: str, body: FormResponseSubmit):
+        """Public form yanıtı. Aynı MİMARİ DÜZELTME (2026-07-24) burada da
+        geçerli — bkz. get_public_form docstring'i."""
         form = await db.forms.find_one({"public_token": token, "share_mode": "public"})
         if not form:
             raise HTTPException(404, "Form yayında değil")
-        
+        reset_tok = current_tenant_id.set(form.get("tenant_id"))
+        try:
+            if not await is_feature_enabled(db, "forms"):
+                raise HTTPException(403, f"'{FEATURE_FLAG_LABELS.get('forms', 'forms')}' özelliği bu kurum için kapatılmış")
+        finally:
+            current_tenant_id.reset(reset_tok)
+
         doc = {
             "id": str(uuid.uuid4()),
             "form_id": form["id"],

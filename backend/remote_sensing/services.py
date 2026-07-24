@@ -242,13 +242,25 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
         return await db.remote_sensing_images.find(q, {"_id": 0}).sort("capture_date", -1).to_list(200)
 
     @api_router.get("/remote-sensing/images/file/{stored_name}")
-    async def rs_image_file(stored_name: str, request: Request, token: str = Query(None),
-                             _feat=Depends(require_feature("remote_sensing"))):
+    async def rs_image_file(stored_name: str, request: Request, token: str = Query(None)):
         """Yerel diske kaydedilmiş uydu görüntüsünü (PNG) sunar. <img src>
         özel header gönderemediği için ?token= de kabul edilir (storage.py'nin
-        dosya-indirme deseniyle AYNI: JWT imza/aktiflik + tenant kontrolü)."""
+        dosya-indirme deseniyle AYNI: JWT imza/aktiflik + tenant kontrolü).
+
+        MİMARİ DÜZELTME (2026-07-24): eskiden burada
+        `_feat=Depends(require_feature("remote_sensing"))` vardı ama <img>
+        etiketi Authorization header GÖNDEREMEZ (bu yüzden zaten ?token=
+        deseni var) — tenant_context_middleware `current_tenant_id`'yi SADECE
+        Authorization header'ından okur, ?token= query param'ını GÖRMEZ. Yani
+        `current_tenant_id` None kalıyordu ve flag kontrolü tenant filtresiz,
+        rastgele bir tenant'ın kaydına göre karar veriyordu (bkz. forms_module.
+        py'deki AYNI düzeltme). Doğrusu: token'ı çöz, görüntünün GERÇEK
+        tenant_id'sini bul, `current_tenant_id`'yi GEÇİCİ olarak ona set et,
+        ANCAK O ZAMAN flag'i kontrol et."""
         from security import decode_token
         from storage import UPLOAD_DIR
+        from tenant_context import current_tenant_id
+        from platform_core import is_feature_enabled, FEATURE_FLAG_LABELS
         if "/" in stored_name or ".." in stored_name or "\\" in stored_name:
             raise HTTPException(400, "Geçersiz dosya adı")
         auth = request.headers.get("authorization", "")
@@ -267,6 +279,13 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
             raise HTTPException(404, "Görüntü bulunamadı")
         if u.get("role") != "platform_admin" and img.get("tenant_id") not in (None, payload.get("tenant_id")):
             raise HTTPException(404, "Görüntü bulunamadı")
+        effective_tenant_id = img.get("tenant_id") or payload.get("tenant_id")
+        reset_tok = current_tenant_id.set(effective_tenant_id)
+        try:
+            if not await is_feature_enabled(db, "remote_sensing"):
+                raise HTTPException(403, f"'{FEATURE_FLAG_LABELS.get('remote_sensing', 'remote_sensing')}' özelliği bu kurum için kapatılmış")
+        finally:
+            current_tenant_id.reset(reset_tok)
         path = UPLOAD_DIR / "remote_sensing" / stored_name
         if not path.is_file():
             raise HTTPException(404, "Dosya bulunamadı")
