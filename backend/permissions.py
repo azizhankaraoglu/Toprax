@@ -264,6 +264,15 @@ PERMISSION_CATALOG = {
             {"key": "communications:preferences_manage", "label": "Kişi Tercihlerini (bir başkası adına) Yönet"},
         ],
     },
+    "report_builder": {
+        "label": "Rapor Oluşturucu (Denetim Faz 6)",
+        "permissions": [
+            {"key": "report_builder:read", "label": "Şablonları Görüntüle / Önizle / Dışa Aktar"},
+            {"key": "report_builder:create", "label": "Şablon Oluştur/Düzenle/Sil"},
+            {"key": "report_builder:share", "label": "Kanal (Mail/SMS/WhatsApp) veya Link ile Paylaş"},
+            {"key": "report_builder:schedule", "label": "Periyodik Gönderim Zamanla"},
+        ],
+    },
     "experience_profiles": {
         "label": "Experience Profile (Mobil Persona)",
         "permissions": [
@@ -394,6 +403,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "automation:view", "automation:manage",
         "communications:view", "communications:send",
         "communications:campaigns_view", "communications:campaigns_manage",
+        "report_builder:read", "report_builder:create", "report_builder:share", "report_builder:schedule",
         "lms:catalog_view", "lms:catalog_manage", "lms:assign", "lms:groups_manage", "lms:status_view_all",
         "integration_hub:view", "platform_core:view",
         "experience_profiles:view", "experience_profiles:manage",
@@ -437,6 +447,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "automation:view", "automation:manage",
         "communications:view", "communications:send",
         "communications:campaigns_view", "communications:campaigns_manage",
+        "report_builder:read", "report_builder:create", "report_builder:share", "report_builder:schedule",
         "lms:catalog_view", "lms:catalog_manage", "lms:assign", "lms:groups_manage", "lms:status_view_all",
         "integration_hub:view", "platform_core:view",
         # Remote Sensing — Ziraat Mühendisi manuel analiz başlatabilir + görüntü/
@@ -464,6 +475,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "field_ops:view",
         "automation:view",
         "communications:view",
+        "report_builder:read", "report_builder:create", "report_builder:share",
         "lms:catalog_view",
         "cases:view", "cases:create",
     ],
@@ -485,6 +497,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "saha:submit", "forms:view",
         "field_ops:view",
         "automation:view",
+        "report_builder:read", "report_builder:create", "report_builder:share",
         "lms:catalog_view",
         "cases:view", "cases:create",
     ],

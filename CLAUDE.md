@@ -5,6 +5,7 @@
 > Son güncelleme: 2026-07-11 (güvenlik denetimi + FAZ 13-17 (IT-36..46) roadmap'e eklendi + FAZ 13 (IT-36..39) TAMAMLANDI — bkz. dosya sonu "Mevcut Durum")
 > Son güncelleme (devam): 2026-07-11 — ROADMAP-URUNLESTIRME.md (on-premise urunlestirme, PR-01..PR-26 + P1-P4) TAMAMLANDI; FAZ 18 (Agricultural Intelligence Engine, IT-47..53) PLANLANDI (`AI-VIZYON-PLATFORMU-MIMARI.md` + ROADMAP-DETAY-TAM.md) ama HENUZ KOD YAZILMADI — bkz. memory/CLAUDE.md Bolum 11-12.
 > Son güncelleme (devam): 2026-07-23 — kullanıcı geri bildirimindeki 10 madde (layout/z-index düzeltmesi, gelişmiş filtre lookup entegrasyonu + 6 sayfaya yayılımı, AI Eğit çökmesi, Görev Yönetimi dashboard+task-type, Lookup/Form/Destek konsolidasyonu, toplu silme, sol menü daralt/genişlet + bildirim detay sayfası, sayfa başlıklarındaki iç kod adlarının temizlenmesi, kullanıcı renk teması) TAMAMLANDI — bkz. dosya sonu "Mevcut Durum" (2026-07-23 oturumu).
+> Son güncelleme (devam): 2026-07-24 — **ÖNEMLİ ORTAM UYARISI:** bu makinede TOPRAX'ın İKİ AYRI git deposu/klasörü var: bu dosyanın bulunduğu `C:\Users\Azizhan\Desktop\toprax_guncel\TOPRAX_Final_12072026_00` VE bağımsız gelişmiş `C:\App\TOPRAX_Final_12072026_00`. Çalışan `toprax-backend`/`toprax-frontend`/`toprax-mongo` Docker container'ları ÖNCEDEN `C:\App`'ten build ediliyordu; bu oturumda kullanıcı kararıyla BU dizin (Desktop kopyası) esas alındı ve `docker compose build` ile imajlar buradan yeniden derlendi (mongo'ya DOKUNULMADI — aynı veri volume'ü, veri kaybı yok). Yeni oturumlar `docker compose` komutlarını hep BU dizinden çalıştırmalı; `C:\App` kopyasının (kendi `elastic_reports.py`/`marnis_takbis.py` dosyaları + commit geçmişi olan) durumu kullanıcı tarafından ayrıca değerlendirilecek — detay için CHANGELOG.md'nin Faz 6 girişindeki "Dağıtım ortamı düzeltmesi" notuna bakın. Denetim raporu Faz 6 (Elastik Rapor Modülü, `backend/report_builder.py` + `pages/ReportBuilder.jsx`) TAMAMLANDI — bkz. dosya sonu "Mevcut Durum".
 
 ---
 
@@ -2278,6 +2279,40 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   Canlı tarayıcı/DB erişimi bu oturumda yoktu (Claude in Chrome bağlı
   değildi) — madde 1 ve 9'un DB-veri kısmı statik kod incelemesiyle
   sınırlı kaldı, kullanıcıdan canlı doğrulama istendi.
+
+- ✅ **2026-07-24 — Denetim raporu Faz 6 (Elastik Rapor Modülü) TAMAMLANDI**
+  (Build 24072026-2315). `toprax_product_audit_report_2407.md`'nin
+  kullanıcı tarafından onaylanan 8 madde arasındaki istek #7. Yeni
+  `backend/report_builder.py` — şablon tasarımcı (modül + kolonlar +
+  Query Engine filtre DSL'i + opsiyonel grupla/topla, pandas groupby/agg)
+  + paylaşım (`communications.send_via_channel()` üzerinden kanal, veya
+  token'lı link) + periyodik gönderim (`report_schedules` + tick).
+  Şablon sahiplik kalıbı `saved_queries.py` (IT-09) ile aynı; veri kaynağı
+  DOĞRUDAN `query_engine.execute_query()` (izin/maskeleme bypass edilmez).
+  PDF export reportlab'in kendi `Vera.ttf`'iyle (yeni bağımlılık yok)
+  GERÇEK Türkçe karakter desteğiyle üretilir — eski `/musthsil`/
+  `/reconciliation` PDF uçlarının ASCII-yakın Helvetica kalıbından
+  BİLİNÇLİ FARKLI, onlara dokunulmadı. `query_engine.py`'ye örnek şablon
+  için yeni `support_requests` modülü eklendi. İzinler `report_builder:
+  read/create/share/schedule`, feature flag `report_builder`. Frontend
+  `pages/ReportBuilder.jsx` (`/rapor-olusturucu`, RAPORLAR grubu) + public
+  görüntüleyici `pages/PublicReportViewer.jsx` (`/rapor/:token`, login
+  gerekmez). **Bilinçli kapsam notu:** personel alıcı seçimi v1'de
+  kullanıcı ID'si ile (tam bir personel seçici yok — `settings:users_view`
+  her role açık değil); önizleme/export ilk 500 kayıtla sınırlı
+  (`crud_base.py`'nin CSV export sınırlamasıyla aynı aile, `truncated`
+  alanıyla dürüstçe bildirilir). **Gerçek Docker deployment'ta (bkz.
+  yukarıdaki ORTAM UYARISI) uçtan uca doğrulandı:** 3 örnek şablon
+  (Çiftçi Listesi/Parsel Envanteri/Destek Talepleri Özeti) seed edildi;
+  gerçek 201 çiftçi/1036 parsel verisiyle düz liste VE risk_level'a göre
+  gruplanmış toplam alan önizlemesi doğru sonuç verdi; CSV/PDF export
+  (geçerli `%PDF-1.3`) çalıştı; link paylaşımıyla üretilen `/rapor/{token}`
+  Authorization header OLMADAN 200 döndü (backend'de sıfır header'lı
+  `requests` ile de ayrıca doğrulandı); zamanlama oluşturuldu, tick henüz-
+  zamanı-gelmemiş durumda `executed:[]` döndü. **Gerçek tarayıcıda** "Yeni
+  Şablon" formuyla (modül seç → kolon işaretle → kaydet) uçtan uca bir
+  şablon oluşturuldu ve doğru şekilde listede göründü. 47/47 pytest yeşil.
+  Test verisi temizlendi.
 
 ## 7. Çalıştırma
 

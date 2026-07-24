@@ -46,6 +46,8 @@ import MobilDashboard from "@/pages/MobilDashboard";
 import OrganizationChart from "@/pages/OrganizationChart";
 import PendingApprovals from "@/pages/PendingApprovals";
 import CaseManagement from "@/pages/CaseManagement";
+import ReportBuilder from "@/pages/ReportBuilder";
+import PublicReportViewer from "@/pages/PublicReportViewer";
 import {
   AyarlarEntegrasyon, HastalikTespiti, EFaturalar, Irsaliyeler,
   KantarKayitlari, AuditLog, UyduGorunutu, SahaPWA, AICopilot
@@ -78,6 +80,7 @@ function App() {
           <Route path="/kurulum" element={<SetupWizard />} />
           <Route path="/platform" element={<PlatformRoute><PlatformAdmin /></PlatformRoute>} />
           <Route path="/form/:token" element={<FormDoldur isPublic={true} />} />
+          <Route path="/rapor/:token" element={<PublicReportViewer />} />
           <Route path="/ciftci" element={<PrivateRoute><FarmerHome /></PrivateRoute>} />
           <Route path="/m" element={<PrivateRoute><MobilDashboard /></PrivateRoute>} />
           <Route path="/ciftci/form/:id" element={<PrivateRoute><FormDoldur isPublic={false} /></PrivateRoute>} />
@@ -130,6 +133,7 @@ function App() {
             <Route path="/organizasyon-hiyerarsisi" element={<OrganizationChart />} />
             <Route path="/onay-bekleyenlerim" element={<PendingApprovals />} />
             <Route path="/bize-ulasin" element={<CaseManagement />} />
+            <Route path="/rapor-olusturucu" element={<ReportBuilder />} />
             <Route path="/egitim-yonetimi" element={<EgitimYonetimi />} />
             <Route path="/integration-hub" element={<IntegrationHub />} />
             <Route path="/gelistirici-portali" element={<DeveloperPortal />} />

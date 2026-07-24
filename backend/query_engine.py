@@ -66,6 +66,10 @@ MODULE_COLLECTIONS = {
     "irrigation_events": "irrigation_events",
     "operations_tasks": "tasks",
     "agronomy_rules": "agronomy_rules",
+    # Denetim Faz 6 — Elastik Rapor Modülü'nün örnek şablonlarından biri
+    # ("Destek Talepleri Özeti") support.py'nin support_requests'ini
+    # Query Engine üzerinden okur, YENİ bir sorgu yolu icat edilmedi.
+    "support_requests": "support_requests",
 }
 
 MODULE_PERMISSIONS = {
@@ -85,6 +89,7 @@ MODULE_PERMISSIONS = {
     "irrigation_events": "irrigation:view",
     "operations_tasks": "operations:view",
     "agronomy_rules": "plantings:view",
+    "support_requests": "support:requests_view",
 }
 # (FAZ 18 IT-47 kaydı — ai_knowledge_records Query Engine'e bağlandı)
 
@@ -274,6 +279,15 @@ CORE_FILTERABLE_FIELDS = {
         {"key": "score_delta", "label": "Skor Etkisi", "type": "number"},
         {"key": "is_blocking", "label": "Engelleyici mi", "type": "text"},
         {"key": "advice", "label": "Öneri", "type": "text"},
+    ],
+    # Denetim Faz 6 — Elastik Rapor Modülü örnek şablonu.
+    "support_requests": [
+        {"key": "farmer_id", "label": "Çiftçi", "type": "text"},
+        {"key": "production_cycle_id", "label": "Üretim Sezonu", "type": "text"},
+        {"key": "support_type_id", "label": "Destek Tipi", "type": "text"},
+        {"key": "requested_amount", "label": "Talep Edilen Miktar", "type": "number"},
+        {"key": "status", "label": "Durum", "type": "text"},
+        {"key": "requested_at", "label": "Talep Tarihi", "type": "date"},
     ],
 }
 

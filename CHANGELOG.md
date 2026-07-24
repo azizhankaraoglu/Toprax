@@ -2,7 +2,77 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
-## [Yayınlanmamış] — Faz 5: Sentinel-2 Parsel Görüntüsü (2026-07-24, Build 24072026-2200)
+## [Yayınlanmamış] — Faz 6: Elastik Rapor Modülü (2026-07-24, Build 24072026-2315)
+
+### Eklendi
+- Yeni `backend/report_builder.py` — şablon tasarımcı (modül + kolonlar +
+  Query Engine filtre DSL'i + opsiyonel grupla/topla) + paylaşım (kanal veya
+  link) + periyodik gönderim. Veri kaynağı DOĞRUDAN `query_engine.
+  execute_query()` — izin/maskeleme (IT-07/IT-08) rapor tarafından bypass
+  edilmez. Şablon sahiplik kalıbı `saved_queries.py` (IT-09) ile BİREBİR AYNI
+  (özel/paylaşılan, sahibi düzenler/siler, admin+ moderasyon).
+- `query_engine.py`'ye yeni `support_requests` modülü (örnek şablonlardan
+  biri — "Destek Talepleri Özeti" — için).
+- Render: pandas ile groupby/agg (sum/avg/count/min/max); CSV export
+  `crud_base.py`'nin `io.StringIO`+`csv.DictWriter` kalıbıyla AYNI; PDF
+  export reportlab ile — kendi paketiyle gelen `Vera.ttf`'i (Bitstream Vera
+  Sans) kayıt ederek GERÇEK Türkçe karakter desteği sağlar (yeni bağımlılık
+  YOK, mevcut PDF uçlarına dokunulmadı).
+- Paylaşım `communications.send_via_channel()` üzerinden (Kara Liste/Tercih
+  Merkezi/Feature Flag gate'i otomatik uygulanır). `report_runs` — paylaşım
+  anında render edilmiş bir JSON SNAPSHOT (canlı sorgu değil); public link
+  `GET /public/reports/{token}` login GEREKTİRMEZ (forms_module.py'nin
+  `_unscoped` token-arama kalıbıyla AYNI).
+- Zamanlama: `report_schedules` CRUD + `POST /reports/run-scheduled` tick
+  (campaigns.py'nin run-scheduled deseniyle AYNI aile, ama TEKRARLI —
+  `next_run_at` her çalıştırmada frekansa göre yeniden hesaplanır).
+- İzinler `report_builder: read/create/share/schedule` (`permissions.py`) +
+  feature flag `report_builder` (`platform_core.py`, God Mode raporlar
+  grubunun altında).
+- Frontend `pages/ReportBuilder.jsx` (`/rapor-olusturucu`, RAPORLAR grubu) —
+  şablon listesi + tasarımcı (kolon seçici + gömülü `FilterPanel` + grupla/
+  topla builder) + önizleme/CSV/PDF/paylaşım/zamanlama drawer'ları. Public
+  görüntüleyici `pages/PublicReportViewer.jsx` (`/rapor/:token`).
+
+### Bilinçli kapsam notları
+- Alıcı seçimi sadeleştirildi: çiftçi alıcılar için `/search` (IT-10) ile
+  canlı arama var, personel alıcılar için v1'de doğrudan kullanıcı ID'si
+  girilir (tam bir personel seçici kapsam dışı — `settings:users_view` her
+  role açık değil).
+- Önizleme/export ilk 500 kayıtla sınırlı (`crud_base.py`'nin CSV export
+  sınırlamasıyla AYNI aile) — `truncated` alanı bunu dürüstçe bildirir.
+
+### Doğrulama
+- `py_compile` + `pyflakes` (0 uyarı) + 47 pytest yeşil.
+- **Gerçek Docker deployment'ta uçtan uca doğrulandı** (bkz. aşağıdaki
+  "Dağıtım ortamı düzeltmesi" notu): örnek şablonlar seed edildi; gerçek
+  201 çiftçi/1036 parsel verisiyle önizleme (düz liste VE risk_level'a göre
+  gruplanmış toplam alan) doğru sonuç verdi; CSV/PDF export (geçerli
+  `%PDF-1.3` header) çalıştı; link paylaşımı ile üretilen `/rapor/{token}`
+  Authorization header OLMADAN 200 döndü; zamanlama oluşturuldu, tick
+  henüz-zamanı-gelmemiş durumda `executed:[]` döndürdü. Tarayıcıda "Yeni
+  Şablon" formuyla gerçek bir şablon uçtan uca oluşturuldu. Test verisi
+  temizlendi, sadece 3 örnek şablon kaldı.
+
+### Dağıtım ortamı düzeltmesi (bu oturumda keşfedildi)
+- Çalışan `toprax-backend`/`toprax-frontend`/`toprax-mongo` Docker
+  container'larının **`C:\App\TOPRAX_Final_12072026_00`** adlı, bu oturumun
+  çalışma dizininden (`C:\Users\Azizhan\Desktop\toprax_guncel\
+  TOPRAX_Final_12072026_00`) TAMAMEN AYRI bir git deposundan build edildiği
+  bulundu — iki depo bağımsız olarak gelişmiş (C:\App'te kendi
+  `elastic_reports.py`/`marnis_takbis.py` dosyaları + uncommitted
+  değişiklikler vardı). Kullanıcı kararıyla bu çalışma dizini (Desktop
+  kopyası) esas alındı: `docker compose build` ile backend/frontend imajları
+  BU depodan yeniden derlendi, mongo container'a DOKUNULMADI (aynı
+  `toprax_final_12072026_00_mongo_data` volume — proje klasör adı aynı
+  olduğu için otomatik eşleşti — veri kaybı YOK, `.env` sırları da zaten
+  birebir aynıydı). Ayrıca eksik olan `docker-compose.override.yml`
+  (`tests/` bind mount'u) eklendi. **Bir sonraki oturum için önemli:**
+  artık `docker compose` komutları BU dizinden (`C:\Users\Azizhan\Desktop\
+  toprax_guncel\TOPRAX_Final_12072026_00`) çalıştırılmalı; `C:\App` kopyası
+  kullanıcı tarafından ayrıca değerlendirilecek.
+
+
 
 ### Eklendi
 - Yeni `backend/remote_sensing/providers/sentinel2.py` — `IRemoteSensingProvider`

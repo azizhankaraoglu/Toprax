@@ -95,6 +95,8 @@ FEATURE_FLAG_LABELS = {
     # (Denetim Faz 3, 2026-07-24) Resmi Sistem Entegrasyonları
     "mernis": "MERNİS Kimlik Doğrulama",
     "takbis": "TAKBİS Tapu Sorgu",
+    # (Denetim Faz 6, 2026-07-24) Elastik Rapor Modülü
+    "report_builder": "Rapor Oluşturucu",
 }
 
 HEALTH_STATUS_LABELS = {"saglikli": "Sağlıklı", "uyari": "Uyarı", "hata": "Hata", "kurulu_degil": "Kurulu Değil"}

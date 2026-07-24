@@ -502,6 +502,13 @@ register_communication_policy_routes(api_router, db, current_user, require_permi
 from lms import register_lms_routes
 register_lms_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
+# Elastik Rapor Modülü — şablon tasarımcı + paylaşım (kanal/link) +
+# periyodik gönderim (Denetim raporu #7 / Faz 6). raw_db, forms_module.py'nin
+# public token deseniyle AYNI: /public/reports/{token} tenant bilinmeden
+# önce token'la bulmalı.
+from report_builder import register_report_builder_routes
+register_report_builder_routes(api_router, db, current_user, require_permission, log_audit, require_feature, raw_db=raw_db)
+
 # Integration Hub Formalizasyonu + Webhook Engine (IT-32 / FAZ 11).
 from integration_hub import register_integration_hub_routes
 register_integration_hub_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
@@ -642,6 +649,11 @@ async def startup():
         await db.admin_areas.create_index([("geometry", "2dsphere")])
         await db.parcels.create_index([("geometry", "2dsphere")])
 
+        # Denetim Faz 6 — Elastik Rapor Modülü: public link erişimi token'la
+        # (forms.public_token ile AYNI aile), zamanlama tick'i due sorgusu.
+        await raw_db.report_runs.create_index("public_token", unique=True)
+        await db.report_schedules.create_index([("active", 1), ("next_run_at", 1)])
+
         # Tenant izolasyonu artık her sorguda tenant_id filtresi kullanıyor —
         # bu alan üzerinde index olmadan koleksiyon taraması yapılır.
         for coll in ["users", "farmers", "parcels", "contracts", "plantings",
@@ -649,7 +661,8 @@ async def startup():
                      "tasks", "appointments", "kantar_records", "einvoices",
                      "irsaliyeler", "iot_sensors", "drone_missions", "notifications",
                      "audit_logs", "integrations", "regions", "disease_detections",
-                     "field_visits", "forms", "yields", "uploads", "production_cycles", "admin_areas"]:
+                     "field_visits", "forms", "yields", "uploads", "production_cycles", "admin_areas",
+                     "report_templates", "report_runs", "report_schedules"]:
             await raw_db[coll].create_index("tenant_id")
         await raw_db.tenants.create_index("slug", unique=True)
         await raw_db.tenants.create_index("id", unique=True)

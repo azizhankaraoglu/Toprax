@@ -7,7 +7,7 @@ import {
   Settings2, BarChart3, Truck, Bell, LogOut, Award, ChevronRight, FlaskConical,
   Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Sparkles,
   UserCog, ShieldCheck, LayoutList, Landmark, Compass, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, ClipboardCheck,
-  Workflow, CheckSquare, Inbox, Radio
+  Workflow, CheckSquare, Inbox, Radio, FileBarChart2
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
 import AnnouncementPopup from "@/components/AnnouncementPopup";
@@ -71,6 +71,7 @@ const navGroups = [
     // ağırlıklı olduğu için ÜRETİM'e taşındı (son hal kararı).
     title: "RAPORLAR",
     items: [
+      { to: "/rapor-olusturucu", icon: FileBarChart2, label: "Rapor Oluşturucu", featureFlag: "report_builder" },
       { to: "/saha-operasyonlari?view=raporlar", icon: ClipboardCheck, label: "Saha Raporları", featureFlag: "reports" },
       { to: "/verimlilik", icon: BarChart3, label: "Verimlilik", featureFlag: "reports" },
       { to: "/karne", icon: Award, label: "Çiftçi Karne", featureFlag: "reports" },
