@@ -186,6 +186,13 @@ function BulkImport({ onDone }) {
 
       {error && <div className="text-xs text-red-400 p-2 bg-red-500/10 rounded mt-3">{error}</div>}
       {result && <div className="text-xs text-[var(--primary)] mt-3">{result.count} idari alan oluşturuldu.</div>}
+      {/* Denetim STAB-B1: geometri tipi uygun olmayan (örn. Point) kayıtlar
+          artık backend'den uyarı olarak döner ve burada gösterilir. */}
+      {result?.warnings?.length > 0 && (
+        <div className="text-xs text-amber-400 p-2 bg-amber-500/10 rounded mt-2 space-y-1" data-testid="admin-area-bulk-warnings">
+          {result.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
+        </div>
+      )}
     </div>
   );
 }

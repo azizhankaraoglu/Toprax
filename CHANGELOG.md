@@ -2,6 +2,48 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [Yayınlanmamış] — Denetim Düzeltmeleri Faz 1 (2026-07-24, Build 24072026-1400)
+
+### Eklendi
+- **A8 Sunucu tarafı şekille seçim**: yeni `POST /parcels/select-by-geometry`
+  (`$geoIntersects`, `/parcels/{parcel_id}`'den önce tanımlı);
+  `HaritaPaneli.jsx` "Şekille Seç" artık Turf.js tarayıcı taraması yerine bu
+  ucu kullanır (1000+ parselde donma giderildi; sunucu hatasında eski
+  yönteme sessiz geri dönüş).
+- **A9 Topoloji doğrulaması**: yeni `backend/geo_validation.py` (saf Python
+  self-intersection/halka kontrolü, shapely bağımlılığı YOK) — parsel
+  create/update/split/import-geojson uçlarında 400; `Parcels.jsx` çiziminde
+  `turf.kinks` ile erken uyarı.
+- **A10 Görev erteleme**: `field_ops.py` yeni `ertelendi` durumu — saha
+  aşamalarından geçilebilir, checklist zorunluluğundan muaf (yalnız `kapandi`
+  ister), `ertelendi → planlandi` yeniden planlama; kanban'a "Ertelendi"
+  sütunu; `SahaOperasyonlari.jsx` + `MobilDashboard.jsx` ALLOWED_NEXT senkron.
+- **A12 Kantar hızlı giriş**: Kantar Kayıtları'na klavye-öncelikli "Hızlı
+  Giriş" formu (Enter alan geçişi, Ctrl+Enter/F2 kayıt, kayıt sonrası odak
+  başa) + `docs/kantar-rs232-kopru.md` (RS232 keyboard-wedge köprü kılavuzu,
+  pyserial örneğiyle).
+- **A14 Gerçek iletişim sağlayıcıları**: `channel_providers.py`'ye
+  `RealSmsProvider` (Netgsm/Twilio/webhook — integrations._probe_sms_send
+  yeniden kullanımı) + `SmtpEmailProvider`; yeni async
+  `get_channel_provider_for(db, channel)` factory'si entegrasyon kaydı
+  etkin+dolu ise gerçek, değilse simüle döner; `communications.
+  send_via_channel` bu factory'ye geçti (KVKK gate değişmedi).
+- **A15 Test seti**: `tests/test_audit_fixes_faz1.py` (12 test — A9 topoloji,
+  A10 geçiş kuralları, A11 düzeltme işareti). Toplam 47 test yeşil.
+
+### Düzeltildi
+- **A7 (STAB-B1)**: `/admin-areas/bulk-import` Point/LineString kayıtları
+  artık sessizce atlamaz — tip başına sayılıp Türkçe `warnings[]` döner,
+  `AdminAreaManagement.jsx` gösterir.
+- **A11 Ledger düzeltme takibi**: `POST /ledger/{id}/reverse` bağlı kaynak
+  belgeyi (`support_request`/`entitlement`/`reconciliation`/`einvoice`)
+  `correction_status: "Düzeltildi"` ile işaretler (belgenin kendi durum
+  makinesine dokunmaz) + audit; `ProductionCycleDetail.jsx` rozet gösterir.
+- **A13 KPI drill-down**: Dashboard'da hedefsiz 4 kart bağlandı
+  (Hedef Hasat/Gerçekleşen → /verimlilik vb.); `UfydDashboard.jsx` KPI
+  bileşenine `to` desteği eklendi (global liste sayfası olmayan finans
+  kartları bilinçli olarak tıklamasız bırakıldı).
+
 ## [Yayınlanmamış] — Denetim Düzeltmeleri Faz 0 (2026-07-24, Build 24072026-1200)
 
 ### Güvenlik

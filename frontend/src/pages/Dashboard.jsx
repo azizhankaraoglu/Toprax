@@ -194,8 +194,8 @@ export default function Dashboard() {
         <KPI icon={MapIcon} label="Toplam Parsel" value={fmt(k.parcels_total)} to="/parseller" />
         <KPI icon={Wheat} label="Toplam Alan" value={fmt(k.total_area_dekar)} suffix="dekar" to="/parseller" />
         <KPI icon={FileText} label="Aktif Sözleşme" value={fmt(k.active_contracts)} accent="bg-info/10 text-info" to="/sozlesmeler" />
-        <KPI icon={Target} label="Hedef Hasat" value={fmt(k.expected_ton)} suffix="ton" accent="bg-warning/10 text-warning" />
-        <KPI icon={TrendingUp} label="Gerçekleşen" value={fmt(k.actual_ton)} suffix="ton" delta={`%${k.yield_completion_pct}`} accent="bg-success/10 text-success" />
+        <KPI icon={Target} label="Hedef Hasat" value={fmt(k.expected_ton)} suffix="ton" accent="bg-warning/10 text-warning" to="/verimlilik" />
+        <KPI icon={TrendingUp} label="Gerçekleşen" value={fmt(k.actual_ton)} suffix="ton" delta={`%${k.yield_completion_pct}`} accent="bg-success/10 text-success" to="/verimlilik" />
         <KPI icon={AlertTriangle} label="Riskli Parsel" value={fmt(k.risky_parcels)} accent="bg-danger/10 text-danger" to="/parseller?risk=1" />
         <KPI icon={Users} label="A Karne Çiftçi" value={data.karne_distribution.A} accent="bg-orange/10 text-orange-500" to="/ciftciler?karne=A" />
       </div>
@@ -214,8 +214,8 @@ export default function Dashboard() {
         <KPI icon={Wheat} label="Ekili Parsel" value={fmt(k.ekili_parcels ?? 0)} accent="bg-success/10 text-success" to="/parseller?ekili=evet" />
         <KPI icon={MapIcon} label="Ekili Değil" value={fmt(k.ekili_degil_parcels ?? 0)} to="/parseller?ekili=hayir" />
         <KPI icon={TrendingUp} label="Sökülen Parsel" value={fmt(k.sokulen_parcels ?? 0)} accent="bg-warning/10 text-warning" to="/parseller" />
-        <KPI icon={Wheat} label="Sökülen Alan" value={fmt(k.sokulen_alan_dekar ?? 0)} suffix="dekar" accent="bg-warning/10 text-warning" />
-        <KPI icon={Target} label="Kalan (Sökülecek) Alan" value={fmt(k.kalan_alan_dekar ?? 0)} suffix="dekar" accent="bg-info/10 text-info" />
+        <KPI icon={Wheat} label="Sökülen Alan" value={fmt(k.sokulen_alan_dekar ?? 0)} suffix="dekar" accent="bg-warning/10 text-warning" to="/parseller" />
+        <KPI icon={Target} label="Kalan (Sökülecek) Alan" value={fmt(k.kalan_alan_dekar ?? 0)} suffix="dekar" accent="bg-info/10 text-info" to="/parseller?ekili=evet" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">

@@ -56,21 +56,24 @@ const TASK_STATUS_LABELS = {
   planlandi: "Planlandı", atandi: "Atandı", kabul_edildi: "Kabul Edildi",
   reddedildi: "Reddedildi", yola_cikildi: "Yola Çıkıldı", yerine_ulasildi: "Görev Yerine Ulaşıldı",
   calisiliyor: "Çalışılıyor", tamamlandi: "Tamamlandı", onay_bekliyor: "Yönetici Onayı Bekliyor",
-  kapandi: "Kapandı", iptal_edildi: "İptal Edildi",
+  kapandi: "Kapandı", iptal_edildi: "İptal Edildi", ertelendi: "Ertelendi",
 };
 
 // backend/field_ops.py'deki TASK_ALLOWED_TRANSITIONS'ın client-side TAHMİNİ —
 // sürükle-bırak hedefini önermek için, gerçek doğrulama backend'de.
+// Denetim A10 (2026-07-24): saha aşamalarından "ertelendi"ye geçiş eklendi
+// (backend'le ELLE senkron tutulan çift kopya — MobilDashboard.jsx'te de aynı).
 const ALLOWED_NEXT = {
-  planlandi: ["atandi", "iptal_edildi"],
-  atandi: ["kabul_edildi", "reddedildi", "iptal_edildi"],
-  kabul_edildi: ["yola_cikildi", "iptal_edildi"],
-  yola_cikildi: ["yerine_ulasildi", "iptal_edildi"],
-  yerine_ulasildi: ["calisiliyor", "iptal_edildi"],
-  calisiliyor: ["tamamlandi", "iptal_edildi"],
+  planlandi: ["atandi", "ertelendi", "iptal_edildi"],
+  atandi: ["kabul_edildi", "reddedildi", "ertelendi", "iptal_edildi"],
+  kabul_edildi: ["yola_cikildi", "ertelendi", "iptal_edildi"],
+  yola_cikildi: ["yerine_ulasildi", "ertelendi", "iptal_edildi"],
+  yerine_ulasildi: ["calisiliyor", "ertelendi", "iptal_edildi"],
+  calisiliyor: ["tamamlandi", "ertelendi", "iptal_edildi"],
   tamamlandi: ["onay_bekliyor", "iptal_edildi"],
   onay_bekliyor: ["kapandi", "iptal_edildi"],
   reddedildi: ["planlandi", "iptal_edildi"],
+  ertelendi: ["planlandi", "iptal_edildi"],
   kapandi: [], iptal_edildi: [],
 };
 
@@ -83,6 +86,7 @@ const KANBAN_COLUMNS = [
   { key: "sahada", label: "Sahada", statuses: ["yerine_ulasildi", "calisiliyor"] },
   { key: "tamamlandi", label: "Tamamlandı", statuses: ["tamamlandi"] },
   { key: "onay_bekliyor", label: "Onay Bekliyor", statuses: ["onay_bekliyor"] },
+  { key: "ertelendi", label: "Ertelendi", statuses: ["ertelendi"] },
   { key: "kapandi", label: "Kapandı", statuses: ["kapandi"] },
   { key: "iptal", label: "Reddedildi / İptal", statuses: ["reddedildi", "iptal_edildi"] },
 ];

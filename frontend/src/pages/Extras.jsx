@@ -745,6 +745,116 @@ export function Irsaliyeler() {
   );
 }
 
+/**
+ * Denetim A12 (2026-07-24) — Kantar Hızlı Giriş Modu.
+ * Hasat döneminde kuyruktaki kamyonlar için fare kullanmadan, tamamen
+ * klavyeyle kayıt: alanlar arasında Enter ile ilerlenir, Ctrl+Enter (veya
+ * F2) kaydeder, kayıt sonrası form sıfırlanıp odak İLK alana döner —
+ * operatör elini klavyeden hiç kaldırmaz. RS232/USB kantar cihazı
+ * entegrasyonu için bkz. docs/kantar-rs232-kopru.md (keyboard-wedge
+ * köprüsü ağırlığı imleç neredeyse oraya "yazar" — bu form onunla uyumlu).
+ */
+function KantarHizliGiris({ farmers, onSaved }) {
+  const EMPTY = { member_no: "", truck_plate: "", brut_ton: "", dara_ton: "", polar_oran: "", kalite: "B" };
+  const [v, setV] = useState(EMPTY);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const refs = useRef([]);
+
+  const focusField = (i) => refs.current[i]?.focus();
+
+  async function submit() {
+    setErr(""); setMsg("");
+    const farmer = farmers.find(
+      (f) => f.member_no?.toLowerCase() === v.member_no.trim().toLowerCase()
+    );
+    if (!farmer) { setErr(`Üye no bulunamadı: ${v.member_no}`); focusField(0); return; }
+    if (!v.truck_plate.trim()) { setErr("Plaka gerekli"); focusField(1); return; }
+    const brut = Number(v.brut_ton), dara = Number(v.dara_ton);
+    if (!brut || !dara || dara >= brut) { setErr("Brüt/dara hatalı — dara brütten küçük olmalı"); focusField(2); return; }
+    setBusy(true);
+    try {
+      await api.post("/kantar/records", {
+        farmer_id: farmer.id, truck_plate: v.truck_plate.trim().toUpperCase(),
+        brut_ton: brut, dara_ton: dara,
+        polar_oran: v.polar_oran ? Number(v.polar_oran) : null,
+        kalite: v.kalite || "B", kantar_no: "K-1",
+      });
+      setMsg(`✓ ${farmer.full_name} — net ${(brut - dara).toFixed(2)} t kaydedildi`);
+      setV(EMPTY);
+      focusField(0);
+      onSaved?.();
+    } catch (e2) {
+      setErr(e2.response?.data?.detail || "Kayıt başarısız");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Enter → sonraki alan; son alanda Enter VEYA her yerde Ctrl+Enter/F2 → kaydet.
+  function onKeyDown(e, idx, isLast) {
+    if (e.key === "F2" || (e.key === "Enter" && (e.ctrlKey || isLast))) {
+      e.preventDefault(); submit();
+    } else if (e.key === "Enter") {
+      e.preventDefault(); focusField(idx + 1);
+    }
+  }
+
+  const field = (idx, name, label, props = {}, isLast = false) => (
+    <div>
+      <label className="text-[10px] text-[var(--text-dim)] uppercase tracking-wider block mb-1">{label}</label>
+      <input
+        ref={(el) => { refs.current[idx] = el; }}
+        className="input text-sm"
+        value={v[name]}
+        autoFocus={idx === 0}
+        onChange={(e) => setV((s) => ({ ...s, [name]: e.target.value }))}
+        onKeyDown={(e) => onKeyDown(e, idx, isLast)}
+        data-testid={`kantar-fast-${name}`}
+        {...props}
+      />
+    </div>
+  );
+
+  return (
+    <div className="card p-4 mb-6" data-testid="kantar-fast-entry">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-display text-lg">⚡ Hızlı Giriş (Klavye)</h3>
+        <span className="text-[11px] text-[var(--text-dim)]">
+          Enter: sonraki alan · Ctrl+Enter / F2: kaydet · kayıt sonrası odak başa döner
+        </span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        {field(0, "member_no", "Üye No", { placeholder: "TS-00001" })}
+        {field(1, "truck_plate", "Plaka", { placeholder: "42 ABC 123" })}
+        {field(2, "brut_ton", "Brüt (ton)", { type: "number", step: "0.01", inputMode: "decimal" })}
+        {field(3, "dara_ton", "Dara (ton)", { type: "number", step: "0.01", inputMode: "decimal" })}
+        {field(4, "polar_oran", "Polar %", { type: "number", step: "0.01", inputMode: "decimal" })}
+        <div>
+          <label className="text-[10px] text-[var(--text-dim)] uppercase tracking-wider block mb-1">Kalite</label>
+          <select
+            ref={(el) => { refs.current[5] = el; }}
+            className="input text-sm" value={v.kalite}
+            onChange={(e) => setV((s) => ({ ...s, kalite: e.target.value }))}
+            onKeyDown={(e) => onKeyDown(e, 5, true)}
+            data-testid="kantar-fast-kalite"
+          >
+            <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+          </select>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 mt-3">
+        <button className="btn btn-primary text-sm" onClick={submit} disabled={busy} data-testid="kantar-fast-submit">
+          {busy ? "Kaydediliyor…" : "Kaydet (Ctrl+Enter)"}
+        </button>
+        {msg && <span className="text-xs text-[var(--primary)]">{msg}</span>}
+        {err && <span className="text-xs text-red-400">{err}</span>}
+      </div>
+    </div>
+  );
+}
+
 export function KantarKayitlari() {
   const [docs, setDocs] = useState([]);
   const [farmers, setFarmers] = useState([]);
@@ -762,6 +872,9 @@ export function KantarKayitlari() {
         <h1 className="font-display text-4xl">Kantar Kayıtları</h1>
         <p className="text-[var(--text-dim)] text-sm mt-1">{docs.length} tartı · {fmt(totalNet)} ton net · ortalama polar %{avgPolar}</p>
       </header>
+
+      {/* Denetim A12 — klavye-öncelikli hızlı giriş (hasat dönemi kuyruğu) */}
+      <KantarHizliGiris farmers={farmers} onSaved={load} />
 
       <QuickAddPanel
         title="Yeni Tartı Kaydı"

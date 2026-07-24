@@ -173,6 +173,16 @@ export default function Parcels() {
 
   // ============ ÇİZ: yeni parsel oluştur ============
   function onDrawCreated(layer, geojson) {
+    // Denetim (2026-07-24): topoloji ön-kontrolü — kendi kendini kesen çizim
+    // backend'de zaten 400 ile reddedilir (geo_validation.py), burada erken
+    // ve anlaşılır bir uyarı verilir (turf.kinks self-intersection noktalarını bulur).
+    try {
+      const kinks = turf.kinks(turf.polygon(geojson.geometry.coordinates));
+      if (kinks?.features?.length > 0) {
+        alert("Çizilen şekil kendisiyle kesişiyor — kenarlar birbirinin üzerinden geçmemeli. Lütfen şekli yeniden çizin.");
+        return;
+      }
+    } catch { /* turf geometriyi okuyamazsa backend doğrulaması yakalar */ }
     if (tool === "draw") {
       setDrawnGeoJSON(geojson);
     } else if (tool === "edit" && editTarget) {

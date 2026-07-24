@@ -72,13 +72,22 @@ TASK_STATUS_LABELS = {
     "reddedildi": "Reddedildi", "yola_cikildi": "Yola Çıkıldı",
     "yerine_ulasildi": "Görev Yerine Ulaşıldı", "calisiliyor": "Çalışılıyor",
     "tamamlandi": "Tamamlandı", "onay_bekliyor": "Yönetici Onayı Bekliyor",
-    "kapandi": "Kapandı", "iptal_edildi": "İptal Edildi",
+    "kapandi": "Kapandı", "iptal_edildi": "İptal Edildi", "ertelendi": "Ertelendi",
 }
 TASK_ALLOWED_TRANSITIONS: Dict[str, set] = {}
 for _i, _s in enumerate(TASK_STATUS_FLOW[:-1]):
     TASK_ALLOWED_TRANSITIONS[_s] = {TASK_STATUS_FLOW[_i + 1], "iptal_edildi"}
 TASK_ALLOWED_TRANSITIONS["atandi"].add("reddedildi")
 TASK_ALLOWED_TRANSITIONS["reddedildi"] = {"planlandi", "iptal_edildi"}  # yeniden planlama
+# Denetim A10 (2026-07-24): sahada beklenmeyen durum (parsel sahibi yerinde
+# yok vb.) — checklist zorunluluğu mühendisi bloke etmesin diye görev
+# saha aşamalarından "ertelendi"ye alınabilir; ertelenen görev yeniden
+# planlanır. `iptal_edildi` gibi checklist KONTROLÜNDEN MUAF (yalnızca
+# `kapandi` checklist ister — bkz. transition_task).
+for _s in ("planlandi", "atandi", "kabul_edildi", "yola_cikildi",
+           "yerine_ulasildi", "calisiliyor"):
+    TASK_ALLOWED_TRANSITIONS[_s].add("ertelendi")
+TASK_ALLOWED_TRANSITIONS["ertelendi"] = {"planlandi", "iptal_edildi"}
 TASK_ALLOWED_TRANSITIONS["kapandi"] = set()       # terminal
 TASK_ALLOWED_TRANSITIONS["iptal_edildi"] = set()  # terminal
 
@@ -440,7 +449,7 @@ def register_field_ops_routes(api_router, db, current_user, require_permission, 
                 raise HTTPException(400, f"Checklist tamamlanmadan görev kapatılamaz: {', '.join(incomplete)}")
 
         updates = {"status": body.status, "status_updated_at": datetime.now(timezone.utc).isoformat()}
-        if body.status in ("reddedildi", "iptal_edildi") and body.reason:
+        if body.status in ("reddedildi", "iptal_edildi", "ertelendi") and body.reason:
             updates["close_reason"] = body.reason
 
         await db.field_tasks.update_one({"id": task_id}, {"$set": updates})

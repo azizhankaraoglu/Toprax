@@ -415,7 +415,11 @@ export default function ProductionCycleDetail() {
                   <td className="p-3">{stype ? stype.name : r.support_type_id}</td>
                   <td className="p-3">{r.requested_amount} {r.unit}</td>
                   <td className="p-3 text-xs text-[var(--text-dim)] capitalize">{r.channel}</td>
-                  <td className="p-3"><span className={`badge ${SUPPORT_STATUS_BADGE[r.status] || "badge-neutral"}`}>{SUPPORT_STATUS_LABELS[r.status] || r.status}</span></td>
+                  <td className="p-3">
+                    <span className={`badge ${SUPPORT_STATUS_BADGE[r.status] || "badge-neutral"}`}>{SUPPORT_STATUS_LABELS[r.status] || r.status}</span>
+                    {/* Denetim A11: bağlı ledger kaydı ters kayıtla düzeltilmişse işaret */}
+                    {r.correction_status && <span className="badge badge-c ml-1 text-[10px]" title={`Ters kayıt: ${r.corrected_at?.slice(0, 10) || ""}`}>{r.correction_status.toUpperCase()}</span>}
+                  </td>
                   <td className="p-3 text-xs text-[var(--text-dim)]">{(r.requested_at || "").slice(0, 10)}</td>
                   <td className="p-3">
                     {nextOptions.length > 0 && (

@@ -6,14 +6,23 @@
  * bir rapor değildir, kabul kriteri bunu açıkça ister.
  */
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "@/api";
 import { Wallet, HandCoins, Clock, Users, ListChecks, Landmark } from "lucide-react";
 
 const fmt = (n) => new Intl.NumberFormat("tr-TR").format(n);
 
-function KPI({ icon: Icon, label, value, suffix, accent }) {
+// Denetim A13 (2026-07-24): KPI kartları drill-down (convention #11) —
+// `to` verilirse tıklanınca ilgili filtreli ekrana gider.
+function KPI({ icon: Icon, label, value, suffix, accent, to }) {
+  const navigate = useNavigate();
+  const clickable = !!to;
   return (
-    <div className="card card-hover p-5 fade-in">
+    <div
+      className={`card card-hover p-5 fade-in ${clickable ? "cursor-pointer" : ""}`}
+      onClick={clickable ? () => navigate(to) : undefined}
+      role={clickable ? "button" : undefined}
+    >
       <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${accent || "bg-[var(--primary)]/10 text-[var(--primary)]"}`}>
         <Icon size={20} />
       </div>
@@ -41,7 +50,10 @@ export default function UfydDashboard() {
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KPI icon={Wallet} label="Toplam Hakediş" value={fmt(data.total_hakedis)} suffix="₺" accent="bg-emerald-500/10 text-emerald-400" />
+        {/* Denetim A13: hakediş/karne finans görünümü /karne'den drill edilir;
+            üretim sezonu/destek talebi GLOBAL liste sayfası henüz yok — var
+            olmayan rotaya bağlamak yerine o kartlar tıklamasız bırakıldı. */}
+        <KPI icon={Wallet} label="Toplam Hakediş" value={fmt(data.total_hakedis)} suffix="₺" accent="bg-emerald-500/10 text-emerald-400" to="/karne" />
         <KPI icon={HandCoins} label="Toplam Destek" value={fmt(data.total_destek)} suffix="₺" accent="bg-amber-500/10 text-amber-400" />
         <KPI icon={Clock} label="Bekleyen Ödemeler" value={fmt(data.pending_payments)} suffix="₺" accent="bg-blue-500/10 text-blue-400" />
         <KPI icon={Landmark} label="Nakit İhtiyacı" value={fmt(data.cash_need)} suffix="₺" accent="bg-red-500/10 text-red-400" />

@@ -302,9 +302,16 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
             raise HTTPException(400, "İçe aktarılacak feature bulunamadı")
 
         created = []
+        # Denetim STAB-B1 (2026-07-24): Point/LineString feature'lar eskiden
+        # SESSİZCE atlanıyordu — kullanıcı `ilceler.geojson` gibi nokta bazlı
+        # bir dosya yükleyince "0 kayıt" görüp nedenini anlayamıyordu. Artık
+        # atlanan tip başına sayılıp yanıtta Türkçe uyarı dönülür.
+        skipped_by_type: Dict[str, int] = {}
         for f in body.features:
             geom = f.get("geometry")
             if not geom or geom.get("type") not in ("Polygon", "MultiPolygon"):
+                gtype = (geom or {}).get("type") or "geometrisiz"
+                skipped_by_type[gtype] = skipped_by_type.get(gtype, 0) + 1
                 continue  # idari sınır için Point/LineString atlanır
             name = (f.get("properties") or {}).get(body.name_field) or "(adsız)"
             doc = {
@@ -318,9 +325,20 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
             doc.pop("_id", None)
             created.append(doc)
 
+        warnings = [
+            f"{cnt} kayıt '{gtype}' tipinde olduğu için atlandı — idari sınır için "
+            f"Polygon/MultiPolygon geometrisi gerekir"
+            for gtype, cnt in skipped_by_type.items()
+        ]
+        if not created and warnings:
+            warnings.append(
+                "Hiçbir kayıt içe aktarılamadı. Nokta (Point) bazlı bir dosya yüklediyseniz "
+                "sınır (poligon) içeren bir kaynak dosya kullanın."
+            )
         await log_audit(db, user, action="create", entity="admin_area", entity_id="bulk_import",
-                         new_value={"count": len(created), "area_type": body.area_type}, request=request)
-        return {"status": "imported", "count": len(created)}
+                         new_value={"count": len(created), "area_type": body.area_type,
+                                    "skipped": skipped_by_type}, request=request)
+        return {"status": "imported", "count": len(created), "warnings": warnings}
 
     @api_router.get("/admin-areas/{area_id}/summary")
     async def admin_area_summary(area_id: str, user=Depends(require_permission("admin_areas:view")),

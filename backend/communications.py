@@ -51,7 +51,7 @@ from fastapi import HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Optional, Dict
 
-from channel_providers import CHANNELS, get_channel_provider
+from channel_providers import CHANNELS, get_channel_provider, get_channel_provider_for
 
 TEMPLATE_VARIABLES = [
     "FarmerName", "ProductionSeason", "ParcelNo",
@@ -239,7 +239,11 @@ async def send_via_channel(
     if block_reason:
         ok, status, detail, provider_ref = False, "basarisiz", block_reason, None
     else:
-        result = get_channel_provider(channel).send(recipient, rendered_content, rendered_subject)
+        # Denetim A14 (2026-07-24): entegrasyon-farkındalıklı factory —
+        # kurumun `integrations` kaydında etkin+dolu SMS/SMTP kimliği varsa
+        # GERÇEK gönderim, yoksa eskisi gibi simüle (davranış sözleşmesi aynı).
+        provider = await get_channel_provider_for(db, channel)
+        result = provider.send(recipient, rendered_content, rendered_subject)
         ok = result["ok"]
         status = result["status"] if ok else "basarisiz"
         detail = result["detail"]

@@ -51,6 +51,7 @@ from totp import verify_totp
 from audit import log_audit, register_audit_routes
 from integrations import register_integration_routes
 from tenant_context import TenantScopedDB, current_tenant_id
+from geo_validation import validate_geometry
 from public_contact import resolve_bootstrap_tenant, create_public_contact_case
 from search_utils import safe_regex, TR_COLLATION            # BULGU 2/4: güvenli arama + TR collation
 
@@ -1273,7 +1274,13 @@ async def create_parcel(body: ParcelCreate, request: Request, user=Depends(curre
     """Yeni parsel oluştur (manuel form veya harita çizim aracıyla)"""
     if not is_admin(user):
         raise HTTPException(403, "Yetkiniz yok")
-    
+
+    # Denetim (2026-07-24): topoloji doğrulaması — self-intersecting çizim
+    # coğrafi sorguları ve NDVI analizlerini bozuyordu (bkz. geo_validation.py).
+    geo_errors = validate_geometry(body.model_dump().get("geometry"))
+    if geo_errors:
+        raise HTTPException(400, geo_errors[0])
+
     doc = body.model_dump()
     doc["id"] = str(uuid.uuid4())
 
@@ -1386,6 +1393,37 @@ async def bulk_update_parcels(body: ParcelBulkUpdateRequest, request: Request,
     return {"updated_count": updated_count, "requested_count": len(body.parcel_ids)}
 
 
+class ParcelSelectByGeometryRequest(BaseModel):
+    """Denetim STAB-B3 (2026-07-24) — haritada çizilen şeklin GeoJSON geometrisi."""
+    geometry: Dict[str, Any]
+
+
+@api_router.post("/parcels/select-by-geometry")
+async def select_parcels_by_geometry(body: ParcelSelectByGeometryRequest,
+                                      user=Depends(require_permission("parcels:view")),
+                                      _feature=Depends(require_feature("parcel"))):
+    """
+    Denetim STAB-B3: "Şekille Seç" kesişim hesabı eskiden tarayıcıda Turf.js
+    ile yapılıyordu — 1000+ parselde donma. Artık MongoDB $geoIntersects
+    (2dsphere index, startup'ta mevcut) ile sunucuda hesaplanır; yanıt sadece
+    id listesidir, frontend bunu kendi filtre kümesiyle kesiştirir.
+    Bu route da `/parcels/{parcel_id}`'den ÖNCE tanımlı olmalı (route sırası
+    tuzağı — bkz. bulk-update notu).
+    """
+    geom = body.geometry or {}
+    if geom.get("type") not in ("Polygon", "MultiPolygon"):
+        raise HTTPException(400, "Seçim geometrisi Polygon/MultiPolygon olmalı")
+    try:
+        parcels = await db.parcels.find(
+            {"is_active": {"$ne": False},
+             "geometry": {"$geoIntersects": {"$geometry": geom}}},
+            {"_id": 0, "id": 1},
+        ).to_list(10000)
+    except Exception:
+        raise HTTPException(400, "Geometri sorgusu çalıştırılamadı — çizilen şekil geçersiz olabilir")
+    return {"parcel_ids": [p["id"] for p in parcels], "count": len(parcels)}
+
+
 class ParcelBulkDeleteRequest(BaseModel):
     parcel_ids: List[str]
 
@@ -1433,6 +1471,12 @@ async def update_parcel(parcel_id: str, body: ParcelUpdate, request: Request,
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(400, "Güncellenecek alan yok")
+
+    # Denetim (2026-07-24): geometri güncelleniyorsa topoloji doğrulaması
+    if "geometry" in updates:
+        geo_errors = validate_geometry(updates["geometry"])
+        if geo_errors:
+            raise HTTPException(400, geo_errors[0])
 
     # Çiftçi atanıyor/değiştiriliyorsa region_id'yi o çiftçiden türet (bölge
     # bazlı sorgular tutarlı kalsın) + parselin köyü boşsa çiftçinin köyünü ata.
@@ -1518,6 +1562,11 @@ async def split_parcel(parcel_id: str, body: ParcelSplitRequest, request: Reques
         raise HTTPException(400, "Bölme için en az 2 yeni geometri gerekli")
     if len(body.new_geometries) != len(body.new_areas_dekar):
         raise HTTPException(400, "new_geometries ve new_areas_dekar sayıları eşleşmeli")
+    # Denetim (2026-07-24): bölme parçalarında topoloji doğrulaması
+    for i, geom in enumerate(body.new_geometries):
+        geo_errors = validate_geometry(geom)
+        if geo_errors:
+            raise HTTPException(400, f"Parça {i + 1}: {geo_errors[0]}")
     if body.new_names and len(body.new_names) != len(body.new_geometries):
         raise HTTPException(400, "new_names verildiyse new_geometries ile aynı sayıda olmalı")
 
@@ -1745,6 +1794,13 @@ async def import_parcels_geojson(body: GeoJSONImportRequest, request: Request,
             # 3B koordinatları (yükseklik) 2B'ye indir — hem alan hesabı hem
             # 2dsphere index için gerekli (Google Earth/KML dosyaları 3B gelir).
             geom = {"type": "Polygon", "coordinates": _to_2d_coords(geom["coordinates"])}
+
+            # Denetim (2026-07-24): topoloji doğrulaması — bozuk (self-intersecting)
+            # geometri sessizce içeri alınmaz, hatalar listesinde raporlanır.
+            geo_errors = validate_geometry(geom)
+            if geo_errors:
+                errors.append({"index": i, "error": geo_errors[0]})
+                continue
 
             # Çiftçi ARTIK OPSİYONEL — dosyada veya istekte farmer_id yoksa parsel
             # "atanmamış" olarak oluşturulur; kullanıcı sonra parselden çiftçi atar.

@@ -508,7 +508,13 @@ export default function HaritaPaneli() {
   // — bkz. IT-14 mapBounds.contains) otomatik seçer. Daire için leaflet'in
   // toGeoJSON()'ı bir Point döner (properties.radius'la), turf ile kesişim
   // kurabilmek için gerçek çemberi layer.getLatLng()/getRadius()'tan inşa ederiz.
-  function onDrawSelection(layer, geojson, shapeType) {
+  async function onDrawSelection(layer, geojson, shapeType) {
+    // Denetim STAB-B3 (2026-07-24): kesişim hesabı artık tarayıcıda Turf.js
+    // taraması DEĞİL — backend'in $geoIntersects'li `/parcels/select-by-geometry`
+    // ucu (1000+ parselde tarayıcı donması gideriliyor). Daire yine client'ta
+    // poligona çevrilir (MongoDB $geoIntersects daire kabul etmez). Backend'in
+    // döndürdüğü id'ler o anki filteredParcels (bounds ∩ Gelişmiş Filtre)
+    // kümesiyle KESİŞTİRİLİR — eski davranışla birebir aynı kapsam.
     try {
       const poly = shapeType === "circle"
         ? turf.circle(
@@ -517,10 +523,22 @@ export default function HaritaPaneli() {
             { steps: 64, units: "kilometers" }
           )
         : turf.polygon(geojson.geometry.coordinates);
-      const insideIds = filteredParcels
-        .filter((p) => p.__centroid && turf.booleanPointInPolygon(turf.point([p.__centroid[1], p.__centroid[0]]), poly))
-        .map((p) => p.id);
+      const { data } = await api.post("/parcels/select-by-geometry", { geometry: poly.geometry });
+      const serverIds = new Set(data.parcel_ids || []);
+      const insideIds = filteredParcels.filter((p) => serverIds.has(p.id)).map((p) => p.id);
       setSelectedIds(new Set(insideIds));
+    } catch (e) {
+      // Sunucu sorgusu başarısız olursa eski client-side yönteme sessizce düş —
+      // özellik tamamen kaybolmasın (küçük veri setlerinde sorunsuz çalışır).
+      try {
+        const poly = shapeType === "circle"
+          ? turf.circle([layer.getLatLng().lng, layer.getLatLng().lat], layer.getRadius() / 1000, { steps: 64, units: "kilometers" })
+          : turf.polygon(geojson.geometry.coordinates);
+        const insideIds = filteredParcels
+          .filter((p) => p.__centroid && turf.booleanPointInPolygon(turf.point([p.__centroid[1], p.__centroid[0]]), poly))
+          .map((p) => p.id);
+        setSelectedIds(new Set(insideIds));
+      } catch { /* geometri bozuksa seçim yapılmaz */ }
     } finally {
       setDrawSelectActive(false);
     }

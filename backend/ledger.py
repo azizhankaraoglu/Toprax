@@ -176,6 +176,36 @@ def register_ledger_routes(api_router, db, current_user, require_permission, log
         )
         await log_audit(db, user, action="reverse", entity="ledger_entry", entity_id=reversal["id"],
                          old_value={"reversed_entry_id": entry_id}, new_value=reversal, request=request)
+
+        # Denetim A11 (2026-07-24): ters kayıt yapılan hareket bir kaynak
+        # belgeye (destek talebi/hakediş vb.) bağlıysa o belge "Düzeltildi"
+        # olarak İŞARETLENİR — belgenin KENDİ durum makinesine DOKUNULMAZ
+        # (immutable ledger felsefesiyle tutarlı: düzeltme bir işarettir),
+        # muhasebeci finansal takipte hangi belgenin ters kayıtla
+        # düzeltildiğini görebilir. reference_type → koleksiyon eşlemesi:
+        _REF_COLLECTIONS = {
+            "support_request": "support_requests",
+            "entitlement": "entitlements",
+            "reconciliation": "reconciliations",
+            "einvoice": "einvoices",
+        }
+        ref_type, ref_id = original.get("reference_type"), original.get("reference_id")
+        coll_name = _REF_COLLECTIONS.get(ref_type or "")
+        if coll_name and ref_id:
+            res = await db[coll_name].update_one(
+                {"id": ref_id},
+                {"$set": {
+                    "correction_status": "Düzeltildi",
+                    "corrected_at": datetime.now(timezone.utc).isoformat(),
+                    "corrected_by_ledger_entry_id": reversal["id"],
+                }},
+            )
+            if res.modified_count:
+                await log_audit(db, user, action="correction_flag", entity=ref_type,
+                                 entity_id=ref_id,
+                                 new_value={"correction_status": "Düzeltildi",
+                                            "ledger_reversal_id": reversal["id"]},
+                                 request=request)
         return reversal
 
     @api_router.get("/production-cycles/{cycle_id}/current-account")
