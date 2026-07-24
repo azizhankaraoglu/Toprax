@@ -44,12 +44,13 @@ COMMON_EPSG_CODES = [
     {"code": 23037, "label": "ED50 / UTM Zone 37N (EPSG:23037)"},
 ]
 
-# Denetim düzeltmesi (2026-07-24) — 20 MB, Türkiye çapında ~1100 ilçe /
-# ~60.000 mahalle sınır verisi (detaylı poligonlarla) için yetersiz kaldı.
-# nginx'in client_max_body_size'ı (Dockerfile.frontend) da bununla UYUMLU
-# olacak şekilde (bu sınırın ÜZERİNDE, 60 MB) yükseltildi — aksi halde
-# nginx erken keserse bu dosyanın Türkçe hata mesajı hiç görünmez.
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+# Denetim düzeltmesi (2026-07-24, 2026-07-25'te 70 MB'a yükseltildi) — 20 MB,
+# Türkiye çapında ~1100 ilçe / ~60.000 mahalle sınır verisi (detaylı
+# poligonlarla) için yetersiz kaldı. nginx'in client_max_body_size'ı
+# (Dockerfile.frontend) da bununla UYUMLU olacak şekilde (bu sınırın
+# ÜZERİNDE, 80 MB) yükseltildi — aksi halde nginx erken keserse bu dosyanın
+# Türkçe hata mesajı hiç görünmez.
+MAX_UPLOAD_BYTES = 70 * 1024 * 1024
 
 
 def _transform_coords(coords, transformer):
@@ -269,7 +270,7 @@ def register_geo_import_routes(api_router, db, current_user, require_permission,
         filename = (file.filename or "").lower()
         content = await file.read()
         if len(content) > MAX_UPLOAD_BYTES:
-            raise HTTPException(400, "Dosya çok büyük (20 MB sınırı)")
+            raise HTTPException(400, "Dosya çok büyük (70 MB sınırı)")
 
         if filename.endswith(".ncz"):
             raise HTTPException(

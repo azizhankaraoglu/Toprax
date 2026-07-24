@@ -2,6 +2,41 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [Yayınlanmamış] — İdari Alanlar: İKİNCİ kök neden (2026-07-25, Build 25072026-0100)
+
+Madde 4'teki (aşağıda) nginx/`insert_many` düzeltmesi GEREKLİYDİ ama
+YETERSİZDİ — kullanıcı gerçek bir "ilçe" GeoJSON'u (1100 kayıt, ~2.6 MB,
+boyut sınırının çok altında) yüklediğinde toplu içe aktarma HÂLÂ "sunucuda
+hata" ile çöküyordu.
+
+- **Gerçek kök neden (canlı backend logundan bulundu):** kaynak
+  shapefile'daki bazı ilçe poligonlarında (örn. "Hasankeyf") bitişik
+  YİNELENEN köşe noktaları var — TUİK/il-ilçe sınır verilerinde sık
+  rastlanan bir kalite sorunu. MongoDB'nin `admin_areas.geometry` üzerindeki
+  2dsphere indeksi bunu geçersiz halka ("Loop is not valid ... Duplicate
+  vertices") sayıp reddediyor; `insert_many` VARSAYILAN OLARAK sıralı
+  (`ordered=True`) olduğundan tek bir geçersiz kayıt TÜM 2000'lik parçayı
+  `BulkWriteError` ile çökertiyor, bu da yakalanmadan 500 Internal Server
+  Error olarak kullanıcıya "sunucuda hata" şeklinde yansıyordu.
+- **Düzeltme (`backend/admin_areas.py`):** (1) yeni `_dedupe_ring`/
+  `_clean_geometry` — bitişik aynı köşe noktalarını otomatik temizler
+  (halkanın şeklini bozmadan) ve gerçek Hasankeyf-tipi hatayı KÖKTEN
+  çözer; (2) `insert_many(..., ordered=False)` + `BulkWriteError`
+  yakalama — dedup'ın kurtaramadığı GERÇEKTEN geçersiz geometriler (örn.
+  kendisiyle kesişen poligon) artık tüm isteği çökertmek yerine sadece o
+  kayıt(lar) atlanıp isim listesiyle Türkçe uyarı olarak dönülür, geri
+  kalan TÜM geçerli kayıtlar yine de kaydedilir.
+- **Doğrulama:** gerçek MongoDB'ye (2dsphere indeksli test koleksiyonu)
+  karşı üç senaryo test edildi — (a) Hasankeyf-tipi yinelenen köşe →
+  dedup sonrası BAŞARIYLA eklendi, (b) kasıtlı kendisiyle kesişen poligon
+  → çökme YOK, isimle raporlanıp atlandı, (c) normal geçerli poligon →
+  sorunsuz eklendi. 50 pytest yeşil.
+- **Not:** kullanıcının önceki başarısız deneme(ler)inden kalan kısmi
+  kayıtlar (662 adet — 83 il / 578 ilçe / 1 mahalle) veritabanında duruyor;
+  toplu içe aktarma idempotent OLMADIĞINDAN yeniden yüklemeden önce
+  kullanıcıyla birlikte temizlenmesi gerekiyor (mükerrer kayıt oluşmaması
+  için).
+
 ## [Yayınlanmamış] — Kullanıcı Geri Bildirimi Turu (2026-07-24/25, Build 25072026-0015)
 
 Denetim raporu + 8 fazın tamamlanmasının ARDINDAN kullanıcının canlı ekranı

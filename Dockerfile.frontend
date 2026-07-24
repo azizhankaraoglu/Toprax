@@ -29,15 +29,16 @@ COPY --from=build /app/build /usr/share/nginx/html
 # sınırının HEM dosya yüklemesi HEM ayrıştırılmış geometrinin geri POST'u)
 # bunu kolayca aşar — istek backend'e hiç ULAŞMADAN nginx'in 413'üyle
 # sessizce reddediliyordu ("veri boyutu büyük geliyor" şüphesi doğruydu).
-# geo_import.py'nin kendi MAX_UPLOAD_BYTES sınırı (50 MB) zaten var — nginx
-# bunun ALTINDA kalıp erken keserse backend'in Türkçe hata mesajı hiç
-# görünmez, bu yüzden nginx sınırı UYGULAMA sınırının ÜZERİNDE tutulur.
+# geo_import.py'nin kendi MAX_UPLOAD_BYTES sınırı (2026-07-25'te 70 MB'a
+# yükseltildi) zaten var — nginx bunun ALTINDA kalıp erken keserse backend'in
+# Türkçe hata mesajı hiç görünmez, bu yüzden nginx sınırı UYGULAMA sınırının
+# ÜZERİNDE (80 MB) tutulur.
 # proxy_read_timeout da varsayılan 60s'den yükseltildi — 60.000 kayıtlık
 # toplu import (artık insert_many ile toplu, ama yine de saniyeler sürer)
 # gateway timeout'a takılmasın diye.
 RUN echo 'server { \
   listen 80; \
-  client_max_body_size 60M; \
+  client_max_body_size 80M; \
   root /usr/share/nginx/html; \
   index index.html; \
   location /api/ { \

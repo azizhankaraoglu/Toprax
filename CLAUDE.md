@@ -2414,6 +2414,27 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   5. Madde 1'in bir parçası (Parseller AI Asistanı konumu).
   **Doğrulama:** py_compile+pyflakes temiz, 50 pytest yeşil, gerçek Docker
   deployment'ta uçtan uca (her madde ayrı doğrulandı, bkz. CHANGELOG.md).
+- **2026-07-25 (Build 25072026-0100) — İdari Alanlar toplu yükleme: İKİNCİ
+  gerçek kök neden bulundu ve düzeltildi.** Madde 4'teki nginx/insert_many
+  düzeltmesi GEREKLİYDİ ama YETERSİZDİ — kullanıcı gerçek bir ilçe
+  GeoJSON'u (1100 kayıt, 2.6 MB, boyut sınırının çok altında) yükleyince
+  hâlâ "sunucuda hata" alıyordu. Canlı backend logunda bulunan gerçek
+  neden: kaynak shapefile'daki bazı ilçelerde (örn. "Hasankeyf") bitişik
+  YİNELENEN köşe noktaları var (TUİK sınır verisinde sık rastlanan bir
+  kalite sorunu) — MongoDB'nin `admin_areas.geometry` 2dsphere indeksi
+  bunu geçersiz halka sayıp reddediyor, `insert_many`'nin varsayılan
+  `ordered=True` davranışı da TEK geçersiz kayıt yüzünden TÜM 2000'lik
+  parçayı `BulkWriteError` ile çökertip yakalanmadan 500'e dönüşüyordu.
+  `admin_areas.py`'ye `_dedupe_ring`/`_clean_geometry` (bitişik yinelenen
+  köşeleri otomatik temizler — Hasankeyf-tipi hatayı KÖKTEN çözer) +
+  `insert_many(ordered=False)` ile `BulkWriteError` yakalama (dedup'ın
+  kurtaramadığı gerçekten geçersiz geometriler artık tüm isteği değil
+  sadece kendini atlar, isimle Türkçe uyarı döner) eklendi. Gerçek
+  MongoDB'ye karşı 3 senaryo (dedup ile kurtarılan, gerçekten bozuk,
+  normal) doğrulandı, 50 pytest yeşil. **Not:** kullanıcının önceki
+  başarısız denemelerinden kalan 662 kısmi kayıt (83 il/578 ilçe/1
+  mahalle) veritabanında duruyor — toplu import idempotent olmadığından
+  yeniden yüklemeden önce kullanıcıyla birlikte temizlenmeli.
 
 ## 7. Çalıştırma
 

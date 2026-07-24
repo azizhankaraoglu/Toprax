@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel
+from pymongo.errors import BulkWriteError
 
 AREA_TYPES = ("il", "ilce", "mahalle")
 MAX_SIMPLIFY_POINTS = 300  # Layer v1 harita performansı için — sadece LİSTE/harita yanıtına uygulanır
@@ -59,6 +60,36 @@ def _simplify_geometry(geometry: Optional[Dict[str, Any]], max_points: int = MAX
         return {"type": "Polygon", "coordinates": [_simplify_ring(ring, max_points) for ring in coords]}
     if gtype == "MultiPolygon":
         return {"type": "MultiPolygon", "coordinates": [[_simplify_ring(ring, max_points) for ring in poly] for poly in coords]}
+    return geometry
+
+
+def _dedupe_ring(ring: List[List[float]]) -> List[List[float]]:
+    """Art arda gelen BİREBİR AYNI köşe noktalarını kaldırır. Gerçek TUIK/il-
+    ilçe shapefile'larında (örn. 2026-07-25'te canlıda görülen "Hasankeyf"
+    ilçesi) bu tür yinelenen köşeler sık rastlanan bir veri kalitesi
+    sorunudur — MongoDB'nin 2dsphere indeksi "Loop is not valid ... Duplicate
+    vertices" diyerek KAYDIN TAMAMINI reddediyordu (bkz. bulk_import_admin_
+    areas). Sadece bitişik/aynı noktaları siler, halkanın şeklini değiştirmez."""
+    if not ring:
+        return ring
+    cleaned = [ring[0]]
+    for pt in ring[1:]:
+        if pt != cleaned[-1]:
+            cleaned.append(pt)
+    return cleaned
+
+
+def _clean_geometry(geometry: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Toplu içe aktarmadan gelen ham geometriyi MongoDB'nin 2dsphere
+    indeksine yazılabilir hale getirir (bkz. _dedupe_ring)."""
+    if not geometry:
+        return geometry
+    gtype = geometry.get("type")
+    coords = geometry.get("coordinates")
+    if gtype == "Polygon":
+        return {**geometry, "coordinates": [_dedupe_ring(r) for r in coords]}
+    if gtype == "MultiPolygon":
+        return {**geometry, "coordinates": [[_dedupe_ring(r) for r in poly] for poly in coords]}
     return geometry
 
 
@@ -326,17 +357,38 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
             name = (f.get("properties") or {}).get(body.name_field) or "(adsız)"
             docs.append({
                 "id": str(uuid.uuid4()), "name": str(name), "area_type": body.area_type,
-                "parent_id": body.parent_id, "lookup_value_id": None, "geometry": geom,
+                "parent_id": body.parent_id, "lookup_value_id": None, "geometry": _clean_geometry(geom),
                 "population": None, "agricultural_area_dekar": None, "farmer_count_est": None,
                 "is_active": True, "created_by": user.get("full_name") or user.get("email"),
                 "created_at": datetime.now(timezone.utc).isoformat(),
             })
 
+        # Denetim düzeltmesi (2026-07-25) — canlıda gerçek "ilçe" dosyasıyla
+        # bulundu: _clean_geometry bitişik yinelenen köşeleri temizler ama
+        # bazı kaynak dosyalarda BAŞKA geçersizlikler de olabilir (self-
+        # intersection vb.) — bunlar MongoDB'nin 2dsphere indeksinde
+        # `BulkWriteError` fırlatır. ESKİDEN bu, TÜM isteği 500 Internal
+        # Server Error ile çökertiyordu (kullanıcıya "sunucuda hata" olarak
+        # görünüyordu) ve `ordered` varsayılanı (True) o ANA KADAR chunk
+        # içinde başarıyla eklenmiş kayıtları da yarım bırakıyordu.
+        # `ordered=False` ile MongoDB chunk'taki TÜM geçerli kayıtları yazar,
+        # sadece geçersiz olanları atlar; hangi kayıtların atlandığını
+        # `writeErrors[].index`'ten çözüp kullanıcıya Türkçe isim listesiyle
+        # bildiriyoruz.
         CHUNK = 2000
+        geo_error_names: List[str] = []
         for i in range(0, len(docs), CHUNK):
             chunk = docs[i:i + CHUNK]
-            await db.admin_areas.insert_many(chunk)
-            created.extend(chunk)
+            try:
+                await db.admin_areas.insert_many(chunk, ordered=False)
+                created.extend(chunk)
+            except BulkWriteError as e:
+                failed_idx = {err["index"] for err in e.details.get("writeErrors", [])}
+                for idx, d in enumerate(chunk):
+                    if idx in failed_idx:
+                        geo_error_names.append(d["name"])
+                    else:
+                        created.append(d)
         for d in created:
             d.pop("_id", None)
 
@@ -345,6 +397,12 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
             f"Polygon/MultiPolygon geometrisi gerekir"
             for gtype, cnt in skipped_by_type.items()
         ]
+        if geo_error_names:
+            preview = ", ".join(geo_error_names[:10]) + ("…" if len(geo_error_names) > 10 else "")
+            warnings.append(
+                f"{len(geo_error_names)} kayıt geçersiz/kendisiyle kesişen geometri nedeniyle "
+                f"atlandı (kaynak dosyadaki sınır verisi hatalı): {preview}"
+            )
         if not created and warnings:
             warnings.append(
                 "Hiçbir kayıt içe aktarılamadı. Nokta (Point) bazlı bir dosya yüklediyseniz "
