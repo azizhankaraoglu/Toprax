@@ -50,6 +50,9 @@ EVENT_TYPES = {
     # Denetim eklentisi (2026-07-25) — NDWI/MSI kaynaklı su stresi, genel
     # bitki-sağlığı alarmından AYRI event (farklı ekibe yönlendirilebilsin).
     "remote_sensing_water_stress_detected": "Uzaktan Algılama Su Stresi Tespit Edildi",
+    # Denetim eklentisi (2026-07-25) — NASA FIRMS yangın alarmı (satellite_
+    # provider.py'nin fire-scan tick'i tetikler).
+    "nasa_firms_alert_detected": "NASA FIRMS Yangın Alarmı Tespit Edildi",
 }
 
 _subscribers: Dict[str, List[Callable[..., Awaitable[None]]]] = {}

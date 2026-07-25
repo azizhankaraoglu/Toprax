@@ -2465,6 +2465,31 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   kaynaklanıyor. **Doğrulama:** 50 pytest yeşil, EOSDA 3'lü gruplama mock
   HTTP ile 3 senaryoda test edildi, `craco build` hatasız, GEE gerçek API'ye
   karşı canlı test edildi (bkz. CHANGELOG.md).
+- **2026-07-25 (Build 25072026-0431, v1.1) — Ollama düzeltme + GEE CANLI
+  doğrulandı + NASA FIRMS + TAKBİS/MERNİS UI + Harita + Integration Hub.**
+  (1) Ollama "connection refused" kök nedeni: backend Docker konteyneri
+  içinde `localhost:11434`'e gidiyordu — kendi konteynerine, Ollama'ya
+  DEĞİL; `ollama_base_url` → `http://ollama:11434` (docker-compose servis
+  adı) ile düzeltildi. (2) Kullanıcı Google Cloud Console'da proje IAM/API
+  sorununu giderdi — GEE yeniden test edildi, ARTIK TAM ÇALIŞIYOR: gerçek
+  9 NDVI gözlemi + gerçek imzalı thumbnail URL'i. (3) NASA FIRMS: kullanıcı
+  MAP_KEY verdi, kaydedildi; yeni `GET/PUT /satellite/fire-scan-settings`
+  (parametrik saat frekansı, varsayılan 6, `karne_parameters` ile AYNI
+  ayar deseni) + `POST /satellite/fire-scan/run` (tick-endpoint, cron YOK)
+  — canlı testte gerçek bir zaman-aşımı bug'ı bulundu (954 parselin TÜMÜ
+  tek istekte taranmaya çalışılıyordu) ve `max_tasks=25` kota korumasıyla
+  düzeltildi; `Parcel.fire_status` + parsel kartında yangın rozeti + yeni
+  `nasa_firms_alert_detected` bildirim event'i. (4) TAKBİS/MERNİS arka ucu
+  zaten TAMAMDI (Faz 3) — eksik olan SADECE UI'ydi: TAKBİS artık parsel
+  EKLEME formlarında + ParcelDetail.jsx Hızlı İşlemler'de (önceden sadece
+  Düzenle modunda); MERNİS artık çiftçi EKLEME modalında (FarmerDetail.jsx'te
+  zaten vardı). (5) ParcelDetail.jsx haritası CartoDB'den HaritaPaneli.jsx'in
+  MEVCUT "hibrit" (Esri World Imagery + etiket overlay) basemap'ine geçti,
+  zoom 14→17. (6) PlatformAdmin.jsx'in God Mode SYSTEM_SCREENS'indeki
+  jenerik "Ayarlar" etiketi "Entegrasyonlar"a çevrildi (buton zaten
+  Integration Hub'a gidiyordu, sadece etiket belirsizdi). **Doğrulama:**
+  50 pytest yeşil, `craco build` hatasız, TÜM yeni arayüz parçaları gerçek
+  tarayıcıda canlı test edildi (konsol hatası yok) — bkz. CHANGELOG.md.
 
 ## 7. Çalıştırma
 

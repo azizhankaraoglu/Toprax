@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "@/api";
 import { MapContainer, TileLayer, Polygon } from "react-leaflet";
-import { ArrowLeft, MapPin, Droplets, FlaskConical, Sprout, Award, Satellite, Radio, Plane, Pencil, Check, X, Plus, Calendar, Trash2, Landmark } from "lucide-react";
+import { ArrowLeft, MapPin, Droplets, FlaskConical, Sprout, Award, Satellite, Radio, Plane, Pencil, Check, X, Plus, Calendar, Trash2, Landmark, Flame } from "lucide-react";
 import DynamicFieldsSection from "@/components/DynamicFieldsSection";
 import DocumentsTab from "@/components/DocumentsTab";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -27,7 +27,6 @@ import GeoFileImport from "@/components/GeoFileImport";
 import VisitHistory from "@/components/VisitHistory";
 import FarmerSelect from "@/components/FarmerSelect";
 import RemoteSensingPanel from "@/components/RemoteSensingPanel";
-import { getBasemapUrl } from "@/lib/theme";
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
 const SOIL_TYPES = ["Killi", "Kumlu", "Tınlı", "Kireçli", "Killi-Tınlı"];
@@ -53,6 +52,7 @@ export default function ParcelDetail() {
   const [takbisBusy, setTakbisBusy] = useState(false);
   const [takbisResult, setTakbisResult] = useState(null);
   const [takbisMsg, setTakbisMsg] = useState("");
+  const [showTakbisQuick, setShowTakbisQuick] = useState(false);
 
   // IT-06 — Üretim Sezonları (ProductionCycle)
   const [cycles, setCycles] = useState([]);
@@ -191,8 +191,16 @@ export default function ParcelDetail() {
         {/* SOL: HARİTA */}
         <div className="card overflow-hidden lg:col-span-2" style={{ height: 380 }}>
           {parcel.geometry && (
-            <MapContainer center={[centerLat, centerLng]} zoom={14} style={{ height: "100%", width: "100%" }}>
-              <TileLayer url={getBasemapUrl()} attribution="&copy; OpenStreetMap"/>
+            // Denetim eklentisi (2026-07-25) — kullanıcı isteği: bu harita
+            // Hybrid (uydu ortofoto + yer adı/sınır etiket overlay'i) olsun
+            // ve daha yakın zoom'da açılsın. HaritaPaneli.jsx'in "hibrit"
+            // basemap tanımıyla AYNI Esri URL'leri (anahtarsız/ücretsiz) —
+            // yeni bir basemap kataloğu İCAT EDİLMEDİ.
+            <MapContainer center={[centerLat, centerLng]} zoom={17} style={{ height: "100%", width: "100%" }}>
+              <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                         attribution="Tiles &copy; Esri"/>
+              <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+                         attribution="Tiles &copy; Esri"/>
               <Polygon
                 positions={parcel.geometry.coordinates[0].map(([lng, lat]) => [lat, lng])}
                 pathOptions={{ color: riskColor, fillColor: riskColor, fillOpacity: 0.5, weight: 3 }}
@@ -218,6 +226,26 @@ export default function ParcelDetail() {
               <Satellite size={14}/>
               <span className="font-medium">{parcel.risk_label}</span>
               <span className="text-xs opacity-80 ml-auto">NDVI {parcel.ndvi_latest}</span>
+            </div>
+          )}
+          {/* Denetim eklentisi (2026-07-25) — NASA FIRMS yangın göstergesi
+              (satellite_provider.py'nin fire-scan tick'i doldurur, bkz.
+              Parcel.fire_status). Sadece bir kere kontrol edilmişse gösterilir. */}
+          {parcel.fire_status?.checked_at && (
+            <div className="flex items-center gap-2 text-sm p-2.5 rounded-lg"
+                 style={parcel.fire_status.active
+                   ? { background: "#ef444422", color: "#ef4444" }
+                   : { background: "var(--surface-2)", color: "var(--text-dim)" }}
+                 data-testid="parcel-fire-status">
+              <Flame size={14}/>
+              <span className="font-medium">
+                {parcel.fire_status.active
+                  ? `YANGIN ALARMI · ${parcel.fire_status.alert_count} sıcak nokta`
+                  : "Yangın tespit edilmedi"}
+              </span>
+              <span className="text-[10px] opacity-70 ml-auto">
+                {new Date(parcel.fire_status.checked_at).toLocaleString("tr-TR")}
+              </span>
             </div>
           )}
           <div className="grid grid-cols-2 gap-2 pt-3 border-t border-[var(--border)]">
@@ -314,7 +342,52 @@ export default function ParcelDetail() {
               });
             }}
           />
+          {/* Denetim eklentisi (2026-07-25) — kullanıcı isteği: TAKBİS artık
+              sadece "Düzenle" moduna girince değil, Hızlı İşlemler'den de
+              erişilebilir. AYNI takbisForm/verifyTakbis/takbisResult state'i
+              (component-level, editing'e bağlı değil) yeniden kullanılır. */}
+          <button onClick={() => setShowTakbisQuick((s) => !s)} className="btn btn-ghost text-xs" data-testid="quick-takbis-toggle">
+            <Landmark size={14}/> TAKBİS Sorgula
+          </button>
         </div>
+        {showTakbisQuick && (
+          <div className="border border-[var(--border)] rounded-lg p-3 mt-3" data-testid="quick-takbis-box">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
+              <div>
+                <label className="text-[10px] text-[var(--text-dim)] mb-1 block">İl</label>
+                <input className="input text-xs py-1" value={takbisForm.il}
+                       onChange={(e) => setTakbisForm((f) => ({ ...f, il: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-[10px] text-[var(--text-dim)] mb-1 block">İlçe</label>
+                <input className="input text-xs py-1" value={takbisForm.ilce}
+                       onChange={(e) => setTakbisForm((f) => ({ ...f, ilce: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-[10px] text-[var(--text-dim)] mb-1 block">Ada No</label>
+                <input className="input text-xs py-1" value={takbisForm.ada}
+                       onChange={(e) => setTakbisForm((f) => ({ ...f, ada: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-[10px] text-[var(--text-dim)] mb-1 block">Parsel No</label>
+                <input className="input text-xs py-1" value={takbisForm.parsel}
+                       onChange={(e) => setTakbisForm((f) => ({ ...f, parsel: e.target.value }))} />
+              </div>
+              <button className="btn btn-ghost text-xs py-1.5" onClick={verifyTakbis} disabled={takbisBusy} data-testid="quick-takbis-submit">
+                {takbisBusy ? "Sorgulanıyor…" : "Sorgula"}
+              </button>
+            </div>
+            {takbisMsg && <div className="text-[11px] text-[var(--text-dim)] mt-2">{takbisMsg}</div>}
+            {takbisResult?.found && (
+              <div className="text-[11px] mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div><span className="text-[var(--text-dim)]">Malik:</span> {takbisResult.malik}</div>
+                <div><span className="text-[var(--text-dim)]">Nitelik:</span> {takbisResult.nitelik}</div>
+                <div><span className="text-[var(--text-dim)]">Alan:</span> {takbisResult.alan_m2} m²</div>
+                <div><span className="text-[var(--text-dim)]">Tapu Tarihi:</span> {takbisResult.tapu_tarihi}</div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* SINIR İÇE AKTAR — IT-13.5 (SHP/GeoJSON/KML/DXF → WGS84 → parsel geometrisi)

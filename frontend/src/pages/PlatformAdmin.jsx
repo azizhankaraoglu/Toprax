@@ -41,7 +41,12 @@ const SYSTEM_SCREENS = [
   { path: "/experience-profiles", label: "Experience Profile", icon: Smartphone },
   { path: "/platform-core", label: "Platform Core", icon: SlidersHorizontal },
   { path: "/gelistirici-portali", label: "Geliştirici Portalı", icon: Code2 },
-  { path: "/ayarlar", label: "Ayarlar", icon: Settings },
+  // Denetim eklentisi (2026-07-25) — "Ayarlar" → "Entegrasyonlar" olarak
+  // yeniden etiketlendi: bu buton zaten /ayarlar'a gidiyordu ve /ayarlar
+  // TEK BAŞINA <AyarlarEntegrasyon/>'u render ediyor (App.js:121) — yani
+  // Integration Hub zaten God Mode'dan buradan erişilebiliyordu, sadece
+  // jenerik "Ayarlar" etiketi bunu belli etmiyordu.
+  { path: "/ayarlar", label: "Entegrasyonlar", icon: Settings },
 ];
 
 const LICENSE_FIELDS = [

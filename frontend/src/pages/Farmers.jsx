@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/api";
-import { Search, UserPlus, Phone, X } from "lucide-react";
+import { Search, UserPlus, Phone, X, ShieldCheck, ShieldAlert } from "lucide-react";
 import DynamicFieldsSection from "@/components/DynamicFieldsSection";
 import FilterPanel from "@/components/FilterPanel";
 import AiAssistantBox from "@/components/AiAssistantBox";
@@ -30,6 +30,43 @@ export default function Farmers() {
   // Form Yönetimi'nden gelen dinamik alanlar (Sprint A1) — key: field_key
   const [extra, setExtra] = useState({});
 
+  // Denetim eklentisi (2026-07-25) — kullanıcı isteği: MERNİS artık sadece
+  // FarmerDetail.jsx'te değil, çiftçi EKLEME formunda da mevcut. Çiftçi
+  // henüz yaratılmadığı için ÖN doğrulama yapılır (farmer_id GÖNDERİLMEZ —
+  // /gov/mernis/verify sadece kontrol eder, yazmaz); kayıt gerçekten
+  // oluşturulunca AYNI uç farmer_id İLE tekrar çağrılıp FarmerDetail.jsx'in
+  // "MERNİS Doğrulandı" rozetiyle AYNI kalıcı alan (mernis_verified) yazılır.
+  const [mernisYear, setMernisYear] = useState("");
+  const [mernisBusy, setMernisBusy] = useState(false);
+  const [mernisMsg, setMernisMsg] = useState("");
+  const [mernisPreVerified, setMernisPreVerified] = useState(false);
+
+  async function verifyMernisQuick() {
+    if (!form.tc_no || form.tc_no.length !== 11) {
+      setMernisMsg("Önce 11 haneli TC No girin."); return;
+    }
+    if (!mernisYear || String(mernisYear).length !== 4) {
+      setMernisMsg("Doğum yılını 4 haneli girin (ör. 1985)."); return;
+    }
+    setMernisBusy(true);
+    setMernisMsg("");
+    const parts = (form.full_name || "").trim().split(/\s+/);
+    const ad = parts.slice(0, -1).join(" ") || parts[0] || "";
+    const soyad = parts.length > 1 ? parts[parts.length - 1] : "";
+    try {
+      const { data: r } = await api.post("/gov/mernis/verify", {
+        tc_no: form.tc_no, ad, soyad, dogum_yili: Number(mernisYear),
+      });
+      setMernisMsg(r.detail);
+      setMernisPreVerified(!!r.verified);
+    } catch (err) {
+      setMernisMsg(err.response?.data?.detail || "MERNİS doğrulaması başarısız.");
+      setMernisPreVerified(false);
+    } finally {
+      setMernisBusy(false);
+    }
+  }
+
   useEffect(() => { api.get("/regions").then((r) => setRegions(r.data)); }, []);
 
   const load = () => {
@@ -46,9 +83,22 @@ export default function Farmers() {
     setCreating(true);
     try {
       const { data } = await api.post("/farmers", { ...form, ...extra });
+      if (mernisPreVerified && mernisYear) {
+        // Ön doğrulama zaten geçtiyse (kimlik bilgisi DEĞİŞMEDİ), yeni
+        // farmer_id ile AYNI uç tekrar çağrılıp kalıcı olarak işaretlenir.
+        const parts = (form.full_name || "").trim().split(/\s+/);
+        const ad = parts.slice(0, -1).join(" ") || parts[0] || "";
+        const soyad = parts.length > 1 ? parts[parts.length - 1] : "";
+        try {
+          await api.post("/gov/mernis/verify", {
+            tc_no: form.tc_no, ad, soyad, dogum_yili: Number(mernisYear), farmer_id: data.id,
+          });
+        } catch { /* kayıt zaten oluştu — doğrulama kaydı FarmerDetail.jsx'ten tekrar denenebilir */ }
+      }
       setShowCreate(false);
       setForm({ full_name: "", tc_no: "", phone: "", email: "", village: "", region_id: "", iban: "", notes: "" });
       setExtra({});
+      setMernisYear(""); setMernisMsg(""); setMernisPreVerified(false);
       load();
       nav(`/ciftciler/${data.id}`);
     } catch (err) {
@@ -147,7 +197,27 @@ export default function Farmers() {
                 </div>
                 <div>
                   <label className="text-xs text-[var(--text-dim)] mb-1.5 block">TC NO *</label>
-                  <input required maxLength="11" className="input" value={form.tc_no} onChange={(e) => setForm({...form, tc_no: e.target.value})}/>
+                  <input required maxLength="11" className="input" value={form.tc_no}
+                         onChange={(e) => { setForm({...form, tc_no: e.target.value}); setMernisPreVerified(false); }}/>
+                  {/* Denetim eklentisi (2026-07-25) — MERNİS ön doğrulama */}
+                  <div className="mt-1.5">
+                    {mernisPreVerified ? (
+                      <span className="badge badge-a text-[10px] inline-flex items-center gap-1" data-testid="new-farmer-mernis-verified">
+                        <ShieldCheck size={11}/> MERNİS Doğrulandı
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <input type="number" placeholder="Doğum yılı" className="input text-xs py-1 w-24"
+                               value={mernisYear} onChange={(e) => setMernisYear(e.target.value)}
+                               data-testid="new-farmer-mernis-year"/>
+                        <button type="button" className="btn btn-ghost text-[11px] px-2 py-1 inline-flex items-center gap-1"
+                                onClick={verifyMernisQuick} disabled={mernisBusy} data-testid="new-farmer-mernis-verify">
+                          <ShieldAlert size={11}/> {mernisBusy ? "Doğrulanıyor…" : "MERNİS ile Doğrula"}
+                        </button>
+                      </div>
+                    )}
+                    {mernisMsg && <div className="text-[10px] text-[var(--text-dim)] mt-1">{mernisMsg}</div>}
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs text-[var(--text-dim)] mb-1.5 block">TELEFON *</label>

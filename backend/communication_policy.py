@@ -54,6 +54,9 @@ EVENT_CONTACT_RESOLVERS = {
     # Denetim eklentisi (2026-07-25) — su stresi (NDWI/MSI), aynı hedef
     # çözümlemesi ama AYRI event_type (bkz. event_bus.EVENT_TYPES).
     "remote_sensing_water_stress_detected": ("farmer", "farmer_id"),
+    # Denetim eklentisi (2026-07-25) — NASA FIRMS yangın alarmı, hedef yine
+    # parselin çiftçisi.
+    "nasa_firms_alert_detected": ("farmer", "farmer_id"),
 }
 
 DEFAULT_CHANNELS_ENABLED = {k: True for k in CHANNELS}

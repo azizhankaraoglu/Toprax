@@ -530,6 +530,95 @@ def register_satellite_routes(api_router, db, current_user, require_permission, 
             raise HTTPException(502, f"Yangın verisi alınamadı: {e}")
         return {"parcel_id": parcel_id, "provider": provider.name, "alerts": alerts}
 
+    # =====================================================================
+    # Denetim eklentisi (2026-07-25) — NASA FIRMS otomatik tarama + Parsel
+    # kartına yangın göstergesi + Communication Policy bildirimi. Kullanıcı
+    # isteği: "sorgulama frekansı parametrik olmalı ve admin belirlemeli,
+    # varsayılan 6 saat" — `karne_parameters` (karne_engine.py) ile AYNI
+    # tek-doküman GET/PUT ayar deseni (yeni bir ayar mimarisi İCAT EDİLMEDİ).
+    # Cron YOK (proje konvansiyonu) — bu bir TICK-ENDPOINT'tir, mevcut
+    # `POST /remote-sensing/scheduler/run` deseniyle AYNI aile.
+    # =====================================================================
+    FIRE_SCAN_DEFAULT_HOURS = 6
+
+    @api_router.get("/satellite/fire-scan-settings")
+    async def get_fire_scan_settings(user=Depends(current_user), _feat=Depends(require_feature("gis"))):
+        doc = await db.fire_scan_settings.find_one({"key": "default"}, {"_id": 0})
+        return {"frequency_hours": (doc or {}).get("frequency_hours", FIRE_SCAN_DEFAULT_HOURS)}
+
+    @api_router.put("/satellite/fire-scan-settings")
+    async def update_fire_scan_settings(body: dict, request: Request,
+                                        user=Depends(require_permission("remote_sensing:settings")),
+                                        _feat=Depends(require_feature("gis"))):
+        hours = body.get("frequency_hours")
+        if not isinstance(hours, (int, float)) or hours <= 0:
+            raise HTTPException(400, "frequency_hours pozitif bir sayı olmalı")
+        await db.fire_scan_settings.update_one({"key": "default"}, {"$set": {"frequency_hours": hours}}, upsert=True)
+        await log_audit(db, user, action="update", entity="fire_scan_settings", entity_id="default",
+                        new_value={"frequency_hours": hours}, request=request)
+        return {"frequency_hours": hours}
+
+    @api_router.post("/satellite/fire-scan/run")
+    async def run_fire_scan(request: Request, user=Depends(require_permission("remote_sensing:settings")),
+                            _feat=Depends(require_feature("gis"))):
+        """Tick-endpoint — `frequency_hours` süresi dolmuş (veya hiç
+        kontrol edilmemiş) parselleri tarar, NASA FIRMS'ten yangın kontrolü
+        yapar, `Parcel.fire_status`'ü günceller, tespit varsa Communication
+        Policy'ye `nasa_firms_alert_detected` event'i yayınlar (KENDİ
+        bildirim mantığı YOK — mevcut event_bus/communication_policy'yi
+        kullanır, remote_sensing/notifications.py'nin AYNI deseni)."""
+        from event_bus import publish
+        # Kota/süre koruması: NASA FIRMS senkron `requests` ile çağrılıyor
+        # (aiohttp değil) — çok sayıda parsel TEK tick'te taranırsa istek
+        # zaman aşımına uğrar (remote_sensing/tasks.py'nin process_pending_
+        # tasks(max_tasks=25) İLE AYNI kota mantığı burada da uygulanıyor).
+        # Kalan parseller BİR SONRAKİ tick'te taranır — sessizce eksik
+        # BIRAKILMAZ, yanıtta `more_due` ile dürüstçe bildirilir.
+        MAX_PARCELS_PER_TICK = 25
+        settings_doc = await db.fire_scan_settings.find_one({"key": "default"}, {"_id": 0})
+        freq_hours = (settings_doc or {}).get("frequency_hours", FIRE_SCAN_DEFAULT_HOURS)
+        provider = await get_satellite_provider(db, "fire")
+        now = datetime.now(timezone.utc)
+        cutoff = (now - timedelta(hours=freq_hours)).isoformat()
+        due_filter = {
+            "is_active": {"$ne": False},
+            "geometry": {"$ne": None},
+            "$or": [{"fire_status.checked_at": {"$exists": False}},
+                    {"fire_status.checked_at": {"$lt": cutoff}}],
+        }
+        total_due = await db.parcels.count_documents(due_filter)
+        due_parcels = await db.parcels.find(due_filter, {"_id": 0}).to_list(MAX_PARCELS_PER_TICK)
+
+        scanned, alerts_found = 0, 0
+        for parcel in due_parcels:
+            bbox = _geometry_bbox(parcel.get("geometry") or parcel.get("geojson"))
+            if not bbox:
+                continue
+            buffered = (bbox[0] - 0.02, bbox[1] - 0.02, bbox[2] + 0.02, bbox[3] + 0.02)
+            try:
+                alerts = provider.get_fire_alerts(buffered, days=1)
+            except Exception:
+                continue
+            scanned += 1
+            has_fire = bool(alerts)
+            fire_status = {
+                "active": has_fire, "checked_at": now.isoformat(),
+                "alert_count": len(alerts), "latest": alerts[0] if alerts else None,
+            }
+            await db.parcels.update_one({"id": parcel["id"]}, {"$set": {"fire_status": fire_status}})
+            if has_fire:
+                alerts_found += 1
+                await publish(db, "nasa_firms_alert_detected", {
+                    "parcel_id": parcel["id"], "farmer_id": parcel.get("farmer_id"),
+                    "alert_count": len(alerts), "detected_at": now.isoformat(),
+                    "confidence": alerts[0].get("confidence") if alerts else None,
+                })
+
+        await log_audit(db, user, action="fire_scan", entity="satellite", entity_id="tick",
+                        new_value={"scanned": scanned, "alerts_found": alerts_found}, request=request)
+        return {"scanned": scanned, "total_due": total_due, "more_due": total_due > len(due_parcels),
+                "alerts_found": alerts_found, "frequency_hours": freq_hours, "provider": provider.name}
+
     class TaskingRequestBody(BaseModel):
         parcel_id: str
         resolution_cm: int = 50

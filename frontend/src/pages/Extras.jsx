@@ -36,6 +36,33 @@ export function AyarlarEntegrasyon() {
   const [saving, setSaving] = useState({});        // itype -> bool
   const [saved, setSaved] = useState({});          // itype -> bool
   const [testInputs, setTestInputs] = useState({ sms_phone: "", email_to: "" });
+  // Denetim eklentisi (2026-07-25) — NASA FIRMS sorgulama frekansı
+  // (saat cinsinden, admin ayarlanabilir, varsayılan 6 — karne_parameters
+  // ile AYNI tek-doküman GET/PUT ayar deseni, bkz. satellite_provider.py).
+  const [fireFreqHours, setFireFreqHours] = useState(6);
+  const [fireFreqSaving, setFireFreqSaving] = useState(false);
+  const [fireScanBusy, setFireScanBusy] = useState(false);
+  const [fireScanMsg, setFireScanMsg] = useState("");
+  useEffect(() => {
+    api.get("/satellite/fire-scan-settings").then((r) => setFireFreqHours(r.data.frequency_hours)).catch(() => {});
+  }, []);
+  async function saveFireFreq() {
+    setFireFreqSaving(true);
+    try { await api.put("/satellite/fire-scan-settings", { frequency_hours: Number(fireFreqHours) }); }
+    finally { setFireFreqSaving(false); }
+  }
+  async function runFireScanNow() {
+    setFireScanBusy(true);
+    setFireScanMsg("");
+    try {
+      const { data } = await api.post("/satellite/fire-scan/run");
+      setFireScanMsg(`${data.scanned} parsel tarandı (${data.total_due} bekleyen)${data.alerts_found > 0 ? ` — ${data.alerts_found} YANGIN ALARMI!` : ", alarm yok"}${data.more_due ? " · kalan parseller sıradaki taramada işlenecek" : ""}`);
+    } catch (err) {
+      setFireScanMsg(err.response?.data?.detail || "Tarama başlatılamadı.");
+    } finally {
+      setFireScanBusy(false);
+    }
+  }
 
   const load = () => api.get("/integrations").then((r) => {
     const byType = {};
@@ -482,6 +509,29 @@ export function AyarlarEntegrasyon() {
           </div>
           {saved.nasa_firms && <div className="text-xs text-[var(--primary)] mt-2 flex items-center gap-2"><CheckCircle2 size={14}/> Kaydedildi</div>}
           <TestBadge itype="nasa_firms"/>
+
+          {/* Denetim eklentisi (2026-07-25) — otomatik tarama frekansı
+              (parametrik, admin ayarlanabilir) + manuel tetikleme.
+              Cron YOK (proje konvansiyonu) — bu bir tick-endpoint'tir,
+              periyodik çalışması için dışarıdan (harici zamanlayıcı) veya
+              buradaki butonla elle tetiklenmesi gerekir. */}
+          <div className="mt-4 pt-4 border-t border-[var(--border)]">
+            <div className="text-xs text-[var(--text-dim)] mb-2">Otomatik Tarama</div>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="text-xs text-[var(--text-dim)]">Sorgulama Frekansı (saat)</label>
+              <input className="input w-20 text-xs" type="number" min="1" step="1"
+                     value={fireFreqHours} onChange={(e) => setFireFreqHours(e.target.value)}
+                     data-testid="fire-scan-freq-input"/>
+              <button onClick={saveFireFreq} disabled={fireFreqSaving} className="btn btn-ghost text-xs">
+                {fireFreqSaving ? "Kaydediliyor…" : "Kaydet"}
+              </button>
+            </div>
+            <button onClick={runFireScanNow} disabled={fireScanBusy} className="btn btn-primary text-xs" data-testid="fire-scan-run-btn">
+              {fireScanBusy ? <Loader2 size={13} className="animate-spin"/> : <Radio size={13}/>}
+              {fireScanBusy ? "Taranıyor…" : "Taramayı Şimdi Çalıştır"}
+            </button>
+            {fireScanMsg && <div className="text-xs text-[var(--text-dim)] mt-2">{fireScanMsg}</div>}
+          </div>
         </div>
 
         {/* ============ UP42 (VHR tasking pazaryeri) ============ */}

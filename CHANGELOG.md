@@ -2,6 +2,81 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [1.1] — Ollama düzeltme + GEE canlı doğrulama + NASA FIRMS + TAKBİS/MERNİS UI + Harita + Integration Hub (2026-07-25, Build 25072026-0431)
+
+Önceki build'in (25072026-0324) hemen ardından kullanıcı canlı testte 5 şey
+buldu/istedi:
+
+### 1. Ollama "Connection refused" — kök neden: yanlış host
+Ayarlar'daki Ollama testi `http://localhost:11434`'e gidiyordu ama backend
+DOCKER KONTEYNERİ İÇİNDE çalışıyor — kendi `localhost`'u kendisidir, Ollama
+konteyneri DEĞİL. `ollama_base_url` config'i `http://ollama:11434` (docker-
+compose servis adı) olarak güncellendi — health-check artık "Ollama
+erişilebilir" dönüyor. *(Not: `docker-compose.ollama.yml`'in host portu bu
+oturumun ERKEN bir aşamasında zaten 11434→11435 taşınmıştı — bu makinede
+TOPRAX'a ait olmayan başka bir Ollama kurulumuyla çakışma yüzünden; bu,
+konteyner-içi `ollama:11434` adresini ETKİLEMEZ, ayrı bir konudur.)*
+
+### 2. Google Earth Engine — kullanıcı Google Cloud Console'u düzeltti, CANLI doğrulandı
+Kullanıcı proje IAM/API-etkinleştirme sorununu Google Cloud Console'dan
+giderdi. Yeniden test edildi: `ee.Initialize()` + `POST /api/v1/analyze-
+field` GERÇEK NASA HLS verisiyle uçtan uca çalışıyor — 9 gerçek NDVI
+gözlemi (Mayıs-Temmuz 2026, ~2-3 günlük aralıklarla, kullanıcının "yüksek
+sıklık" isteğiyle birebir), gerçek imzalı `earthengine.googleapis.com`
+thumbnail URL'i, gerçek alan hesabı. Entegrasyon artık tam olarak
+kullanıcının istediği gibi çalışıyor.
+
+### 3. NASA FIRMS yangın izleme — key kaydedildi + tam entegrasyon
+Kullanıcının verdiği MAP_KEY Integration Center'a kaydedildi (otomatik
+gerçek moda geçti). Yeni:
+- `satellite_provider.py`: `GET/PUT /satellite/fire-scan-settings`
+  (parametrik sorgulama frekansı, saat cinsinden, admin ayarlanabilir,
+  varsayılan 6 — `karne_parameters` ile AYNI tek-doküman ayar deseni) +
+  `POST /satellite/fire-scan/run` (tick-endpoint, cron YOK — proje
+  konvansiyonu). Kota/süre koruması: NASA FIRMS senkron `requests` ile
+  çağrıldığından tek tick'te EN FAZLA 25 parsel taranır (`process_pending_
+  tasks(max_tasks=25)` İLE AYNI mantık) — kalan parseller sıradaki tick'te
+  işlenir, `more_due` ile dürüstçe bildirilir (canlı test sırasında bulunan
+  gerçek bir zaman-aşımı bug'ı — ilk denemede 954 parselin TAMAMI tek
+  istekte taranmaya çalışılıp timeout oluyordu).
+- Tespit varsa yeni `nasa_firms_alert_detected` Communication Policy
+  event'i (event_bus.py + communication_policy.py'ye ikişer satır).
+- `Parcel.fire_status` alanı + parsel kartında yangın göstergesi
+  (ParcelDetail.jsx, `Flame` ikonlu rozet — kırmızı=alarm, nötr=temiz).
+- Ayarlar'da "Otomatik Tarama" bölümü: frekans input + "Taramayı Şimdi
+  Çalıştır" butonu.
+- Gerçek NASA FIRMS'e karşı canlı doğrulandı (954 parsel, 25 tarandı,
+  0 alarm — gerçek API yanıtı).
+
+### 4. TAKBİS/MERNİS — arka uç zaten TAMAMDI (Faz 3), sadece EKSİK UI eklendi
+Araştırma: `POST /gov/mernis/verify` + `POST /gov/takbis/query` zaten
+tam çalışır durumdaydı; MERNİS zaten FarmerDetail.jsx'te vardı. Eksik olan
+SADECE: TAKBİS artık Parseller sayfasının "Manuel"/"Çiz" parsel EKLEME
+formlarında VE ParcelDetail.jsx'in "Hızlı İşlemler" bölümünde (önceden
+SADECE "Düzenle" moduna girince görünüyordu); MERNİS artık Çiftçiler
+sayfasının "Yeni Çiftçi" EKLEME modalında (TC No alanının hemen altında,
+doğum yılı + doğrula — kayıt oluşunca AYNI uç farmer_id ile tekrar
+çağrılıp kalıcı işaretleniyor).
+
+### 5. Parsel haritası — Hybrid basemap + yakın zoom
+`ParcelDetail.jsx`'in kendi Leaflet haritası CartoDB (sokak/etiket)
+basemap'inden `HaritaPaneli.jsx`'in MEVCUT "hibrit" tanımıyla AYNI Esri
+World Imagery + sınır/etiket overlay'ine geçirildi (yeni bir basemap
+kataloğu icat edilmedi), zoom 14→17.
+
+### 6. Integration Hub → God Mode
+`PlatformAdmin.jsx`'in `SYSTEM_SCREENS` listesindeki jenerik "Ayarlar"
+etiketi "Entegrasyonlar"a çevrildi — buton zaten `/ayarlar`'a (SADECE
+`&lt;AyarlarEntegrasyon/&gt;` render eden, App.js:121) gidiyordu, yani
+Integration Hub zaten God Mode'dan (Tenantlar → tenant satırı → sistem
+ekranı butonları) erişilebiliyordu, sadece etiketi bunu belli etmiyordu.
+
+### Doğrulama
+50 pytest yeşil, `craco build` hatasız (ilgisiz dosyalarda önceden var
+olan ESLint uyarıları dışında). Tüm yeni arayüz parçaları (yangın rozeti,
+TAKBİS toggle, MERNİS doğrula, hibrit harita, otomatik tarama ayarları)
+gerçek tarayıcıda canlı test edildi, konsol hatası yok.
+
 ## [1.1] — Çoklu-İndeks Uzaktan Algılama + Google Earth Engine/NASA HLS (2026-07-25, Build 25072026-0324)
 
 Kullanıcının Sentinel Hub "Test Et" butonunun kimlik-doğrulama-only olduğunu

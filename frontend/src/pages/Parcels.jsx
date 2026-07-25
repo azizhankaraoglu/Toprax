@@ -12,7 +12,7 @@ import ParcelsListPanel from "@/components/ParcelsListPanel";
 import AiAssistantBox from "@/components/AiAssistantBox";
 import { getBasemapUrl, getTheme } from "@/lib/theme";
 import {
-  PenLine, Scissors, Combine, Crosshair, Upload, X, Check, Layers, Plus, Satellite, List, ClipboardPlus
+  PenLine, Scissors, Combine, Crosshair, Upload, X, Check, Layers, Plus, Satellite, List, ClipboardPlus, Landmark
 } from "lucide-react";
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
@@ -66,6 +66,29 @@ export default function Parcels() {
   const [toolMsg, setToolMsg] = useState("");
   const [showBulkRS, setShowBulkRS] = useState(false);   // Toplu Uzaktan Algılama paneli
   const [showList, setShowList] = useState(false);       // Liste & Filtre & Toplu Silme paneli (#3)
+
+  // Denetim eklentisi (2026-07-25) — kullanıcı isteği: TAKBİS parsel EKLEME
+  // formuna da eklensin (öncesinde sadece ParcelDetail.jsx düzenleme modunda
+  // vardı). Sorgu-öncesi referans amaçlı — sonucu görüp form alanlarına
+  // (Köy/Alan) elle taşıyabilir, backend /gov/takbis/query hiçbir şey YAZMAZ.
+  const [takbisQuick, setTakbisQuick] = useState({ il: "", ilce: "", ada: "", parsel: "" });
+  const [takbisQuickBusy, setTakbisQuickBusy] = useState(false);
+  const [takbisQuickResult, setTakbisQuickResult] = useState(null);
+  const [takbisQuickMsg, setTakbisQuickMsg] = useState("");
+  async function queryTakbisQuick() {
+    setTakbisQuickBusy(true);
+    setTakbisQuickMsg("");
+    setTakbisQuickResult(null);
+    try {
+      const { data } = await api.post("/gov/takbis/query", takbisQuick);
+      setTakbisQuickResult(data);
+      if (!data.found) setTakbisQuickMsg("Kayıt bulunamadı.");
+    } catch (err) {
+      setTakbisQuickMsg(err.response?.data?.detail || "TAKBİS sorgusu başarısız.");
+    } finally {
+      setTakbisQuickBusy(false);
+    }
+  }
 
   // ÇİZ
   const [drawnGeoJSON, setDrawnGeoJSON] = useState(null);
@@ -797,6 +820,8 @@ export default function Parcels() {
           {tool === "manual" && (
             <div>
               <h3 className="font-display text-lg mb-3">Yeni Parsel (Manuel)</h3>
+              <TakbisQuickBox form={takbisQuick} setForm={setTakbisQuick} busy={takbisQuickBusy}
+                              result={takbisQuickResult} msg={takbisQuickMsg} onQuery={queryTakbisQuick} />
               <QuickAddPanel
                 title="Parsel Bilgilerini Gir"
                 testId="manual-parcel-form"
@@ -827,6 +852,9 @@ export default function Parcels() {
               {!drawnGeoJSON ? (
                 <p className="text-xs text-[var(--text-dim)]">Haritada çizim bekleniyor…</p>
               ) : (
+                <>
+                <TakbisQuickBox form={takbisQuick} setForm={setTakbisQuick} busy={takbisQuickBusy}
+                                result={takbisQuickResult} msg={takbisQuickMsg} onQuery={queryTakbisQuick} />
                 <QuickAddPanel
                   title="Parsel Bilgilerini Gir"
                   testId="draw-parcel-form"
@@ -844,6 +872,7 @@ export default function Parcels() {
                   submitLabel={`Kaydet (${areaFromGeoJSON(drawnGeoJSON)} dekar)`}
                   onSubmit={submitNewParcel}
                 />
+                </>
               )}
             </div>
           )}
@@ -1069,6 +1098,50 @@ export default function Parcels() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Denetim eklentisi (2026-07-25) — TAKBİS ön-sorgu kutusu (parsel EKLEME
+// akışında, "manuel" ve "çiz" formlarının üstünde). Backend /gov/takbis/
+// query hiçbir şey YAZMAZ (bkz. gov_integration_routes.py) — sadece
+// referans bilgi döner, kullanıcı sonucu görüp form alanlarına elle taşır.
+function TakbisQuickBox({ form, setForm, busy, result, msg, onQuery }) {
+  return (
+    <div className="border border-[var(--border)] rounded-lg p-3 mb-3" data-testid="parcel-add-takbis-box">
+      <div className="text-xs font-medium text-[var(--primary)] mb-2 flex items-center gap-1.5">
+        <Landmark size={13}/> TAKBİS Tapu Sorgu (opsiyonel — sonucu forma elle taşıyın)
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
+        <div>
+          <label className="text-[10px] text-[var(--text-dim)] mb-1 block">İl</label>
+          <input className="input text-xs py-1" value={form.il} onChange={(e) => setForm((f) => ({ ...f, il: e.target.value }))} />
+        </div>
+        <div>
+          <label className="text-[10px] text-[var(--text-dim)] mb-1 block">İlçe</label>
+          <input className="input text-xs py-1" value={form.ilce} onChange={(e) => setForm((f) => ({ ...f, ilce: e.target.value }))} />
+        </div>
+        <div>
+          <label className="text-[10px] text-[var(--text-dim)] mb-1 block">Ada No</label>
+          <input className="input text-xs py-1" value={form.ada} onChange={(e) => setForm((f) => ({ ...f, ada: e.target.value }))} />
+        </div>
+        <div>
+          <label className="text-[10px] text-[var(--text-dim)] mb-1 block">Parsel No</label>
+          <input className="input text-xs py-1" value={form.parsel} onChange={(e) => setForm((f) => ({ ...f, parsel: e.target.value }))} />
+        </div>
+        <button className="btn btn-ghost text-xs py-1.5" onClick={onQuery} disabled={busy} data-testid="parcel-add-takbis-submit">
+          {busy ? "Sorgulanıyor…" : "Sorgula"}
+        </button>
+      </div>
+      {msg && <div className="text-[11px] text-[var(--text-dim)] mt-2">{msg}</div>}
+      {result?.found && (
+        <div className="text-[11px] mt-2 grid grid-cols-2 md:grid-cols-4 gap-2" data-testid="parcel-add-takbis-result">
+          <div><span className="text-[var(--text-dim)]">Malik:</span> {result.malik}</div>
+          <div><span className="text-[var(--text-dim)]">Nitelik:</span> {result.nitelik}</div>
+          <div><span className="text-[var(--text-dim)]">Alan:</span> {result.alan_m2} m²</div>
+          <div><span className="text-[var(--text-dim)]">Tapu Tarihi:</span> {result.tapu_tarihi}</div>
+        </div>
+      )}
     </div>
   );
 }
