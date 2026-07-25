@@ -12,11 +12,40 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import api, { BACKEND_URL } from "@/api";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Satellite, RefreshCw, Play, Pause, Image as ImageIcon, CloudSun, Brain } from "lucide-react";
 
 const ndviColor = (v) => (v == null ? "#97a8a0" : v > 0.65 ? "#4ade80" : v > 0.45 ? "#fbbf24" : "#ef4444");
 const ndviLabel = (v) => (v == null ? "—" : v > 0.65 ? "Sağlıklı gelişim" : v > 0.45 ? "İzlemeye değer" : "Stres altında");
+
+// Denetim eklentisi (2026-07-25) — 9-indeks genişlemesi (bkz. backend
+// remote_sensing/indices.py, TEK KAYNAK). Grup listeleri backend'deki
+// CANOPY_CODES/WATER_CODES ile AYNI (sadece grafik gruplaması için burada
+// tekrarlanır — etiket/açıklama METNİ hardcode EDİLMEZ, GET /remote-sensing/
+// index-catalog'tan çekilir).
+const CANOPY_CODES = ["ndvi", "evi", "savi", "msavi", "ndre", "reci", "ccci", "lai"];
+const WATER_CODES = ["ndwi", "msi"];
+const LINE_COLORS = {
+  ndvi: "#4ade80", ndre: "#22d3ee", reci: "#a78bfa", ccci: "#f472b6",
+  msavi: "#facc15", savi: "#fb923c", evi: "#34d399", lai: "#94a3b8",
+  ndwi: "#60a5fa", msi: "#f87171",
+};
+
+// Düzeltme (2026-07-25) — backend /manual-sync ve /sentinel2/fetch HER ZAMAN
+// HTTP 200 döner (task içi hatalar run_task'ta yakalanıp results[].error'a
+// yazılır, dış isteği ÇÖKERTMEZ — bkz. remote_sensing/tasks.py). Önceden
+// frontend sadece "queued"/"processed" SAYISINA bakıp "işlendi" diyordu; bir
+// görev "bulut oranı çok yüksek"/"tarih aralığında görüntü yok" gibi bir
+// nedenle BAŞARISIZ olsa bile kullanıcı yanlışlıkla başarı mesajı görüyordu.
+// Artık results[] içindeki gerçek başarı/hata durumu okunup gösteriliyor.
+function summarizeRsResult(data, label) {
+  const results = data?.results || [];
+  const failed = results.filter((r) => r && r.success === false);
+  const base = `${label}: ${data?.queued ?? 0} görev kuyruğa alındı, ${data?.processed ?? 0} işlendi.`;
+  if (failed.length === 0) return base;
+  const reasons = failed.map((r) => r.error).filter(Boolean).join(" · ");
+  return `${base} ${failed.length} görev BAŞARISIZ${reasons ? ": " + reasons : ""}`;
+}
 
 export default function RemoteSensingPanel({ parcelId }) {
   const [status, setStatus] = useState(null);
@@ -32,26 +61,50 @@ export default function RemoteSensingPanel({ parcelId }) {
 
   const [s2Busy, setS2Busy] = useState(false);
   const [s2Msg, setS2Msg] = useState("");
+  const [indexLabels, setIndexLabels] = useState({});
+  const [hiddenLines, setHiddenLines] = useState(() => new Set(CANOPY_CODES.filter((c) => c !== "ndvi")));
 
   const load = () => {
     api.get("/remote-sensing/providers/status").then((r) => setStatus(r.data)).catch(() => {});
-    // Denetim Faz 5 — birincil NDVI grafiği/slider'ı EOSDA istatistiğine
-    // dayanır (bilinçli tercih: iki farklı sağlayıcının NDVI serisini
-    // birleştirmek yerine, mevcut çalışan grafik AYNEN korunur; Sentinel-2
-    // sadece kendi görüntüsünü aynı zaman çizgisine "son bilinen görüntü"
-    // deseniyle ekler — bkz. curImgS2 aşağıda).
+    // Bug fix (2026-07-25) — ÖNCEDEN burada `s.provider !== "sentinel2"`
+    // filtresi vardı: salt Sentinel-2 taraması yapılmış (hiç EOSDA çalışmamış)
+    // bir parselde `stats` boş kalıyor, panelin TAMAMI (görüntüler dahil)
+    // "henüz veri yok" gösteriyordu — Sentinel-2 backend'de GERÇEKTEN veri
+        // üretmiş olsa bile. Artık EOSDA/Sentinel-2 serileri AYRI tutulur,
+    // panel İKİSİNDEN herhangi biri veri taşıyorsa render olur.
     api.get(`/remote-sensing/parcels/${parcelId}/timeseries`).then((r) =>
-      setStats((r.data.statistics || []).filter((s) => s.provider !== "sentinel2"))
+      setStats(r.data.statistics || [])
     ).catch(() => setStats([]));
     api.get(`/remote-sensing/parcels/${parcelId}/images`).then((r) => setImages(r.data || [])).catch(() => setImages([]));
   };
   useEffect(load, [parcelId]);
+  useEffect(() => {
+    api.get("/remote-sensing/index-catalog").then((r) => setIndexLabels(r.data || {})).catch(() => {});
+  }, []);
 
-  // En güncel istatistik dokümanının serisi (tarih artan sıralı).
-  const series = useMemo(() => {
-    const latest = stats[0];
-    return (latest?.series || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  }, [stats]);
+  const statEosda = useMemo(() => stats.find((s) => s.provider !== "sentinel2"), [stats]);
+  const statS2 = useMemo(() => stats.find((s) => s.provider === "sentinel2"), [stats]);
+  const seriesEosda = useMemo(
+    () => (statEosda?.series || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "")),
+    [statEosda]
+  );
+  const seriesS2 = useMemo(
+    () => (statS2?.series || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "")),
+    [statS2]
+  );
+  // Slider/görüntü zaman çizgisi: EOSDA varsa öncelikli (mevcut davranışla
+  // en tutarlı, image pane EOSDA odaklı), yoksa Sentinel-2.
+  const series = seriesEosda.length ? seriesEosda : seriesS2;
+  // Çok-indeksli grafikler için kaynak: Sentinel-2 8 ek indeksi hesaplar
+  // (EOSDA en fazla 3 indeksle sınırlı — bkz. eosda.py), o yüzden S2 varsa
+  // ondan, yoksa EOSDA'dan (sadece NDVI/istekte belirtilenler) beslenir.
+  const indexSeries = seriesS2.length ? seriesS2 : seriesEosda;
+
+  const toggleLine = (code) => setHiddenLines((prev) => {
+    const next = new Set(prev);
+    if (next.has(code)) next.delete(code); else next.add(code);
+    return next;
+  });
 
   // Görüntüler tarihe göre sıralı — seçili tarihte görüntü YOKSA o tarihten
   // ÖNCEKİ en yeni görüntü gösterilir ("son bilinen görüntü"), aksi halde tek
@@ -78,13 +131,20 @@ export default function RemoteSensingPanel({ parcelId }) {
     }
     return found || null;
   }, [cur, sortedImages]);
+  // Bug fix (2026-07-25) — ÖNCEDEN `cur.date` yoksa (veya S2'nin görüntü
+  // tarihi EOSDA'nın slider'ının ulaşabildiği en yeni tarihten SONRAYSA,
+  // ki bu iki bağımsız uydu geçişi için gayet olası) `curImgS2` null kalıp
+  // "henüz görüntü yok" gösteriyordu — Sentinel-2'nin GERÇEKTEN kaydedilmiş
+  // bir görüntüsü olsa bile. Artık eşleşme bulunamazsa en son S2 görüntüsüne
+  // düşer (fallback), Sentinel-2 kendi tarih çizgisinde bağımsız çalışır.
   const curImgS2 = useMemo(() => {
-    if (!cur?.date) return null;
+    const latest = sortedImagesS2[sortedImagesS2.length - 1] || null;
+    if (!cur?.date) return latest;
     let found = null;
     for (const im of sortedImagesS2) {
       if ((im.capture_date || "") <= cur.date) found = im; else break;
     }
-    return found || null;
+    return found || latest;
   }, [cur, sortedImagesS2]);
   const imgIsExact = curImg && curImg.capture_date === cur?.date;
   const imgIsExactS2 = curImgS2 && curImgS2.capture_date === cur?.date;
@@ -124,7 +184,7 @@ export default function RemoteSensingPanel({ parcelId }) {
         task_types: ["statistics", "download"],   // NDVI istatistiği + true-color uydu görüntüsü (gerçek EOSDA)
         indices: ["ndvi"],
       });
-      setMsg(`Analiz çalıştırıldı: ${data.queued ?? 0} görev kuyruğa alındı, ${data.processed ?? 0} işlendi.`);
+      setMsg(summarizeRsResult(data, "Analiz"));
       load();
     } catch (err) {
       setMsg(err.response?.data?.detail || "Analiz başlatılamadı (EOSDA yetkisi/entegrasyonu gerekli).");
@@ -138,7 +198,7 @@ export default function RemoteSensingPanel({ parcelId }) {
     setS2Msg("");
     try {
       const { data } = await api.post("/remote-sensing/sentinel2/fetch", { parcel_id: parcelId });
-      setS2Msg(`Sentinel-2 görüntüsü güncellendi: ${data.queued ?? 0} görev kuyruğa alındı, ${data.processed ?? 0} işlendi.`);
+      setS2Msg(summarizeRsResult(data, "Sentinel-2 görüntüsü"));
       load();
     } catch (err) {
       setS2Msg(err.response?.data?.detail || "Sentinel-2 görüntüsü alınamadı.");
@@ -188,25 +248,61 @@ export default function RemoteSensingPanel({ parcelId }) {
       {msg && <div className="text-xs text-[var(--text-dim)] mb-3">{msg}</div>}
       {s2Msg && <div className="text-xs text-[var(--text-dim)] mb-3">{s2Msg}</div>}
 
-      {series.length === 0 ? (
+      {seriesEosda.length === 0 && seriesS2.length === 0 ? (
         <div className="text-sm text-[var(--text-dim)] py-6 text-center border border-dashed border-[var(--border)] rounded-lg">
           Bu parsel için henüz uzaktan algılama verisi yok.<br />
           <span className="text-xs">"Uydu Analizini Güncelle" ile NDVI istatistiği ve uydu görüntüsü çekin.</span>
         </div>
       ) : (
         <>
-          {/* NDVI zaman serisi grafiği */}
-          <div className="mb-4">
-            <div className="text-xs text-[var(--text-dim)] mb-1">NDVI Zaman Serisi ({series.length} tarih)</div>
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={series} onClick={(e) => { if (e && e.activeTooltipIndex != null) setIdx(e.activeTooltipIndex); }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1a2326" />
-                <XAxis dataKey="date" stroke="#97a8a0" tick={{ fontSize: 10 }} />
-                <YAxis domain={[0, 1]} stroke="#97a8a0" tick={{ fontSize: 10 }} />
-                <Tooltip contentStyle={{ background: "#11181a", border: "1px solid #243038", borderRadius: 8 }} />
-                <Line type="monotone" dataKey="ndvi" stroke="#4ade80" strokeWidth={2} dot={{ r: 2 }} name="NDVI" />
-              </LineChart>
-            </ResponsiveContainer>
+          {/* Denetim eklentisi (2026-07-25) — "optimum tasarım": 9 ayrı
+              tam-genişlik grafik YERİNE, eski tek NDVI satırı kategoriye
+              göre 2 sütuna bölünür (mevcut görüntü panelindeki grid
+              deseni yeniden kullanılır). Sol: bitki örtüsü/klorofil ailesi
+              (NDVI hep açık+kalın, diğerleri legend'e tıklayarak aç/kapa).
+              Sağ: su stresi/nem (NDWI+MSI, sadece 2 çizgi, hep açık). */}
+          <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs text-[var(--text-dim)] mb-1">
+                Bitki Örtüsü & Klorofil ({indexSeries.length} tarih) — diğer indeksler için lejanda tıklayın
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={indexSeries} onClick={(e) => { if (e && e.activeTooltipIndex != null) setIdx(e.activeTooltipIndex); }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1a2326" />
+                  <XAxis dataKey="date" stroke="#97a8a0" tick={{ fontSize: 9 }} />
+                  <YAxis stroke="#97a8a0" tick={{ fontSize: 9 }} />
+                  <Tooltip contentStyle={{ background: "#11181a", border: "1px solid #243038", borderRadius: 8 }} />
+                  <Legend onClick={(o) => toggleLine(o.dataKey)}
+                          wrapperStyle={{ fontSize: 10, cursor: "pointer" }}
+                          formatter={(value, entry) => (
+                            <span style={{ opacity: hiddenLines.has(entry.dataKey) ? 0.35 : 1 }}>{value}</span>
+                          )} />
+                  {CANOPY_CODES.map((code) => (
+                    <Line key={code} type="monotone" dataKey={code}
+                          name={indexLabels[code]?.label_tr || code.toUpperCase()}
+                          stroke={LINE_COLORS[code]} strokeWidth={code === "ndvi" ? 2 : 1.3}
+                          dot={false} hide={hiddenLines.has(code)} connectNulls />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div>
+              <div className="text-xs text-[var(--text-dim)] mb-1">Su Stresi & Nem</div>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={indexSeries}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1a2326" />
+                  <XAxis dataKey="date" stroke="#97a8a0" tick={{ fontSize: 9 }} />
+                  <YAxis stroke="#97a8a0" tick={{ fontSize: 9 }} />
+                  <Tooltip contentStyle={{ background: "#11181a", border: "1px solid #243038", borderRadius: 8 }} />
+                  <Legend wrapperStyle={{ fontSize: 10 }} />
+                  {WATER_CODES.map((code) => (
+                    <Line key={code} type="monotone" dataKey={code}
+                          name={indexLabels[code]?.label_tr || code.toUpperCase()}
+                          stroke={LINE_COLORS[code]} strokeWidth={1.6} dot={false} connectNulls />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
           {/* Gün-gün zaman slider'ı */}
@@ -286,6 +382,8 @@ export default function RemoteSensingPanel({ parcelId }) {
                 <span className="text-xs" style={{ color: ndviColor(cur?.ndvi) }}>{ndviLabel(cur?.ndvi)}</span>
               </div>
               {cur?.ndre != null && <div className="text-xs text-[var(--text-dim)]">NDRE: {cur.ndre}</div>}
+              {cur?.ndwi != null && <div className="text-xs text-[var(--text-dim)]">NDWI: {cur.ndwi}</div>}
+              {cur?.msi != null && <div className="text-xs text-[var(--text-dim)]">MSI: {cur.msi}</div>}
               <div className="text-xs text-[var(--text-dim)] flex items-center gap-1">
                 <CloudSun size={13} /> Bulut: %{cur?.cloud_pct ?? "—"}
               </div>

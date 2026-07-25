@@ -74,6 +74,12 @@ SECRET_FIELDS = {
     # sağlayıcı (bkz. gov_providers.py) devrede kalır.
     "mernis": {"password"},
     "takbis": {"password"},
+    # (Denetim Faz 9C, 2026-07-25) Google Earth Engine + NASA HLS —
+    # service_account_key_json TAM bir gizli anahtar dosyası (private_key
+    # alanı içerir), tek bir "secret" alan olarak maskelenir (diğerleri gibi
+    # tek tek alan yerine bütün JSON blob maskelenir — GEE service account
+    # key'i başka türlü parçalanamaz).
+    "google_earth_engine": {"service_account_key_json"},
 }
 
 VALID_TYPES = set(SECRET_FIELDS.keys())
@@ -83,7 +89,8 @@ VALID_TYPES = set(SECRET_FIELDS.keys())
 # ailesinin tamamı bu deseni paylaşır (bkz. satellite_provider.py,
 # remote_sensing/providers/__init__.py). SMS/Email/AI'da ayrı bir "mock"
 # kavramı yoktur — onlar kimlik bilgisi + enabled olunca zaten aktiftir.
-MOCK_CAPABLE_TYPES = {"planet_labs", "sentinel_hub", "nasa_firms", "up42", "eosda", "mernis", "takbis"}
+MOCK_CAPABLE_TYPES = {"planet_labs", "sentinel_hub", "nasa_firms", "up42", "eosda", "mernis", "takbis",
+                      "google_earth_engine"}
 
 
 def _is_filled(config: dict, key: str) -> bool:
@@ -128,6 +135,8 @@ def _has_credentials(itype: str, config: dict, provider: Optional[str]) -> bool:
     if itype in ("mernis", "takbis"):
         return (_is_filled(config, "username") and _is_filled(config, "password")
                 and _is_filled(config, "service_url"))
+    if itype == "google_earth_engine":
+        return _is_filled(config, "service_account_email") and _is_filled(config, "service_account_key_json")
     return False
 
 
@@ -399,6 +408,35 @@ def _probe_eosda(cfg: dict, timeout: int) -> Tuple[bool, str]:
         return True, "EOSDA bağlantısı doğrulandı — anahtar geçerli."
     except Exception as e:
         return False, f"Bağlantı hatası: {e}"
+
+
+def _probe_google_earth_engine(cfg: dict, timeout: int) -> Tuple[bool, str]:
+    """Google Earth Engine service account kimlik doğrulaması — `ee.
+    Initialize()` + ölçek testi olarak `ee.Number(1).getInfo()` (görüntü/
+    HLS sorgusu OLUŞTURMAZ, sadece kimlik bilgisinin geçerliliğini doğrular).
+    Denetim Faz 9C kuralı: bu fonksiyon HİÇBİR ZAMAN uygulamayı çökertmez —
+    `ee` paketi yoksa/kimlik bilgisi hatalıysa loglanıp False döner, `remote_
+    sensing/providers/gee_hls/service.py` bu durumda mock/demo moda düşer."""
+    email = cfg.get("service_account_email")
+    key_json = cfg.get("service_account_key_json")
+    project = cfg.get("project")
+    if not email or not key_json:
+        return False, "Önce Service Account e-postası ve JSON anahtarı girilmeli"
+    if cfg.get("mock_mode", True):
+        return True, "[MOCK MOD] Kimlik bilgisi formatı geçerli görünüyor. Gerçek doğrulama için 'mock_mode' kapatılmalı."
+    try:
+        import ee
+        credentials = ee.ServiceAccountCredentials(email, key_data=key_json)
+        if project:
+            ee.Initialize(credentials, project=project)
+        else:
+            ee.Initialize(credentials)
+        val = ee.Number(1).getInfo()
+        return bool(val == 1), "Google Earth Engine kimlik doğrulaması başarılı."
+    except ImportError:
+        return False, "'earthengine-api' paketi kurulu değil (requirements.txt)."
+    except Exception as e:
+        return False, f"GEE bağlantı/kimlik hatası: {e}"
 
 
 def _probe_ollama(cfg: dict, timeout: int) -> Tuple[bool, str]:
@@ -755,6 +793,8 @@ def register_integration_routes(api_router, db, current_user, is_admin, log_audi
             ok, message = _with_retry(lambda: _probe_takbis(cfg, timeout), retry_count)
         elif itype == "ai_service":
             ok, message = _with_retry(lambda: _probe_ai_service(provider, cfg, timeout), retry_count)
+        elif itype == "google_earth_engine":
+            ok, message = _with_retry(lambda: _probe_google_earth_engine(cfg, timeout), retry_count)
         else:
             ok, message = False, "Bilinmeyen entegrasyon tipi"
 

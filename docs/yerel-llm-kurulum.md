@@ -13,7 +13,10 @@ docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d ollama
 ```
 Bu, `docker-compose.ollama.yml`'de tanımlı `toprax-ollama` konteynerini
 mevcut `toprax-net` ağına ekler — backend konteynerinden `http://ollama:11434`
-adresiyle erişilir. Sadece `127.0.0.1:11434` host'a açılır (dışarıya kapalı).
+adresiyle erişilir. Sadece `127.0.0.1:11435` host'a açılır (dışarıya kapalı;
+konteyner içi port değişmedi — 11435, bu geliştirme makinesinde TOPRAX'a ait
+olmayan başka bir Ollama kurulumuyla 11434 çakışmasın diye seçilen HOST
+tarafı port, backend↔ollama konteyner-içi trafiğini etkilemez).
 
 **Seçenek B — Doğrudan kurulum (Windows/macOS/Linux):**
 [ollama.com/download](https://ollama.com/download) adresinden indirip kurun.
@@ -52,7 +55,7 @@ bölümünü açın:
 
 | Alan | Açıklama |
 |---|---|
-| Ollama URL | Docker: `http://ollama:11434` · Yerel: `http://localhost:11434` |
+| Ollama URL | Backend Docker'da çalışıyorsa (varsayılan canlı kurulum): `http://ollama:11434` · Backend Windows'ta doğrudan `uvicorn` ile çalışıyorsa VE Ollama Seçenek A (Docker) ile kurulduysa: `http://localhost:11435` · Ollama Seçenek B (doğrudan kurulum) ile kurulduysa: `http://localhost:11434` |
 | Metin modeli | `llama3.1:8b` (veya indirdiğiniz başka bir model) |
 | Görüntü modeli | `llava:7b` |
 | Strateji | aşağıya bakın |

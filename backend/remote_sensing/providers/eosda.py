@@ -50,6 +50,12 @@ class EOSDAProvider(IRemoteSensingProvider):
         self.api_key = api_key
         self.mock_mode = mock_mode
         self.timeout = timeout
+        # Denetim eklentisi (2026-07-25) — 3'ten fazla indeks istendiğinde
+        # request_statistics birden fazla mt_stats isteğini SIRAYLA yürütüp
+        # BİRLEŞTİRİLMİŞ sonucu burada saklar (Sentinel2Provider'ın senkron
+        # `self._cache` desenine uyarlanmış hali — bkz. _build_chunked_
+        # statistics). get_task_status önce buraya bakar.
+        self._merged_cache: Dict[str, list] = {}
 
     # --- Ortak HTTP yardımcıları ---------------------------------------------
     @property
@@ -138,17 +144,65 @@ class EOSDAProvider(IRemoteSensingProvider):
     def request_statistics(self, field_id: str, indices: List[str], date_range: tuple,
                            geometry: Optional[dict] = None) -> str:
         start, end = date_range
+        codes = indices or ["ndvi"]
         if self.mock_mode:
             # Sonucu task_id'ye göm (get_task_status deterministik üretsin).
-            token = f"{field_id}|{','.join(indices)}|{start:%Y%m%d}|{end:%Y%m%d}"
+            token = f"{field_id}|{','.join(codes)}|{start:%Y%m%d}|{end:%Y%m%d}"
             return "mock-stattask-" + str(zlib.crc32(token.encode()) % 10_000_000)
-        # GERÇEK EOSDA mt_stats (canlı API ile doğrulanmış şema,
-        # bkz. https://doc.eos.com/docs/statistics/):
-        #  - bm_type: BÜYÜK HARF indeks adları (en fazla 3), dizi
-        #  - geometry: DOĞRUDAN GeoJSON Polygon (field_id DEĞİL)
-        #  - reference: istek referansı
+        # LAI EOSDA'dan İSTENMEZ — gerçek bir bm_type kodu değil, NDVI'den
+        # yerel olarak türetilir (bkz. sentinel2.py'nin AYNI mantığı). EOSDA'ya
+        # gönderilecek "gerçek" kodlar bu kümeden hariç tutulur; talep edilen
+        # LAI merge SONRASI eklenir.
+        wants_lai = "lai" in codes
+        eosda_codes = [c for c in codes if c != "lai"] or ["ndvi"]
+        # LAI istenmişse (tek başına da olsa) senkron birleştirme yoluna
+        # girilir — gerçek EOSDA task_id'si DOĞRUDAN dönülemez çünkü LAI'nin
+        # NDVI'den türetilip sonuca EKLENMESİ gerekir (aşağıdaki `if
+        # wants_lai` bloğu). >3 gerçek indeks zaten aynı yolu kullanıyordu.
+        if len(eosda_codes) > 3 or wants_lai:
+            # Denetim eklentisi (2026-07-25) — kullanıcı "hem EOSDA'da hem
+            # Sentinel'de" 9-indeks istedi. EOSDA'nın bm_type'ı istek başına
+            # EN FAZLA 3 indeks kabul eder (gerçek API sınırı) — bu yüzden
+            # 3'lük gruplara bölünüp SIRAYLA birden çok mt_stats isteği
+            # açılır, her biri polling ile beklenir, tarihe göre BİRLEŞTİRİLİR.
+            # MALİYET UYARISI: bu, tek istekli haline göre ~3 KAT EOSDA kotası/
+            # süresi demektir — bu yüzden SADECE manuel "9 indeks" akışında
+            # devreye girer (tasks.py'de otomatik tarama varsayılanı hâlâ
+            # ["ndvi"]). Sonuç senkron olarak `_merged_cache`'e gömülür —
+            # dışarıya TEK bir task_id döner (Sentinel2Provider'ın senkron
+            # cache desenine uyarlanmış hali).
+            merged: Dict[str, dict] = {}
+            for i in range(0, len(eosda_codes), 3):
+                chunk = eosda_codes[i:i + 3]
+                chunk_task_id = self._request_statistics_single(chunk, start, end, field_id, geometry)
+                deadline = time.monotonic() + 120
+                status = self.get_task_status(chunk_task_id)
+                while status.state in (TaskState.POLLING, TaskState.RUNNING, TaskState.QUEUED) and time.monotonic() < deadline:
+                    time.sleep(2)
+                    status = self.get_task_status(chunk_task_id)
+                for point in self.parse_statistics(status.result, indices=chunk):
+                    d = point.get("date")
+                    if not d:
+                        continue
+                    merged.setdefault(d, {}).update(point)
+            if wants_lai:
+                from ..indices import estimate_lai
+                for point in merged.values():
+                    if point.get("ndvi") is not None:
+                        point["lai"] = estimate_lai(point["ndvi"])
+            merged_series = sorted(merged.values(), key=lambda p: p.get("date") or "")
+            synthetic_id = "eosda-merged-" + uuid.uuid4().hex[:12]
+            self._merged_cache[synthetic_id] = merged_series
+            return synthetic_id
+        return self._request_statistics_single(codes, start, end, field_id, geometry)
+
+    def _request_statistics_single(self, codes: List[str], start, end, field_id, geometry) -> str:
+        """TEK bir mt_stats isteği (≤3 indeks) — GERÇEK EOSDA şeması (canlı API
+        ile doğrulanmış, bkz. https://doc.eos.com/docs/statistics/):
+        bm_type BÜYÜK HARF indeks adları (en fazla 3, dizi), geometry
+        DOĞRUDAN GeoJSON Polygon (field_id DEĞİL), reference istek referansı."""
         params = {
-            "bm_type": [i.upper() for i in (indices or ["ndvi"])][:3],
+            "bm_type": [c.upper() for c in codes][:3],
             "date_start": start.strftime("%Y-%m-%d"),
             "date_end": end.strftime("%Y-%m-%d"),
             "reference": str(field_id or "toprax"),
@@ -166,6 +220,15 @@ class EOSDAProvider(IRemoteSensingProvider):
     def get_task_status(self, task_id: str) -> TaskStatus:
         if self.mock_mode:
             return self._mock_status(task_id)
+        if task_id in self._merged_cache:
+            # 3'lük gruplama sonucu (bkz. request_statistics) — senkron
+            # olarak önceden hesaplanmış, gerçek bir HTTP çağrısı gerekmez.
+            # `{"series": [...]}` sarmalı — Sentinel2Provider'ın cache
+            # deseniyle AYNI (parse_statistics dict girdisini ZATEN
+            # ayrıştırılmış kabul edip olduğu gibi döner, ham EOSDA
+            # `indexes` şeması gibi TEKRAR ayrıştırmaya ÇALIŞMAZ).
+            return TaskStatus(task_id=task_id, state=TaskState.COMPLETED,
+                              result={"series": self._merged_cache[task_id]})
         resp = requests.get(f"{self.STATISTICS_URL}/{task_id}",
                             headers=self._headers, timeout=self.timeout,
                             allow_redirects=False)

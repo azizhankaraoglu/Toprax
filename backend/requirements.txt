@@ -15,8 +15,10 @@ click==8.4.1
 cryptography==48.0.0
 distro==1.9.0
 dnspython==2.8.0
+earthengine-api==1.7.36
 email-validator==2.3.0
 ezdxf==1.4.4
+geojson==3.3.0
 fastapi==0.110.1
 fastuuid==0.14.0
 filelock==3.29.0

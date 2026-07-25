@@ -42,6 +42,7 @@ from pyproj import Transformer, CRS
 
 from .base import IRemoteSensingProvider
 from ..dto import TaskStatus, TaskState
+from ..indices import INDEX_CATALOG, EVALSCRIPT_CODES, estimate_lai
 
 
 TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
@@ -96,6 +97,43 @@ function evaluatePixel(s) {
   return { data: [ndvi], dataMask: [s.dataMask] };
 }
 """
+
+
+def _build_stats_evalscript(real_codes: List[str]) -> Tuple[str, List[str]]:
+    """Denetim eklentisi (2026-07-25) — 9 indeksin (LAI hariç, o NDVI'den
+    Python'da türetilir) TEK bir Sentinel Hub Statistics API çağrısında
+    hesaplanması için DİNAMİK evalscript üretir (8 ayrı istek yerine tek
+    istek — ücretsiz CDSE kotasını korur). `real_codes` sırası önemlidir:
+    `data[i]` çıktısı `real_codes[i]`'e karşılık gelir (positional eşleme,
+    `_NDVI_STATS_EVALSCRIPT`'in tek-bantlı deseninin N-bantlı genellemesi).
+    Döner: (evalscript_str, real_codes) — real_codes response parse için
+    aynen geri kullanılır."""
+    codes = [c for c in real_codes if c in EVALSCRIPT_CODES]
+    if not codes:
+        codes = ["ndvi"]
+    needed_bands = sorted({b for c in codes for b in INDEX_CATALOG[c]["bands_required"]})
+    band_list = ", ".join(f'"{b}"' for b in needed_bands + ["dataMask"])
+    band_vars = "\n  ".join(f"let {b}=s.{b};" for b in needed_bands)
+    # NOT: virgül YORUMDAN ÖNCE olmalı — "formül  // ad,\n" yazılırsa virgül
+    # `//` satır-sonu yorumunun İÇİNE düşer ve JS dizisi virgülsüz kalır
+    # (syntax error). Trailing comma (son elemandan sonra da virgül) ES6+'da
+    # geçerlidir, Sentinel Hub evalscript motoru bunu destekler.
+    data_lines = "\n    ".join(f"{INDEX_CATALOG[c]['formula_js']},  // {c}" for c in codes)
+    script = f"""
+//VERSION=3
+function setup() {{
+  return {{ input: [{{ bands: [{band_list}] }}],
+           output: [{{ id: "data", bands: {len(codes)} }}, {{ id: "dataMask", bands: 1 }}] }};
+}}
+function evaluatePixel(s) {{
+  {band_vars}
+  let data = [
+    {data_lines}
+  ];
+  return {{ data: data, dataMask: [s.dataMask] }};
+}}
+"""
+    return script, codes
 
 
 def _expand_bbox_by_meters(geometry: dict, margin_m: float = 30.0) -> Tuple[float, float, float, float]:
@@ -291,10 +329,17 @@ class Sentinel2Provider(IRemoteSensingProvider):
             raise RuntimeError(entry.get("error") or "Sentinel-2 görüntüsü üretilemedi")
         return entry["bytes"]
 
-    # --- İstatistik (NDVI zaman serisi) — senkron, cache'e gömülür ------------
+    # --- İstatistik (çoklu-indeks zaman serisi) — senkron, cache'e gömülür ----
     def request_statistics(self, field_id: str, indices: List[str], date_range: tuple,
                            geometry: Optional[dict] = None) -> str:
+        """Denetim düzeltmesi (2026-07-25) — `indices` ARTIK gerçekten
+        kullanılıyor (önceden sessizce yok sayılıp her zaman sadece NDVI
+        hesaplanıyordu). NDVI last_ndvi mirror'ı için HER ZAMAN dahil edilir.
+        Gerçek CDSE modunda TEK bir çok-bantlı evalscript ile (8 ayrı istek
+        DEĞİL) tüm indeksler bir çağrıda hesaplanır."""
         start, end = date_range
+        if "ndvi" not in indices:
+            indices = ["ndvi", *indices]
         task_id = "s2-stat-" + uuid.uuid4().hex[:12]
         try:
             if self.mock_mode or not geometry:
@@ -303,12 +348,37 @@ class Sentinel2Provider(IRemoteSensingProvider):
                 series, d = [], start
                 while d <= end:
                     ndvi = max(0.1, min(0.95, base + rnd.uniform(-0.08, 0.08)))
-                    series.append({"date": d.strftime("%Y-%m-%d"), "ndvi": round(ndvi, 3),
-                                   "cloud_pct": rnd.randint(0, 20)})
+                    point = {"date": d.strftime("%Y-%m-%d"), "cloud_pct": rnd.randint(0, 20)}
+                    # Mock modda gerçekçi görünüm için tüm indeksler NDVI'den
+                    # türetilir — gerçek CDSE'de her indeks kendi bandından
+                    # bağımsız hesaplanır (bkz. else dalı).
+                    for code in indices:
+                        if code == "ndvi":
+                            point["ndvi"] = round(ndvi, 3)
+                        elif code == "ndre":
+                            point["ndre"] = round(max(0, ndvi * 0.82 + rnd.uniform(-0.03, 0.03)), 3)
+                        elif code == "reci":
+                            point["reci"] = round(max(0, ndvi * 4.5 + rnd.uniform(-0.3, 0.3)), 3)
+                        elif code == "ccci":
+                            point["ccci"] = round(max(0, 0.55 + rnd.uniform(-0.1, 0.1)), 3)
+                        elif code == "ndwi":
+                            point["ndwi"] = round(ndvi * 0.25 - 0.05 + rnd.uniform(-0.02, 0.02), 3)
+                        elif code == "msi":
+                            point["msi"] = round(max(0, 1.4 - ndvi * 0.9 + rnd.uniform(-0.05, 0.05)), 3)
+                        elif code == "msavi":
+                            point["msavi"] = round(ndvi * 1.05, 3)
+                        elif code == "savi":
+                            point["savi"] = round(ndvi * 0.92, 3)
+                        elif code == "evi":
+                            point["evi"] = round(ndvi * 0.78, 3)
+                        elif code == "lai":
+                            point["lai"] = estimate_lai(ndvi)
+                    series.append(point)
                     d += timedelta(days=5)
                 self._cache[task_id] = {"kind": "stats", "ok": True, "series": series}
             else:
                 token = self._get_token()
+                evalscript, real_codes = _build_stats_evalscript(indices)
                 body = {
                     "input": {"bounds": {"geometry": geometry},
                              "data": [{"type": "sentinel-2-l2a",
@@ -318,7 +388,7 @@ class Sentinel2Provider(IRemoteSensingProvider):
                     "aggregation": {
                         "timeRange": {"from": f"{start}T00:00:00Z", "to": f"{end}T23:59:59Z"},
                         "aggregationInterval": {"of": "P5D"},
-                        "evalscript": _NDVI_STATS_EVALSCRIPT, "resx": 10, "resy": 10,
+                        "evalscript": evalscript, "resx": 10, "resy": 10,
                     },
                 }
                 resp = requests.post(STATS_URL, json=body,
@@ -327,11 +397,15 @@ class Sentinel2Provider(IRemoteSensingProvider):
                 series = []
                 for interval in resp.json().get("data", []):
                     bands = interval.get("outputs", {}).get("data", {}).get("bands", {})
-                    stats = (bands.get("B0") or {}).get("stats", {})
-                    if not stats or not stats.get("sampleCount"):
-                        continue
-                    series.append({"date": interval["interval"]["from"][:10],
-                                   "ndvi": round(stats.get("mean", 0), 3), "cloud_pct": 0})
+                    point = {"date": interval["interval"]["from"][:10], "cloud_pct": 0}
+                    for i, code in enumerate(real_codes):
+                        stats = (bands.get(f"B{i}") or {}).get("stats", {})
+                        if stats and stats.get("sampleCount"):
+                            point[code] = round(stats.get("mean", 0), 3)
+                    if "lai" in indices and point.get("ndvi") is not None:
+                        point["lai"] = estimate_lai(point["ndvi"])
+                    if point.get("ndvi") is not None:
+                        series.append(point)
                 self._cache[task_id] = {"kind": "stats", "ok": bool(series), "series": series,
                                         "error": None if series else "Bu aralıkta veri yok"}
         except Exception as e:  # noqa: BLE001

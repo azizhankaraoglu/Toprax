@@ -2,6 +2,81 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [1.1] — Çoklu-İndeks Uzaktan Algılama + Google Earth Engine/NASA HLS (2026-07-25, Build 25072026-0324)
+
+Kullanıcının Sentinel Hub "Test Et" butonunun kimlik-doğrulama-only olduğunu
+sorması ve "NDVI dışında kaç veri noktası alabiliriz" sorusu, bunun
+üzerine **9 indeksin tamamının hem EOSDA hem Sentinel-2'de**, "optimum
+tasarım" (2 sütun) + AI yorumu + bildirim entegrasyonuyla eklenmesi ve
+ayrıca **Google Earth Engine + NASA HLS** yeni bir sağlayıcı olarak
+kurulması istendi.
+
+### 1. Sentinel-2 görüntüsü gösterilmiyordu — GERÇEK bug bulundu
+`RemoteSensingPanel.jsx`'in istatistik yükleme kodu `provider !== "sentinel2"`
+filtresiyle Sentinel-2 serilerini DIŞLIYORDU — salt Sentinel-2 taraması
+yapılmış (hiç EOSDA çalışmamış) bir parselde panelin TAMAMI "henüz veri
+yok" gösteriyordu, backend'de görüntü gerçekten kayıtlı olsa bile. Ayrıca
+Sentinel-2'nin görüntü seçimi EOSDA'nın slider tarihine bağlıydı — iki
+bağımsız uydu geçişi farklı tarihlerde olduğunda görüntü hiç görünmüyordu.
+Her ikisi de düzeltildi (EOSDA/Sentinel-2 serileri artık ayrı tutulur,
+panel ikisinden biri veri taşırsa render olur; S2 görüntüsü kendi tarih
+çizgisine göre seçilip bulunamazsa en son S2 görüntüsüne düşer).
+
+### 2. 9 indeks — tek kaynak katalog + Sentinel-2 (ücretsiz) + EOSDA
+Yeni `backend/remote_sensing/indices.py` — NDVI/NDRE/RECI/CCCI/NDWI/MSI/
+MSAVI/SAVI/EVI/LAI için TEK kaynak katalog (formül, kategori, TR etiket,
+"tahmini" bayrağı). `sentinel2.py` artık TEK bir çok-bantlı evalscript ile
+(8 ayrı istek değil) tüm indeksleri bir CDSE Statistics API çağrısında
+hesaplıyor. `eosda.py`, EOSDA'nın istek başına 3-indeks sınırını 3'lü
+gruplara bölüp sıralı isteklerle aşıyor (LAI EOSDA'ya hiç gönderilmez,
+NDVI'den yerel türetilir) — kullanıcının açık isteği "hem EOSDA'da hem
+Sentinel'de" karşılandı, maliyet uyarısıyla (otomatik taramada varsayılan
+hâlâ sadece NDVI, 9-indeks sadece manuel akışta). `base.py`'nin
+`parse_statistics`/`detect_anomaly` NDVI/NDRE hardcode'undan kurtarılıp
+katalog üzerinden genellendi; `tasks.py` `Parcel.remote_sensing.last_ndvi`'yi
+KORUYARAK yanına `last_indices` dict'i ekliyor.
+
+### 3. AI yorumu + Bildirim
+`services.py`'nin AI/kural metni artık NDVI'nin yanında su stresi (NDWI/
+MSI) ve klorofil/azot (NDRE/RECI/CCCI) bulgularını veri-güdümlü olarak
+ekliyor. Yeni `remote_sensing_water_stress_detected` Communication Policy
+event'i (mevcut `remote_sensing_anomaly_detected`'ten AYRI — admin farklı
+ekibe yönlendirebilsin diye), event_bus.py + communication_policy.py'ye
+ikişer satırlık ekleme.
+
+### 4. Frontend — 2 sütunlu "optimum tasarım"
+Eski tam-genişlik tek NDVI grafiği, mevcut görüntü panelinin grid deseniyle
+2 sütuna bölündü: "Bitki Örtüsü & Klorofil" (NDVI hep açık+kalın, diğer 7
+indeks legend'e tıklayarak aç/kapa) + "Su Stresi & Nem" (NDWI+MSI, hep
+açık). 9 ayrı tam-genişlik grafik YOK. Yeni `GET /remote-sensing/index-catalog`
+ucu — frontend TR etiketleri hardcode ETMEDEN çeker.
+
+### 5. Google Earth Engine + NASA HLS (yeni üçüncü sağlayıcı)
+Kullanıcının verdiği tam spesifikasyona göre `POST /api/v1/analyze-field`
+— HLSS30+HLSL30 birleştirme, %20 bulut filtresi, 30m tampon (hem istatistik
+alanı hem kırpma), NDVI=(B5-B4)/(B5+B4), True Color thumbnail. Literal
+istek/yanıt şeması korunur (TOPRAX'ın standart zarfı kullanılmaz).
+Integration Center'a yeni `google_earth_engine` tipi (service account
+email + JSON key + proje ID, mock-capable — kimlik yoksa/hatalıysa ASLA
+crash olmaz, mock moda düşer). AYRICA `IRemoteSensingProvider` arayüzüne
+sarılıp (`GEEHLSProvider`) mevcut Tarama Politikası/AI-yorumu/bildirim
+boru hattına `provider_override="gee_hls"` ile bağlanabilir hale getirildi.
+**Gerçek kimlik bilgisiyle canlı doğrulandı** — kod Google'ın gerçek
+altyapısına başarıyla kimlik doğruluyor (`ee.Initialize` + `ee.Number(1).
+getInfo()` başarılı); verilen proje ID'si ("seismic-operand-307212") Google
+tarafında SİLİNMİŞ, alternatif olarak denenen proje ID'sinde ise servis
+hesabının gerekli IAM izni yok — bu, TOPRAX kodundan değil kullanıcının
+Google Cloud Console yapılandırmasından kaynaklanan, kod dışı bir engel
+(net Google hata mesajlarıyla doğrulandı, sessizce yutulmadı).
+
+### Doğrulama
+50 pytest yeşil. `base.py`/`sentinel2.py`/`eosda.py` mock modda gerçek
+9-indeks çıktısı üretildiği doğrulandı (birim test). `eosda.py`'nin 3'lü
+gruplama+birleştirme mantığı mock HTTP yanıtlarıyla 3 senaryoda test
+edildi (9 indeks, LAI+küçük istek, düz NDVI — hepsi doğru). GEE entegrasyonu
+gerçek Google altyapısına karşı canlı test edildi (yukarıda). Frontend
+`craco build` hatasız derlendi.
+
 ## [Yayınlanmamış] — İdari Alanlar: İKİNCİ kök neden (2026-07-25, Build 25072026-0100)
 
 Madde 4'teki (aşağıda) nginx/`insert_many` düzeltmesi GEREKLİYDİ ama

@@ -47,6 +47,9 @@ EVENT_TYPES = {
     # IT-27 kural ekranında tanımladığı politikadadır (KONU 1.4 onaylı/
     # onaysız akış `requires_approval` ile aynı kuralda çalışır).
     "remote_sensing_anomaly_detected": "Uzaktan Algılama Anomalisi Tespit Edildi",
+    # Denetim eklentisi (2026-07-25) — NDWI/MSI kaynaklı su stresi, genel
+    # bitki-sağlığı alarmından AYRI event (farklı ekibe yönlendirilebilsin).
+    "remote_sensing_water_stress_detected": "Uzaktan Algılama Su Stresi Tespit Edildi",
 }
 
 _subscribers: Dict[str, List[Callable[..., Awaitable[None]]]] = {}

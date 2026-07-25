@@ -14,8 +14,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from .dto import TaskState, TaskType, EOSDA_REQUESTS_PER_INDEX
+from .indices import ALL_INDEX_CODES, INDEX_CATALOG
 from .monitoring import record_task_metric
-from .notifications import publish_anomaly
+from .notifications import publish_anomaly, publish_water_stress
 
 # Kota + süre koruması: bir "download" turunda EN FAZLA bu kadar sahne render
 # edilir (her render 1 EOSDA task'ı ≈ 1-2 dk sürer, senkron işlenir). En yeni +
@@ -95,12 +96,24 @@ async def run_task(db, task: dict, provider) -> dict:
             # İstatistik geometry ile DOĞRUDAN çalışır — gerçek EOSDA mt_stats
             # field zorunlu tutmaz, gereksiz avca/fields çağrısı yapılmaz.
             indices = task.get("indices") or ["ndvi"]
+            for code in indices:
+                if code not in INDEX_CATALOG:
+                    raise ValueError(f"Bilinmeyen indeks: {code}")
+            if "ndvi" not in indices:
+                indices = ["ndvi", *indices]
             task_id = provider.request_statistics(field_id or task["parcel_id"], indices, (start, end), geometry=geometry)
+            # Her indeks EOSDA_REQUESTS_PER_INDEX (3) "maliyet birimi" sayılır
+            # (dto.py — "1 görüntü = parsel+indeks başına 3 istek" gerçeği).
+            # EOSDA 3'ten fazla indeks istendiğinde bunları KENDİ İÇİNDE 3'lü
+            # gruplar halinde SIRALI birden çok mt_stats isteğiyle karşılar
+            # (bkz. eosda.py request_statistics) — yani TÜM istenen indeksler
+            # işlenir, sadece daha fazla alt-istekle; muhasebe bu yüzden
+            # sağlayıcı farkı gözetmeden tam indeks sayısı üzerinden yapılır.
             api_calls += len(indices) * EOSDA_REQUESTS_PER_INDEX
             status = _poll(provider, task_id)
-            series = provider.parse_statistics(status.result)
+            series = provider.parse_statistics(status.result, indices=indices)
             summary = {"points": len(series), "indices": indices}
-            await _apply_statistics(db, parcel, provider, series)
+            await _apply_statistics(db, parcel, provider, series, indices)
             success = status.state == TaskState.COMPLETED and len(series) > 0
         elif ttype in (TaskType.DOWNLOAD.value, "download"):
             # Görüntü akışı da geometry ile DOĞRUDAN çalışır (field zorunlu değil).
@@ -172,33 +185,57 @@ def _poll(provider, task_id: str, max_wait_s: int = 300, interval_s: float = 2.0
     return status
 
 
-async def _apply_statistics(db, parcel: dict, provider, series: List[Dict]) -> None:
+async def _apply_statistics(db, parcel: dict, provider, series: List[Dict],
+                            requested_indices: Optional[List[str]] = None) -> None:
     """İstatistik sonucunu Parcel.remote_sensing'e işler + son NDVI/anomali +
-    anomali varsa Communication Policy köprüsü."""
+    anomali varsa Communication Policy köprüsü.
+
+    Denetim düzeltmesi (2026-07-25) — önceden SADECE ndvi işleniyordu.
+    `remote_sensing.last_ndvi` (query_engine.py + crop_status.py bunu okur)
+    AYNEN KORUNUR — yanına TÜM mevcut indekslerin son değerlerini taşıyan
+    YENİ `last_indices` dict'i eklenir. `remote_sensing_statistics` dokümanı
+    da geriye uyumlu (`index`/`avg`/`count` kök alanları kalır, frontend'in
+    "Geçmiş Analizler" listesi kırılmaz) + yeni `indices` nested istatistik
+    dict'i."""
     if not series:
         return
     latest = series[-1]
+    present_codes = [c for c in ALL_INDEX_CODES if any(c in p for p in series)]
+    last_indices = {c: latest.get(c) for c in present_codes if latest.get(c) is not None}
+
     await db.parcels.update_one(
         {"id": parcel.get("id")},
         {"$set": {
             "remote_sensing.provider": provider.name,
             "remote_sensing.last_analysis_date": _now(),
             "remote_sensing.last_image_date": latest.get("date"),
-            "remote_sensing.last_ndvi": latest.get("ndvi"),
+            "remote_sensing.last_ndvi": latest.get("ndvi"),          # KORUNUR
+            "remote_sensing.last_indices": last_indices,             # YENİ
             "remote_sensing.last_updated": _now(),
         }})
-    # İstatistikleri arşivle (avg/min/max/median/std için ham seri).
-    vals = [p["ndvi"] for p in series if p.get("ndvi") is not None]
-    if vals:
-        vals_sorted = sorted(vals)
+
+    # İstatistikleri arşivle — her mevcut indeks için avg/min/max/median.
+    indices_stats: Dict[str, dict] = {}
+    for code in present_codes:
+        vals = [p[code] for p in series if p.get(code) is not None]
+        if not vals:
+            continue
+        vs = sorted(vals)
+        indices_stats[code] = {"avg": round(sum(vals) / len(vals), 3), "min": min(vals),
+                               "max": max(vals), "median": vs[len(vs) // 2], "count": len(vals)}
+    if indices_stats:
+        ndvi_stat = indices_stats.get("ndvi", {})
         stat = {
-            "id": str(uuid.uuid4()), "parcel_id": parcel.get("id"),
-            "provider": provider.name, "index": "ndvi",
-            "avg": round(sum(vals) / len(vals), 3), "min": min(vals), "max": max(vals),
-            "median": vals_sorted[len(vals_sorted) // 2],
-            "count": len(vals), "series": series, "created_at": _now(),
+            "id": str(uuid.uuid4()), "parcel_id": parcel.get("id"), "provider": provider.name,
+            "index": "ndvi",                                        # KORUNUR (frontend s.index okuyor)
+            "avg": ndvi_stat.get("avg"), "min": ndvi_stat.get("min"),
+            "max": ndvi_stat.get("max"), "median": ndvi_stat.get("median"),
+            "count": ndvi_stat.get("count", len(series)),           # KORUNUR
+            "indices": indices_stats,                                # YENİ nested dict
+            "series": series, "created_at": _now(),
         }
         await db.remote_sensing_statistics.insert_one(dict(stat))
+
     # Ekili/söküm durumu (#2) — NDVI serisi + manuel kayıtlardan, tarih damgalı.
     try:
         from .crop_status import update_crop_status
@@ -209,6 +246,11 @@ async def _apply_statistics(db, parcel: dict, provider, series: List[Dict]) -> N
     # Anomali → Communication Policy (KONU 1.4).
     anomaly = provider.detect_anomaly(series)
     await publish_anomaly(db, parcel, anomaly, provider.name)
+
+    # Su stresi (NDWI/MSI) — denetim eklentisi (2026-07-25), AYRI event.
+    if "ndwi" in present_codes or "msi" in present_codes:
+        water_anomaly = provider.detect_water_stress(series)
+        await publish_water_stress(db, parcel, water_anomaly, provider.name)
 
 
 async def _store_image(db, parcel: dict, provider, scene: dict, status) -> bool:

@@ -14,6 +14,7 @@ from fastapi import Depends, HTTPException, Request, Query
 from fastapi.responses import FileResponse
 
 from .dto import (TaramaPolicy, RemoteSensingTaskCreate, ScanFrequency)
+from .indices import ALL_INDEX_CODES, INDEX_CATALOG
 from .providers import get_remote_sensing_provider
 from .tasks import create_task, process_pending_tasks
 from .scheduler import run_scheduler_tick, find_uncovered_parcels
@@ -34,12 +35,25 @@ def _rs_metrics(series):
     if not ndvis:
         return None
     latest = series[-1]
-    return {
+    m = {
         "avg": round(sum(ndvis) / len(ndvis), 3),
         "min": min(ndvis), "max": max(ndvis),
         "latest_ndvi": latest.get("ndvi"), "latest_date": latest.get("date"),
         "first_ndvi": series[0].get("ndvi"), "points": len(series),
     }
+    # Denetim eklentisi (2026-07-25) — kök NDVI alanları KIRILMADAN (mevcut
+    # frontend interp.metrics.avg vb. çalışmaya devam eder), diğer 8
+    # indeksin de ortalama/son değeri `by_index` altında toplanır.
+    by_index = {}
+    for code in ALL_INDEX_CODES:
+        if code == "ndvi":
+            continue
+        vals = [p.get(code) for p in series if p.get(code) is not None]
+        if vals:
+            by_index[code] = {"avg": round(sum(vals) / len(vals), 3), "min": min(vals),
+                              "max": max(vals), "latest": series[-1].get(code)}
+    m["by_index"] = by_index
+    return m
 
 
 def _rs_rule_interpretation(parcel, m):
@@ -67,23 +81,55 @@ def _rs_rule_interpretation(parcel, m):
             lines.append(f"Eğilim: NDVI {first} → {latest} artışta; bitki gelişimi olumlu.")
     if latest < 0.45:
         lines.append("Öneri: En kısa sürede sulama ve toprak nemi kontrolü önerilir.")
+
+    # Denetim eklentisi (2026-07-25) — su stresi (NDWI/MSI) ve klorofil/azot
+    # (NDRE/RECI/CCCI) bulguları, veri MEVCUTSA veri-güdümlü olarak eklenir
+    # (mevcut NDVI paragrafı DEĞİŞMEDEN kalır).
+    bi = m.get("by_index", {})
+    if "ndwi" in bi or "msi" in bi:
+        ndwi_l = bi.get("ndwi", {}).get("latest")
+        msi_l = bi.get("msi", {}).get("latest")
+        if (ndwi_l is not None and ndwi_l < 0) or (msi_l is not None and msi_l > 1.3):
+            lines.append(f"Su Stresi: NDWI={ndwi_l}, MSI={msi_l} — bitki su içeriği düşük/nem stresi "
+                         "göstergeleri var, sulama zamanlaması gözden geçirilmeli.")
+        else:
+            lines.append(f"Su Stresi: NDWI={ndwi_l}, MSI={msi_l} — mevcut nem durumu normal aralıkta.")
+    if "ndre" in bi or "reci" in bi or "ccci" in bi:
+        lines.append(f"Klorofil/Azot: NDRE={bi.get('ndre', {}).get('latest')}, "
+                     f"RECI={bi.get('reci', {}).get('latest')} — erken azot/klorofil stresini "
+                     "NDVI'den daha erken gösterebilir.")
+    if "lai" in bi:
+        lines.append(f"Yaprak Alan İndeksi (TAHMİNİ): {bi['lai'].get('latest')} — NDVI'den ampirik "
+                     "olarak türetilmiştir, kesin ölçüm değildir.")
     return " ".join(lines)
 
 
 def _rs_ai_prompt(parcel, m, series):
     crop = parcel.get("current_crop") or "ürün"
     seri = ", ".join(f"{p.get('date')}={p.get('ndvi')}" for p in series if p.get("ndvi") is not None)
+    # Denetim eklentisi (2026-07-25) — mevcut NDVI istemi DEĞİŞMEDEN, her ek
+    # indeks için (veri varsa) tek satırlık bir zaman serisi metni eklenir.
+    extra_series = []
+    bi = m.get("by_index", {})
+    for code, label in (("ndwi", "NDWI"), ("msi", "MSI"), ("ndre", "NDRE"), ("reci", "RECI"), ("lai", "LAI (tahmini)")):
+        if code in bi:
+            vals = ", ".join(f"{p.get('date')}={p.get(code)}" for p in series if p.get(code) is not None)
+            if vals:
+                extra_series.append(f"{label} zaman serisi: {vals}.")
+    extra_block = ("\n" + "\n".join(extra_series) + "\n") if extra_series else "\n"
+    ek_talimat = ("(5) varsa su stresi (NDWI/MSI) ve klorofil/azot (NDRE/RECI) bulgularını da yorumuna kat."
+                  if extra_series else "")
     return (
         f"Parsel: {parcel.get('name') or parcel.get('parcel_code')} "
         f"({parcel.get('area_dekar')} dekar), ürün: {crop}.\n"
         f"NDVI ortalaması: {m['avg']}, en düşük: {m['min']}, en yüksek: {m['max']}, "
         f"son ölçüm: {m['latest_ndvi']} (tarih {m['latest_date']}), toplam {m['points']} tarih.\n"
-        f"NDVI zaman serisi: {seri}.\n"
+        f"NDVI zaman serisi: {seri}.{extra_block}"
         f"Referans: sağlıklı bir {crop} tarlasında bu dönemde NDVI ~0.65-0.80 olmalı.\n"
         "Şunları açıkla: (1) NDVI nedir, yüksek/düşük olması ne anlama gelir; "
         "(2) bu tarlanın durumu (sağlıklı mı, su/besin stresi veya susuzluk var mı); "
         "(3) GEREKÇE olarak beklenen NDVI ile bu tarlanın değerini KARŞILAŞTIR; "
-        "(4) 1-2 somut öneri (ör. sulama). En fazla 6-7 cümle, sade Türkçe."
+        f"(4) 1-2 somut öneri (ör. sulama). {ek_talimat} En fazla 6-7 cümle, sade Türkçe."
     )
 
 
@@ -96,6 +142,15 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
 
     def _now():
         return datetime.now(timezone.utc).isoformat()
+
+    # ---- İndeks kataloğu (2026-07-25) — frontend'in TR etiket/açıklama'yı
+    # hardcode ETMEDEN çekmesi için (tek kaynak ilkesi, bkz. indices.py).
+    @api_router.get("/remote-sensing/index-catalog")
+    async def rs_index_catalog(user=Depends(require_permission("remote_sensing:view"))):
+        return {code: {"label_tr": v["label_tr"], "category": v["category"].value,
+                       "description_tr": v["description_tr"], "is_estimated": v["is_estimated"],
+                       "chart_default_visible": v["chart_default_visible"]}
+                for code, v in INDEX_CATALOG.items()}
 
     # ---- Sağlayıcı durumu ----------------------------------------------------
     @api_router.get("/remote-sensing/providers/status")
@@ -202,8 +257,12 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
         if not parcel_id:
             raise HTTPException(400, "parcel_id gerekli")
         created = [
+            # Denetim eklentisi (2026-07-25) — Sentinel-2 TEK istekte tüm 9
+            # indeksi hesaplayabildiğinden (ücretsiz, ek maliyet yok — bkz.
+            # sentinel2.py _build_stats_evalscript) varsayılan artık NDVI
+            # değil, TÜM katalog.
             await create_task(db, parcel_id=parcel_id, task_type="statistics",
-                              indices=["ndvi"], trigger="manual", priority=100,
+                              indices=ALL_INDEX_CODES, trigger="manual", priority=100,
                               provider_override="sentinel2"),
             await create_task(db, parcel_id=parcel_id, task_type="download",
                               indices=["ndvi"], trigger="manual", priority=100,
@@ -358,3 +417,10 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
             "index": (stat or {}).get("index", "ndvi"),
             "analysis_date": (stat or {}).get("created_at"),
         }
+
+    # ---- Google Earth Engine + NASA HLS (Faz 9C, 2026-07-25) ------------------
+    # Ayrı bir domain (server.py'ye yeni kod eklenmez) ama AYNI api_router'a
+    # bağlanır — literal `POST /v1/analyze-field` sözleşmesi bu şekilde
+    # `/api` önekiyle birlikte `POST /api/v1/analyze-field` olarak dışa açılır.
+    from .providers.gee_hls import register_gee_hls_routes
+    register_gee_hls_routes(api_router, db, current_user, require_permission, log_audit, require_feature)

@@ -11,11 +11,13 @@ ABC kırılmaz.
 from .base import IRemoteSensingProvider
 from .eosda import EOSDAProvider
 from .sentinel2 import Sentinel2Provider
+from .gee_hls import GEEHLSProvider
 from .placeholders import PlanetProvider, AirbusProvider, UP42RSProvider
 
 _PROVIDERS = {
     "eosda": EOSDAProvider,
     "sentinel2": Sentinel2Provider,
+    "gee_hls": GEEHLSProvider,
     "planet": PlanetProvider,
     "airbus": AirbusProvider,
     "up42": UP42RSProvider,
@@ -39,6 +41,20 @@ async def get_remote_sensing_provider(db, tenant_id: str = None,
         real = enabled and cfg.get("client_id") and cfg.get("client_secret") and not mock_mode
         return Sentinel2Provider(client_id=cfg.get("client_id"), client_secret=cfg.get("client_secret"),
                                  mock_mode=not real)
+
+    if itype == "gee_hls":
+        # Denetim Faz 9C — Integration Center'da AYRI bir "google_earth_engine"
+        # tipi (sentinel2'nin sentinel_hub'ı yeniden kullanmasından farklı,
+        # çünkü GEE service account kimliği hiçbir mevcut entegrasyonla
+        # ÖRTÜŞMÜYOR).
+        doc = await db.integrations.find_one({"type": "google_earth_engine"}, {"_id": 0})
+        cfg = (doc or {}).get("config", {})
+        enabled = bool(doc and doc.get("enabled"))
+        mock_mode = cfg.get("mock_mode", True)
+        real = enabled and cfg.get("service_account_email") and cfg.get("service_account_key_json") and not mock_mode
+        return GEEHLSProvider(email=cfg.get("service_account_email"),
+                              key_json=cfg.get("service_account_key_json"),
+                              project=cfg.get("project"), mock_mode=not real)
 
     doc = await db.integrations.find_one({"type": "eosda"}, {"_id": 0})
     cfg = (doc or {}).get("config", {})

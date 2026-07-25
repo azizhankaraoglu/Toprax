@@ -2435,6 +2435,36 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   başarısız denemelerinden kalan 662 kısmi kayıt (83 il/578 ilçe/1
   mahalle) veritabanında duruyor — toplu import idempotent olmadığından
   yeniden yüklemeden önce kullanıcıyla birlikte temizlenmeli.
+- **2026-07-25 (Build 25072026-0324, v1.1) — Çoklu-İndeks Uzaktan Algılama
+  + Google Earth Engine/NASA HLS.** Sentinel Hub "Test Et" butonunun
+  sadece kimlik doğrulama yaptığı (tasarım gereği) netleştirildi; bu arada
+  GERÇEK bir bug bulundu — `RemoteSensingPanel.jsx` Sentinel-2 serilerini
+  filtreleyip dışlıyordu, salt Sentinel-2 taraması yapılmış parsellerde
+  panel tamamen boş görünüyordu (düzeltildi). Kullanıcı NDVI dışında kaç
+  veri alınabileceğini sorunca **9 indeksin (NDRE/RECI/CCCI/NDWI/MSI/
+  MSAVI/SAVI/EVI/LAI) hem EOSDA hem Sentinel-2'de** eklenmesini istedi:
+  yeni `backend/remote_sensing/indices.py` tek-kaynak katalog; `sentinel2.
+  py` TEK çok-bantlı evalscript ile tüm indeksleri bir çağrıda hesaplıyor
+  (ücretsiz, kota korunur); `eosda.py` 3-indeks/istek sınırını 3'lü
+  gruplayıp sıralı isteklerle aşıyor (LAI EOSDA'ya gönderilmez, NDVI'den
+  türetilir) — maliyet uyarısıyla, otomatik tarama varsayılanı hâlâ
+  sadece NDVI. `base.py`/`tasks.py` genellendi (`last_ndvi` KORUNDU,
+  yanına `last_indices` eklendi). AI yorumuna su stresi/klorofil bulguları
+  + yeni `remote_sensing_water_stress_detected` bildirim event'i eklendi.
+  Frontend: eski tek NDVI grafiği "optimum tasarım" ile 2 sütuna bölündü
+  (Bitki Örtüsü&Klorofil legend-toggle + Su Stresi&Nem, 9 ayrı grafik
+  YOK). Ayrıca kullanıcının verdiği tam spesifikasyona göre **Google
+  Earth Engine + NASA HLS** yeni üçüncü sağlayıcı: `POST /api/v1/analyze-
+  field` (HLSS30+HLSL30, %20 bulut filtresi, 30m tampon, NDVI=(B5-B4)/
+  (B5+B4), True Color thumbnail, literal istek/yanıt şeması), Integration
+  Center'a yeni `google_earth_engine` tipi, `IRemoteSensingProvider`'a
+  sarılıp mevcut boru hattına da bağlandı. Gerçek servis hesabı kimlik
+  bilgisiyle CANLI doğrulandı — kod Google'ın gerçek altyapısına başarıyla
+  kimlik doğruluyor; kalan engel (proje silinmiş / IAM izni eksik) TOPRAX
+  kodundan değil kullanıcının Google Cloud Console yapılandırmasından
+  kaynaklanıyor. **Doğrulama:** 50 pytest yeşil, EOSDA 3'lü gruplama mock
+  HTTP ile 3 senaryoda test edildi, `craco build` hatasız, GEE gerçek API'ye
+  karşı canlı test edildi (bkz. CHANGELOG.md).
 
 ## 7. Çalıştırma
 

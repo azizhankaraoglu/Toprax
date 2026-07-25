@@ -18,6 +18,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
 from ..dto import TaskStatus, WeatherData, Anomaly
+from ..indices import ALL_INDEX_CODES
 
 
 class IRemoteSensingProvider(ABC):
@@ -65,34 +66,50 @@ class IRemoteSensingProvider(ABC):
         """(3) Task Status polling — tüm asenkron task tiplerinin ortak durumu."""
         raise NotImplementedError
 
-    def parse_statistics(self, result) -> List[Dict]:
+    def parse_statistics(self, result, indices: Optional[List[str]] = None) -> List[Dict]:
         """Sağlayıcı istatistik sonucunu ortak seriye çevirir:
-        `[{date, ndvi, ndre?, cloud_pct}]`. İki şekli de kabul eder:
-          - Mock:  `{"series": [{date, ndvi, ...}]}`
+        `[{date, ndvi, ndre?, ..., cloud_pct}]`. İki şekli de kabul eder:
+          - Mock/Sentinel2: `{"series": [{date, ndvi, ...}]}` — zaten çok-
+            indeksli, olduğu gibi geçer.
           - Gerçek EOSDA: `[{date, cloud, indexes: {NDVI: {average, median, ...}}}, ...]`
         (bkz. https://doc.eos.com/docs/statistics/ — mt_stats yanıt şeması).
+
+        Denetim düzeltmesi (2026-07-25) — önceden SADECE ndvi/ndre'yi
+        hardcoded olarak okuyordu; artık `indices` (verilmezse TÜM katalog)
+        üzerinden döngüyle keyfi sayıda indeksi `idx` dict'inden çeker.
+
+        ÖNEMLİ (2026-07-25, ikinci düzeltme): önceden bir nokta SADECE NDVI
+        değeri varsa kabul ediliyordu (`if ndvi is None: continue`). EOSDA
+        9-indeks isteği 3'lük gruplara BÖLÜNÜP birden çok istekle
+        karşılandığında (bkz. eosda.py request_statistics), 1. grup DIŞINDAKİ
+        gruplar NDVI TAŞIMAZ — eski mantık bu grupların TÜM noktalarını
+        sessizce SİLERDİ. Artık bir nokta, istenen indekslerden HERHANGİ
+        BİRİ mevcutsa kabul edilir (NDVI zorunlu değil); nihai birleştirilmiş
+        seride NDVI'nin var olması `tasks.py`'nin "ndvi her zaman dahil et"
+        garantisiyle sağlanır.
         """
         if not result:
             return []
         if isinstance(result, dict):
             return result.get("series", [])
+        codes = indices or ALL_INDEX_CODES
         out: List[Dict] = []
         for sc in result:
             if not isinstance(sc, dict):
                 continue
             idx = sc.get("indexes") or {}
-            ndvi_stats = idx.get("NDVI") or idx.get("ndvi") or {}
-            ndre_stats = idx.get("NDRE") or idx.get("ndre") or {}
-            ndvi = ndvi_stats.get("average", ndvi_stats.get("median"))
-            if ndvi is None:
-                continue
-            ndre = ndre_stats.get("average")
-            out.append({
-                "date": sc.get("date"),
-                "ndvi": round(float(ndvi), 3),
-                "ndre": round(float(ndre), 3) if ndre is not None else None,
-                "cloud_pct": round(float(sc.get("cloud", 0) or 0)),
-            })
+            point = {"date": sc.get("date"), "cloud_pct": round(float(sc.get("cloud", 0) or 0))}
+            found_any = False
+            for code in codes:
+                stats = idx.get(code.upper()) or idx.get(code)
+                if not stats:
+                    continue
+                val = stats.get("average", stats.get("median"))
+                if val is not None:
+                    point[code] = round(float(val), 3)
+                    found_any = True
+            if found_any:
+                out.append(point)
         out.sort(key=lambda p: p.get("date") or "")
         return out
 
@@ -119,10 +136,11 @@ class IRemoteSensingProvider(ABC):
     def get_fire_alerts(self, bbox, days: int = 1) -> List[Dict]:
         return []
 
-    def detect_anomaly(self, series: List[Dict]) -> Anomaly:
+    def detect_anomaly(self, series: List[Dict], index: str = "ndvi") -> Anomaly:
         """Basit yerel anomali sezgisi (FAZ 18 Confidence Engine devralana
-        kadar) — NDVI serisinde ani/derin düşüş varsa şüphe işaretler."""
-        vals = [p.get("ndvi") for p in series if p.get("ndvi") is not None]
+        kadar) — seride ani/derin düşüş varsa şüphe işaretler. `index`
+        parametrik (varsayılan ndvi, geriye uyumlu — çağrı yerleri değişmez)."""
+        vals = [p.get(index) for p in series if p.get(index) is not None]
         if len(vals) < 2:
             return Anomaly(detected=False)
         latest, prev = vals[-1], vals[-2]
@@ -130,6 +148,30 @@ class IRemoteSensingProvider(ABC):
         if latest < 0.35 or drop > 0.20:
             sev = "yuksek" if (latest < 0.25 or drop > 0.30) else "orta"
             return Anomaly(detected=True, severity=sev, confidence=min(0.5 + drop, 0.95),
-                           reason=f"NDVI düşüşü: {prev:.2f} → {latest:.2f}",
+                           reason=f"{index.upper()} düşüşü: {prev:.2f} → {latest:.2f}",
                            date=series[-1].get("date"))
+        return Anomaly(detected=False)
+
+    def detect_water_stress(self, series: List[Dict]) -> Anomaly:
+        """Denetim eklentisi (2026-07-25) — MSI yükselişi VEYA NDWI düşüşünde
+        su stresi işaretler (detect_anomaly'nin 'ani değişim' sezgisiyle
+        simetrik, yön tersine çevrilmiş: burada YÜKSELİŞ/DÜŞÜŞ stres demek)."""
+        msi_vals = [p.get("msi") for p in series if p.get("msi") is not None]
+        ndwi_vals = [p.get("ndwi") for p in series if p.get("ndwi") is not None]
+        if len(msi_vals) >= 2:
+            latest, prev = msi_vals[-1], msi_vals[-2]
+            rise = latest - prev
+            if latest > 1.3 or rise > 0.25:
+                sev = "yuksek" if (latest > 1.6 or rise > 0.4) else "orta"
+                return Anomaly(detected=True, severity=sev, confidence=min(0.5 + rise, 0.95),
+                               reason=f"MSI (nem stresi) yükselişi: {prev:.2f} → {latest:.2f}",
+                               date=series[-1].get("date"))
+        if len(ndwi_vals) >= 2:
+            latest, prev = ndwi_vals[-1], ndwi_vals[-2]
+            drop = prev - latest
+            if latest < -0.05 or drop > 0.15:
+                sev = "yuksek" if (latest < -0.15 or drop > 0.25) else "orta"
+                return Anomaly(detected=True, severity=sev, confidence=min(0.5 + drop, 0.95),
+                               reason=f"NDWI (bitki su içeriği) düşüşü: {prev:.2f} → {latest:.2f}",
+                               date=series[-1].get("date"))
         return Anomaly(detected=False)

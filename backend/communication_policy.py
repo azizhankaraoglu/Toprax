@@ -51,6 +51,9 @@ EVENT_CONTACT_RESOLVERS = {
     # farmer_id gelir). KONU 1.4: bu event için tanımlanan politikada
     # requires_approval=True ise önce Ziraat Mühendisi onayına düşer.
     "remote_sensing_anomaly_detected": ("farmer", "farmer_id"),
+    # Denetim eklentisi (2026-07-25) — su stresi (NDWI/MSI), aynı hedef
+    # çözümlemesi ama AYRI event_type (bkz. event_bus.EVENT_TYPES).
+    "remote_sensing_water_stress_detected": ("farmer", "farmer_id"),
 }
 
 DEFAULT_CHANNELS_ENABLED = {k: True for k in CHANNELS}

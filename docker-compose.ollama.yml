@@ -24,7 +24,13 @@ services:
     ports:
       # Sadece localhost'a açık — dışarıya kapalı (Mongo'nun P0 düzeltmesiyle
       # AYNI ihtiyat: yerel LLM sunucusu da host'un dışına açılmamalı).
-      - "127.0.0.1:11434:11434"
+      # NOT (2026-07-25, canlıda bulundu): host portu 11435 — standart 11434
+      # bu geliştirme makinesinde TOPRAX'a AİT OLMAYAN başka bir Ollama
+      # container'ı (ciftci_ollama) tarafından zaten kullanılıyor, "ports are
+      # not available" ile çakışıyordu. Konteyner İÇİ port değişmedi (backend
+      # ağ üzerinden hep "ollama:11434" kullanır); bu sadece host'tan erişim
+      # için farklı bir dış port.
+      - "127.0.0.1:11435:11434"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 15s
