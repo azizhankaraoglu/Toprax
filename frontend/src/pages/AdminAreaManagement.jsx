@@ -16,12 +16,47 @@ import GeoFileImport from "@/components/GeoFileImport";
 import { QuickAddPanel } from "@/components/QuickAdd";
 import { getBasemapUrl } from "@/lib/theme";
 
+// 2026-08-19 — Kolonlar GERÇEK il/ilçe/mahalle dosyalarının taşıdığı profil
+// alanlarına genişletildi (kullanıcı: "geojson dosyasında yer alan demografik
+// veriler kolon olarak eklenmemiş"). Alanlar backend'de tipli kolon
+// (admin_areas.AdminAreaDemographics) ve field_definitions kaydı olarak
+// tanımlı; SmartDataGrid kolon göster/gizle sunduğu için hepsi burada
+// listelenir, kullanıcı istemediğini kapatır.
+//
+// Eski `population`/`agricultural_area_dekar`/`farmer_count_est` alanları
+// KALDIRILMADI — IT-13.6'dan beri elle girilebilen alanlar, dosyadan gelen
+// `nufus_toplam`/`islenen_tarim_arazisi_dekar`/`kayitli_cks_ciftci_sayisi`
+// ile aynı şey DEĞİL (biri kullanıcı tahmini, diğeri kaynak veri).
 const GRID_COLUMNS = [
   { key: "name", label: "Ad", type: "text" },
   { key: "area_type", label: "Tip", type: "text" },
-  { key: "population", label: "Nüfus", type: "number" },
-  { key: "agricultural_area_dekar", label: "Tarım Alanı (dekar)", type: "number" },
-  { key: "farmer_count_est", label: "Tahmini Çiftçi Sayısı", type: "number" },
+  { key: "il_adi", label: "İl", type: "text" },
+  { key: "ilce_adi", label: "İlçe", type: "text" },
+  { key: "nufus_toplam", label: "Nüfus", type: "number" },
+  { key: "hane_sayisi", label: "Hane", type: "number" },
+  { key: "kayitli_cks_ciftci_sayisi", label: "ÇKS Çiftçi", type: "number" },
+  { key: "islenen_tarim_arazisi_dekar", label: "İşlenen Arazi (dekar)", type: "number" },
+  { key: "baskin_urun_grubu", label: "Baskın Ürün Grubu", type: "text" },
+  { key: "birinci_ana_urun", label: "1. Ana Ürün", type: "text" },
+  { key: "hane_aylik_gelir_tl", label: "Hane Geliri (TL)", type: "number" },
+  { key: "traktor_sayisi", label: "Traktör", type: "number" },
+  { key: "buyukbas_hayvan_sayisi", label: "Büyükbaş", type: "number" },
+  { key: "kucukbas_hayvan_sayisi", label: "Küçükbaş", type: "number" },
+  { key: "population", label: "Nüfus (elle)", type: "number" },
+  { key: "agricultural_area_dekar", label: "Tarım Alanı (elle)", type: "number" },
+  { key: "farmer_count_est", label: "Çiftçi Sayısı (elle)", type: "number" },
+];
+
+//: Harita popup'ında gösterilecek özet alanlar — backend'deki POPUP_FIELDS
+//: ile AYNI liste (iki tarafta elle senkron tutulur; TKGM eşlemesindeki
+//: bilinçli JS/Python ikizliğiyle aynı aile, bkz. CLAUDE.md IT-16 notu).
+export const POPUP_FIELDS = [
+  ["il_adi", "İl"], ["ilce_adi", "İlçe"], ["mahalle_adi", "Mahalle"],
+  ["nufus_toplam", "Nüfus"], ["hane_sayisi", "Hane"],
+  ["kayitli_cks_ciftci_sayisi", "ÇKS Çiftçi"],
+  ["islenen_tarim_arazisi_dekar", "İşlenen Arazi (dekar)"],
+  ["baskin_urun_grubu", "Baskın Ürün"], ["birinci_ana_urun", "1. Ürün"],
+  ["hane_aylik_gelir_tl", "Hane Geliri (TL)"],
 ];
 
 function centerOf(geometry) {

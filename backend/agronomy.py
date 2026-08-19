@@ -83,6 +83,21 @@ SIGNAL_CATALOG: List[Dict[str, str]] = [
     # vb.) DEĞİŞMEDİ — mevcut kural kayıtları bu anahtarı referans alıyor.
     {"key": "munavebe_ihlali", "label": "Münavebe İhlali (1/0)", "category": "gecmis", "type": "number"},
     {"key": "ardisik_pancar_yili", "label": "Ardışık Yıl (Aynı Ürün)", "category": "gecmis", "type": "number"},
+    # --- Güneş / arazi (2026-08-19, remote_sensing/solar.py) -------------
+    # Bu sinyaller parselin KAYITLI güneş analizinden okunur; analiz
+    # yapılmamışsa None gelir ve `is_null` operatörüyle "veri yok" kuralı
+    # yazılabilir (mevcut "Toprak analizi hiç yok" kuralıyla AYNI desen).
+    {"key": "gunes_saati_gunluk", "label": "Günlük Etkin Güneşlenme (saat)", "category": "gunes", "type": "number"},
+    {"key": "gunes_yeterlilik_yuzde", "label": "Güneş İhtiyacı Karşılanma (%)", "category": "gunes", "type": "number"},
+    {"key": "golge_orani_yuzde", "label": "Ortalama Gölge Oranı (%)", "category": "gunes", "type": "number"},
+    {"key": "egim_yuzde", "label": "Arazi Eğimi (%)", "category": "gunes", "type": "number"},
+    {"key": "baki", "label": "Bakı (yön)", "category": "gunes", "type": "text"},
+    # --- Toprak biyolojisi (soil_biology.py) ----------------------------
+    {"key": "toprak_sagligi_skoru", "label": "Toprak Sağlığı Skoru (0-100)", "category": "biyoloji", "type": "number"},
+    {"key": "kist_nematodu_var", "label": "Pancar Kist Nematodu (1/0)", "category": "biyoloji", "type": "number"},
+    {"key": "patojen_sayisi", "label": "Tespit Edilen Patojen Sayısı", "category": "biyoloji", "type": "number"},
+    {"key": "solucan_sayisi_m2", "label": "Solucan Sayısı (adet/m²)", "category": "biyoloji", "type": "number"},
+    {"key": "mikrobiyal_biyokutle", "label": "Mikrobiyal Biyokütle C (mg/kg)", "category": "biyoloji", "type": "number"},
 ]
 
 SIGNAL_KEYS = {s["key"] for s in SIGNAL_CATALOG}
@@ -179,6 +194,24 @@ DEFAULT_CROP = {
     "key": "pancar", "label": "Şeker Pancarı",
     "match_terms": ["pancar", "şeker pancarı", "seker pancari"],
 }
+
+
+def _suitability_reason(result: Dict[str, Any], olumlu: List[Dict[str, Any]],
+                        olumsuz: List[Dict[str, Any]]) -> str:
+    """Yüzdelik uygunluğun TEK CÜMLELİK gerekçesi.
+
+    Kullanıcı isteği: "uygunluğu yüzdelik olarak vermek gerekir — örnek:
+    buğdaya uygunluk yüzde 95, sebebi şu". Liste hâlindeki kural eşleşmeleri
+    ekranda ayrıca gösteriliyor; bu alan onun okunabilir özeti.
+    """
+    if result.get("blocking"):
+        engel = next((m["name"] for m in olumsuz if m.get("is_blocking")), None)
+        return f"Uygun değil — engelleyici bulgu: {engel or 'kritik kural ihlali'}"
+    if not olumsuz:
+        return f"%{round(result['score'], 1)} uygun — olumsuz bulgu yok"
+    en_agir = sorted(olumsuz, key=lambda m: m.get("score_delta") or 0)[:2]
+    sebepler = ", ".join(f"{m['name']} ({m['score_delta']:+g})" for m in en_agir)
+    return f"%{round(result['score'], 1)} uygun — puanı en çok düşüren: {sebepler}"
 
 # Sistem promptu {urun} yer tutucusu taşır — crop.label ile doldurulur,
 # böylece YENİ bir ürün eklendiğinde varsayılan şablon otomatik uyarlanır
@@ -315,18 +348,28 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
     @api_router.get("/ekim-planlama/parcel-search")
     async def parcel_search(q: str = "", limit: int = 20,
                             user=Depends(require_permission("plantings:view"))):
-        """il / ilçe / mahalle / ada / parsel no / parsel adı üzerinden arama."""
+        """il / ilçe / mahalle / ada / parsel no / parsel adı üzerinden arama.
+
+        2026-08-19 — BOŞ SORGU ARTIK BOŞ LİSTE DÖNDÜRMÜYOR: arama kutusuna
+        tıklayan kullanıcıya ilk 20 parsel gösterilir. Eski davranışta
+        kullanıcı kutuya tıklıyor, hiçbir şey görmüyor ve "parseller
+        gelmiyor" diye bildiriyordu (canlıda sulama/ekim/görev formlarında
+        yaşandı) — oysa arama çalışıyordu, sadece 2 karakter yazmadan
+        hiçbir şey göstermiyordu.
+        """
         q = (q or "").strip()
-        if len(q) < 2:
-            return []
-        rx = {"$regex": re.escape(q), "$options": "i"}
-        filt = {
-            "is_active": {"$ne": False},
-            "$or": [
+        filt: Dict[str, Any] = {"is_active": {"$ne": False}}
+        if len(q) >= 2:
+            rx = {"$regex": re.escape(q), "$options": "i"}
+            filt["$or"] = [
                 {"name": rx}, {"il": rx}, {"ilce": rx}, {"mahalle": rx},
                 {"ada_no": rx}, {"parsel_no_tapu": rx}, {"village": rx},
-            ],
-        }
+            ]
+        elif q:
+            # Tek karakter: ada/parsel numarası aramalarında anlamlı olabilir
+            # ama ad araması için çok geniş — sadece kod alanlarında aranır.
+            rx = {"$regex": f"^{re.escape(q)}", "$options": "i"}
+            filt["$or"] = [{"ada_no": rx}, {"parsel_no_tapu": rx}]
         limit = max(1, min(limit, 50))
         docs = await db.parcels.find(filt, {
             "_id": 0, "id": 1, "name": 1, "il": 1, "ilce": 1, "mahalle": 1,
@@ -586,11 +629,42 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
         # Pancarı" kaydı (idempotent) — mevcut DEFAULT_RULES/DEFAULT_PROMPT_
         # TEMPLATE zaten bu ürün için yazılmıştı, davranış AYNEN korunur.
         crop_key = DEFAULT_CROP["key"]
-        if not await db.agronomy_crops.find_one({"key": crop_key}, {"_id": 0}):
+        existing_crop = await db.agronomy_crops.find_one({"key": crop_key}, {"_id": 0})
+        if not existing_crop:
             await db.agronomy_crops.insert_one({
                 "id": str(uuid.uuid4()), **DEFAULT_CROP,
                 "is_active": True, "is_default": True, "created_at": _now(),
             })
+        else:
+            # 2026-08-18 — KENDİNİ ONARAN seed (field_definitions.py'nin
+            # `_upgrade_lookup_group` kalıbıyla AYNI aile).
+            #
+            # NEDEN: ürün kataloğu, crop alanı sonradan eklendiğinde çalışan
+            # tek seferlik bir veri migrasyonuyla da doldurulabiliyor; o yol
+            # `label`i ham anahtardan türetiyor ve `match_terms`i tek kelimeye
+            # düşürüyor (canlıda görüldü: label "pancar", match_terms
+            # ["pancar"], is_default false). Sonuç sessiz ama ciddi:
+            #   * ekranda ürün adı "pancar" diye küçük harfle görünür,
+            #   * "şeker pancarı" yazan ekim/verim kayıtları `match_terms`
+            #     eşleşmesine TAKILMAZ → münavebe ve geçmiş polar sinyalleri
+            #     boş kalır, yani kural motoru eksik veriyle karar verir.
+            # Eski seed "kayıt varsa dokunma" dediği için bu bozukluk tekrar
+            # seed çağrılarında da düzelmiyordu. Artık eksik/daralmış alanlar
+            # kanonik değerlerle tamamlanır; kullanıcının ELLE değiştirdiği
+            # bir etiket varsa (DEFAULT dışında bir label) korunur.
+            fixes: Dict[str, Any] = {}
+            if not existing_crop.get("label") or existing_crop.get("label") == crop_key:
+                fixes["label"] = DEFAULT_CROP["label"]
+            missing_terms = [t for t in DEFAULT_CROP["match_terms"]
+                             if t not in (existing_crop.get("match_terms") or [])]
+            if missing_terms:
+                fixes["match_terms"] = (existing_crop.get("match_terms") or []) + missing_terms
+            if not existing_crop.get("is_default"):
+                fixes["is_default"] = True
+            if existing_crop.get("is_active") is False:
+                fixes["is_active"] = True
+            if fixes:
+                await db.agronomy_crops.update_one({"key": crop_key}, {"$set": fixes})
 
         added = 0
         for i, r in enumerate(DEFAULT_RULES):
@@ -721,6 +795,23 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
         sig["ardisik_pancar_yili"] = ardisik
         sig["munavebe_ihlali"] = 1 if ardisik >= 1 else 0
         detay["ayni_urun_ekilen_yillar"] = sorted(crop_yillari, reverse=True)[:8]
+
+        # --- Güneş/arazi (2026-08-19) — parselin KAYITLI analizinden.
+        # Burada Earth Engine'e GİTMEYİZ: kural motoru toplu sorguda yüzlerce
+        # parsel için çalışır, her biri için uydu çağrısı hem yavaş hem kotalı
+        # olurdu. Analiz `/solar/parcels/{id}` ile bir kez yapılır ve parselde
+        # saklanır; burada yalnızca okunur.
+        from remote_sensing.solar import solar_signals
+        sig.update(solar_signals(None, parcel))
+
+        # --- Toprak biyolojisi — en güncel kayıt ---
+        from soil_biology import biology_signals
+        bio = await db.soil_biology.find_one(
+            {"parcel_id": pid, "is_active": {"$ne": False}}, {"_id": 0},
+            sort=[("sample_date", -1)])
+        sig.update(biology_signals(bio))
+        if bio:
+            detay["toprak_biyolojisi_tarih"] = bio.get("sample_date")
 
         return sig, detay
 
@@ -877,6 +968,15 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
         parcel_ids: Optional[List[str]] = None   # verilirse SADECE bunlar taranır
         il: Optional[str] = None
         ilce: Optional[str] = None
+        # 2026-08-19 — köy/mahalle seviyesi ve idari sınır poligonuyla seçim.
+        # `admin_area_id` verilirse parseller İSİMLE değil GERÇEK SINIRLA
+        # ($geoIntersects) eşleştirilir: "Ereğli'de pancara uygun tarlalar"
+        # sorusunun coğrafi olarak doğru cevabı budur (isim eşleşmesi,
+        # aynı adlı köyler ve sınır dışı kalan parsellerde yanılır).
+        mahalle: Optional[str] = None
+        koy: Optional[str] = None
+        admin_area_id: Optional[str] = None
+        min_alan_dekar: Optional[float] = None
         scan_limit: int = 1000                    # taranacak parsel üst sınırı
         top_n: Optional[int] = None                # sonuç listesini en iyi N ile sınırla
 
@@ -900,22 +1000,54 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
             filt["il"] = body.il
         if body.ilce:
             filt["ilce"] = body.ilce
+        if body.mahalle:
+            filt["mahalle"] = body.mahalle
+        if body.koy:
+            filt["village"] = body.koy
+        if body.min_alan_dekar:
+            filt["area_dekar"] = {"$gte": body.min_alan_dekar}
+        if body.admin_area_id:
+            area = await db.admin_areas.find_one({"id": body.admin_area_id},
+                                                 {"_id": 0, "geometry": 1, "name": 1})
+            if not area or not area.get("geometry"):
+                raise HTTPException(404, "İdari alan bulunamadı veya sınırı yok")
+            filt["geometry"] = {"$geoIntersects": {"$geometry": area["geometry"]}}
 
         total_candidates = await db.parcels.count_documents(filt)
         scan_limit = max(1, min(body.scan_limit, 2000))
         parcels = await db.parcels.find(filt, {"_id": 0}).limit(scan_limit).to_list(scan_limit)
 
         results = []
+        farmer_names: Dict[str, str] = {}
         for parcel in parcels:
             sig, _ = await _gather_signals(parcel, season, match_terms)
             r = evaluate_rules(rules, sig)
+            fid = parcel.get("farmer_id")
+            if fid and fid not in farmer_names:
+                f = await db.farmers.find_one({"id": fid}, {"_id": 0, "full_name": 1, "phone": 1})
+                farmer_names[fid] = (f or {}).get("full_name") or "—"
+            # 2026-08-19 — YÜZDELİK UYGUNLUK + GEREKÇE (kullanıcı isteği:
+            # "buğdaya uygunluk yüzde 95, sebebi şu"). `evaluate_rules` zaten
+            # 100'den başlayıp kural deltalarını uyguluyor; skor doğrudan
+            # yüzdedir. Engelleyici kural varsa yüzde göstermek yanıltıcı
+            # olurdu (0 puanla da olsa "ekilebilir" izlenimi verir) — o
+            # durumda `uygunluk_yuzde` None döner, karar "Uygun Değil"dir.
+            olumlu = [m for m in r["matched_rules"] if (m.get("score_delta") or 0) > 0]
+            olumsuz = [m for m in r["matched_rules"] if (m.get("score_delta") or 0) < 0]
             results.append({
                 "parcel_id": parcel["id"], "name": parcel.get("name"),
                 "il": parcel.get("il"), "ilce": parcel.get("ilce"),
                 "mahalle": parcel.get("mahalle") or parcel.get("village"),
-                "area_dekar": parcel.get("area_dekar"), "farmer_id": parcel.get("farmer_id"),
+                "koy": parcel.get("village"),
+                "area_dekar": parcel.get("area_dekar"), "farmer_id": fid,
+                "farmer_name": farmer_names.get(fid),
                 "score": r["score"], "decision": r["decision"], "decision_label": r["decision_label"],
                 "blocking": r["blocking"],
+                "uygunluk_yuzde": None if r["blocking"] else round(r["score"], 1),
+                "olumlu_sebepler": [{"kural": m["name"], "katki": m["score_delta"]} for m in olumlu[:4]],
+                "olumsuz_sebepler": [{"kural": m["name"], "katki": m["score_delta"],
+                                      "tavsiye": m.get("advice")} for m in olumsuz[:4]],
+                "ozet_sebep": _suitability_reason(r, olumlu, olumsuz),
                 "top_issues": [{"name": m["name"], "score_delta": m["score_delta"]} for m in r["matched_rules"][:3]],
             })
 
@@ -924,8 +1056,138 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
         if body.top_n:
             results = results[:max(1, body.top_n)]
 
+        uygun = [r for r in results if not r["blocking"] and r["score"] >= 60]
         return {
             "crop": body.crop, "crop_label": crop_doc["label"], "season": season,
             "total_candidates": total_candidates, "scanned": len(parcels),
             "truncated": truncated, "results": results,
+            "ozet": {
+                "uygun_parsel": len(uygun),
+                "uygun_alan_dekar": round(sum((r.get("area_dekar") or 0) for r in uygun), 1),
+                "engellenen_parsel": sum(1 for r in results if r["blocking"]),
+                "ortalama_uygunluk": round(
+                    sum(r["score"] for r in results) / len(results), 1) if results else None,
+                "ilgili_ciftci_sayisi": len({r["farmer_id"] for r in uygun if r.get("farmer_id")}),
+            },
         }
+
+    # =================================================================
+    # TOPLU EYLEMLER — sorgu sonucundaki parseller üzerinde (2026-08-19)
+    # =================================================================
+    # Kullanıcı isteği: "bulunan tarlaların sahiplerine mesaj atma + toplu
+    # ekim planlama + toplu sözleşme ekleme + dışarı çıktı verme".
+    # Toplu EKİM için yeni uç YAZILMADI — `data_entry.py`'nin
+    # `/plantings/bulk-create`'i zaten var ve ön yüz onu çağırır.
+
+    class BulkMessageRequest(BaseModel):
+        parcel_ids: List[str]
+        channel: str = "sms"
+        template_id: Optional[str] = None
+        subject: Optional[str] = None
+        content: Optional[str] = None
+
+    @api_router.post("/ekim-planlama/bulk-message")
+    async def bulk_message(body: BulkMessageRequest, request: Request,
+                           user=Depends(require_permission("communications:send"))):
+        """Sorgu sonucundaki parsellerin SAHİPLERİNE toplu mesaj.
+
+        Gönderim motoru YENİDEN YAZILMAZ: `communications.send_via_channel`
+        çağrılır — böylece Kara Liste, Tercih Merkezi ve kanal sağlayıcı
+        soyutlaması (IT-25/26/27) otomatik devrede kalır.
+        """
+        from communications import send_via_channel
+        parcels = await db.parcels.find({"id": {"$in": body.parcel_ids}},
+                                        {"_id": 0, "id": 1, "farmer_id": 1, "name": 1}).to_list(2000)
+        farmer_ids = {p.get("farmer_id") for p in parcels if p.get("farmer_id")}
+        sent = failed = 0
+        results = []
+        for fid in farmer_ids:
+            doc, ok = await send_via_channel(
+                db, contact_type="farmer", contact_id=fid, channel=body.channel,
+                template_id=body.template_id, subject=body.subject, content=body.content,
+                variables={}, sent_by=f"ekim planlama toplu gönderim ({user.get('email')})",
+                message_kind="operational")
+            sent += 1 if ok else 0
+            failed += 0 if ok else 1
+            results.append({"farmer_id": fid, "ok": ok, "detay": doc.get("provider_detail")})
+        await log_audit(db, user, action="bulk_message", entity="agronomy",
+                        entity_id=f"{len(farmer_ids)} çiftçi",
+                        new_value={"channel": body.channel, "sent": sent}, request=request)
+        return {"toplam_ciftci": len(farmer_ids), "gonderilen": sent,
+                "basarisiz": failed, "sonuclar": results}
+
+    class BulkContractRequest(BaseModel):
+        parcel_ids: List[str]
+        season: int
+        crop: str = "Şeker Pancarı"
+        variety: str
+        kota_ton_dekar: float = 6.5           # dekar başına kota (alan × bu)
+        status: str = "taslak"
+        sozlesme_turu: Optional[str] = None
+
+    @api_router.post("/contracts/bulk-create")
+    async def bulk_create_contracts(body: BulkContractRequest, request: Request,
+                                    user=Depends(require_permission("contracts:create"))):
+        """Seçili parseller için toplu sözleşme (plantings/bulk-create kalıbı).
+
+        İDEMPOTENT DEĞİL ama KORUMALI: aynı parsel+sezon için sözleşme varsa
+        o parsel ATLANIR ve yanıtta bildirilir — toplu ekranda yanlışlıkla
+        iki kez basmak mükerrer sözleşme üretmesin.
+        """
+        parcels = await db.parcels.find({"id": {"$in": body.parcel_ids}}, {"_id": 0}).to_list(3000)
+        created, skipped = [], []
+        now = datetime.now(timezone.utc).isoformat()
+        for p in parcels:
+            exists = await db.contracts.find_one(
+                {"parcel_id": p["id"], "season": body.season, "status": {"$ne": "iptal"}},
+                {"_id": 0, "id": 1})
+            if exists:
+                skipped.append({"parcel_id": p["id"], "name": p.get("name"),
+                                "sebep": "Bu sezon için sözleşme zaten var"})
+                continue
+            area = p.get("ekilebilir_alan_dekar") or p.get("area_dekar") or 0
+            doc = {
+                "id": str(uuid.uuid4()), "farmer_id": p.get("farmer_id"), "parcel_id": p["id"],
+                "season": body.season, "crop": body.crop, "variety": body.variety,
+                "kota_dekar": area, "kota_ton": round(area * body.kota_ton_dekar, 1),
+                "status": body.status, "sozlesme_turu": body.sozlesme_turu,
+                "tenant_id": p.get("tenant_id"), "created_at": now,
+                "kaynak": "ekim_planlama_toplu",
+            }
+            await db.contracts.insert_one(dict(doc))
+            doc.pop("_id", None)
+            created.append(doc)
+        await log_audit(db, user, action="bulk_create", entity="contract",
+                        entity_id=f"{len(created)} sözleşme",
+                        new_value={"season": body.season, "crop": body.crop}, request=request)
+        return {"olusturulan": len(created), "atlanan": len(skipped),
+                "kayitlar": created, "atlananlar": skipped}
+
+    @api_router.post("/ekim-planlama/bulk-analyze/export")
+    async def bulk_export(body: BulkAnalyzeRequest,
+                          user=Depends(require_permission("agronomy:analyze"))):
+        """Toplu sorgu sonucunu CSV olarak döner (Excel'de açılır).
+
+        PDF için mevcut `report_builder.py` kullanılabilir; burada CSV
+        seçildi çünkü kullanıcı çıktıyı çoğunlukla filtreleyip yeniden
+        işliyor (crud_base.py'nin CSV export kararıyla AYNI gerekçe).
+        """
+        import csv
+        import io
+        from fastapi.responses import StreamingResponse
+
+        data = await bulk_analyze(body, user)          # aynı motoru çağırır
+        buf = io.StringIO()
+        writer = csv.writer(buf, delimiter=";")
+        writer.writerow(["Parsel", "Çiftçi", "İl", "İlçe", "Köy/Mahalle", "Alan (dekar)",
+                         "Uygunluk %", "Karar", "Gerekçe"])
+        for r in data["results"]:
+            writer.writerow([r.get("name"), r.get("farmer_name"), r.get("il"), r.get("ilce"),
+                             r.get("mahalle"), r.get("area_dekar"),
+                             r.get("uygunluk_yuzde") if r.get("uygunluk_yuzde") is not None else "—",
+                             r.get("decision_label"), r.get("ozet_sebep")])
+        buf.seek(0)
+        filename = f"ekim-uygunluk-{body.crop}-{data['season']}.csv"
+        # UTF-8 BOM: Excel Türkçe karakterleri ancak BOM ile doğru açar.
+        return StreamingResponse(iter(["﻿" + buf.getvalue()]), media_type="text/csv",
+                                 headers={"Content-Disposition": f'attachment; filename="{filename}"'})

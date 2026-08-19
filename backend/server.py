@@ -544,6 +544,50 @@ register_ai_engine_routes(api_router, db, raw_db, current_user, require_permissi
 from remote_sensing import register_remote_sensing_routes
 register_remote_sensing_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
+# =====================================================================
+# KARAR DESTEK KATMANI (2026-08-19)
+# =====================================================================
+# Sıralama ÖNEMLİ değil (hepsi bağımsız router kaydı) ama okuma sırası
+# veri akışını yansıtır: ölçüm katmanı (hava → güneş → biyoloji → kök) →
+# karar katmanı (su bütçesi → polar/hasat → sezon takvimi).
+#
+# Hepsi CLAUDE.md konvansiyon #1'e uyar: server.py'ye domain kodu EKLENMEZ,
+# her modül kendi register fonksiyonuyla bağlanır.
+
+# Hava servisi — Open-Meteo (güncel+tahmin) + ERA5-Land (geçmiş) + GDD.
+from weather import register_weather_routes
+register_weather_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+
+# Güneş/gölge — Copernicus DEM GLO-30 üzerinden eğim/bakı + saatlik gölge.
+from remote_sensing.solar_routes import register_solar_routes
+register_solar_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+
+# Toprak biyolojisi — mikroorganizma envanteri + toprak sağlığı skoru.
+from soil_biology import register_soil_biology_routes
+register_soil_biology_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+
+# Kök sayısı / bitki sıklığı + uydu eğrisinden ürün tahmini.
+from crop_stand import register_crop_stand_routes
+register_crop_stand_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+
+# Su bütçesi danışmanı (FAO-56) — ET0 × Kc − etkili yağış.
+from water_budget import register_water_budget_routes
+register_water_budget_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+
+# Polar tahmini + ekim penceresi + olgunlaşma/söküm zamanı.
+from polar_engine import register_polar_routes
+register_polar_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+
+# Sezon Karar Takvimi — tüm ölçümleri fenolojik aşamaya göre karara çevirir.
+from season_planner import register_season_planner_routes
+register_season_planner_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+
+# Karbon ayak izi + fabrika hasat lojistiği.
+from sustainability import register_sustainability_routes
+register_sustainability_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+from harvest_logistics import register_harvest_logistics_routes
+register_harvest_logistics_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+
 # Duyurular — açılışta popup + Bildirimler çekmecesinde okundu-takipli yayın.
 from announcements import register_announcement_routes
 register_announcement_routes(api_router, db, current_user, require_permission, log_audit)

@@ -573,40 +573,65 @@ export function AyarlarEntegrasyon() {
           <TestBadge itype="up42"/>
         </div>
 
-        {/* ============ EOSDA (Uzaktan Algılama sağlayıcısı) ============ */}
+        {/* ============ TOPRAX UYDU (Uzaktan Algılama sağlayıcısı) ============
+            2026-08-18 — Bu kart eskiden "EOSDA (Uzaktan Algılama)" idi ve
+            EOSDA API anahtarı isterdi. Uzaktan algılamanın motoru artık
+            Google Earth Engine + NASA HLS (Sentinel-2 + Landsat 8/9),
+            kullanıcıya görünen adı ise **Toprax Uydu**. Sağlayıcı adı
+            ekranlarda GEÇMEZ — bir uygulama detayıdır ve değişebilir
+            (bkz. backend providers/__init__.py SATELLITE_BRAND).
+
+            EOSDA entegrasyonunun kendisi SİLİNMEDİ: backend'de sınıfı ve
+            entegrasyon tipi duruyor, bir Tarama Politikası'nda
+            `provider_override: "eosda"` ile hâlâ seçilebilir — sadece
+            varsayılan sağlayıcı ve bu ekrandaki yer artık GEE'nin. */}
         <div className="card p-5">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-400"><Satellite size={20}/></div>
             <div>
-              <div className="flex items-center gap-2"><h3 className="font-display text-lg">EOSDA (Uzaktan Algılama)</h3><StatusBadge itype="eosda"/></div>
-              <p className="text-xs text-[var(--text-dim)]">NDVI/uydu görüntüsü — "Uzaktan Algılama" menüsünün sağlayıcısı</p>
+              <div className="flex items-center gap-2"><h3 className="font-display text-lg">Toprax Uydu (Uzaktan Algılama)</h3><StatusBadge itype="google_earth_engine"/></div>
+              <p className="text-xs text-[var(--text-dim)]">10 indeks + gerçek renkli uydu görüntüsü — "Uzaktan Algılama" menüsünün motoru</p>
             </div>
           </div>
           <div className="space-y-3">
-            <input className="input" type="password" placeholder="API Key (apk. ile başlar)"
-                   value={forms.eosda?.config?.api_key || ""}
-                   onChange={(e) => setField("eosda", "api_key", e.target.value)} data-testid="eosda-key-input"/>
+            <input className="input" placeholder="Servis hesabı e-postası (…iam.gserviceaccount.com)"
+                   value={forms.google_earth_engine?.config?.service_account_email || ""}
+                   onChange={(e) => setField("google_earth_engine", "service_account_email", e.target.value)}
+                   data-testid="gee-email-input"/>
+            <textarea className="input font-mono text-[11px]" rows={4}
+                      placeholder='Servis hesabı anahtarı (JSON içeriğinin TAMAMI: {"type":"service_account", …})'
+                      value={forms.google_earth_engine?.config?.service_account_key_json || ""}
+                      onChange={(e) => setField("google_earth_engine", "service_account_key_json", e.target.value)}
+                      data-testid="gee-key-input"/>
+            <input className="input" placeholder="Cloud proje kimliği (Earth Engine'e kayıtlı proje)"
+                   value={forms.google_earth_engine?.config?.project || ""}
+                   onChange={(e) => setField("google_earth_engine", "project", e.target.value)}
+                   data-testid="gee-project-input"/>
             <p className="text-[11px] text-[var(--text-dim)]">
-              API key girip <b>Kaydet</b>'e bastığınızda entegrasyon otomatik olarak demo modundan çıkıp gerçek moda geçer.
-              Anahtarı <b>eos.com</b> hesabınızdan alırsınız (Planet/Gemini anahtarları BURAYA GİRİLMEZ).
+              Anahtarı Google Cloud Console › <b>IAM ve Yönetim › Hizmet Hesapları</b>'ndan JSON olarak indirir,
+              içeriğini olduğu gibi buraya yapıştırırsınız. Proje, <b>Earth Engine'e kayıtlı</b> olmalı ve hizmet
+              hesabının <b>Earth Engine Resource Writer</b> yetkisi bulunmalıdır — yalnız okuma yetkisiyle sayısal
+              analiz çalışır ama <b>uydu görüntüsü üretilemez</b>. Kaydettiğinizde entegrasyon demo modundan
+              otomatik çıkar.
             </p>
             <label className="flex items-center gap-2 text-xs text-[var(--text-dim)] mt-1">
-              <input type="checkbox" checked={forms.eosda?.config?.mock_mode ?? false}
-                     onChange={(e) => setField("eosda", "mock_mode", e.target.checked)} data-testid="eosda-mock-toggle"/>
+              <input type="checkbox" checked={forms.google_earth_engine?.config?.mock_mode ?? false}
+                     onChange={(e) => setField("google_earth_engine", "mock_mode", e.target.checked)}
+                     data-testid="gee-mock-toggle"/>
               Demo (mock) verisiyle çalıştır — gerçek API çağrısı yapmaz, kota harcamaz (sunum/test için)
             </label>
           </div>
           <div className="flex gap-2 mt-3">
-            <button onClick={() => save("eosda")} disabled={saving.eosda} className="btn btn-ghost">
-              <Save size={14}/> {saving.eosda ? "Kaydediliyor…" : "Kaydet"}
+            <button onClick={() => save("google_earth_engine")} disabled={saving.google_earth_engine} className="btn btn-ghost">
+              <Save size={14}/> {saving.google_earth_engine ? "Kaydediliyor…" : "Kaydet"}
             </button>
-            <button onClick={() => test("eosda")} disabled={testing.eosda} className="btn btn-primary">
-              {testing.eosda ? <Loader2 size={14} className="animate-spin"/> : <Wifi size={14}/>}
-              {testing.eosda ? "Test ediliyor…" : "Bağlantıyı Test Et"}
+            <button onClick={() => test("google_earth_engine")} disabled={testing.google_earth_engine} className="btn btn-primary">
+              {testing.google_earth_engine ? <Loader2 size={14} className="animate-spin"/> : <Wifi size={14}/>}
+              {testing.google_earth_engine ? "Test ediliyor…" : "Bağlantıyı Test Et"}
             </button>
           </div>
-          {saved.eosda && <div className="text-xs text-[var(--primary)] mt-2 flex items-center gap-2"><CheckCircle2 size={14}/> Kaydedildi</div>}
-          <TestBadge itype="eosda"/>
+          {saved.google_earth_engine && <div className="text-xs text-[var(--primary)] mt-2 flex items-center gap-2"><CheckCircle2 size={14}/> Kaydedildi</div>}
+          <TestBadge itype="google_earth_engine"/>
         </div>
 
         {/* ============ MERNİS (Denetim Faz 3) ============ */}

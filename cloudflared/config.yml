@@ -1,0 +1,35 @@
+# =====================================================================
+# TOPRAX — Cloudflare Tunnel ingress yapılandırması
+# =====================================================================
+# Tünel token ile "uzaktan yönetilen" modda çalıştırıldığında ingress
+# kuralları Cloudflare panelinden gelir; bu tünel CLI ile oluşturulduğu
+# için (yerel `cert.pem` mevcut) kurallar BURADAN okunur.
+#
+# 2026-08-19: tünel bağlanıyordu ama hiçbir hostname bir servise
+# eşlenmediği için tüm alan adları 503 dönüyordu — eksik olan tam olarak
+# bu dosyaydı.
+#
+# Servis adresleri Docker AĞ İÇİ adlarıdır (localhost DEĞİL): cloudflared
+# konteyneri `toprax-net` ağına bağlı çalışır ve frontend'e servis adıyla
+# ulaşır. Frontend'in kendi nginx'i `/api`'yi backend'e proxy'lediği için
+# tünelin ayrıca backend'e kural açmasına gerek YOKTUR — tek origin.
+tunnel: c85fb4dc-2103-47d2-88e4-2146bca7e69c
+credentials-file: /etc/cloudflared/toprax-credentials.json
+
+# Bağlantı dayanıklılığı: uzun süren istekler (uydu analizi, toplu sorgu)
+# varsayılan 30 sn'lik yanıt beklemesini aşabiliyor.
+originRequest:
+  connectTimeout: 30s
+  noTLSVerify: true
+
+ingress:
+  - hostname: toprax.com.tr
+    service: http://toprax-frontend:80
+  - hostname: www.toprax.com.tr
+    service: http://toprax-frontend:80
+  - hostname: demo.toprax.com.tr
+    service: http://toprax-frontend:80
+  - hostname: app.toprax.com.tr
+    service: http://toprax-frontend:80
+  # Eşleşmeyen her istek için zorunlu son kural.
+  - service: http_status:404

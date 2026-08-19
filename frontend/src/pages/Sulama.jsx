@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "@/api";
+import { fx } from "@/lib/num";
 import { Droplets, AlertTriangle, Waves, Layers } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import { QuickAddPanel } from "@/components/QuickAdd";
@@ -112,7 +113,7 @@ export default function Sulama() {
         <div className="card p-5">
           <Droplets className="text-[var(--primary)] mb-2"/>
           <div className="text-xs text-[var(--text-dim)] tracking-wider uppercase">Toplam Su</div>
-          <div className="font-display text-3xl">{(data.total_m3 / 1000).toFixed(1)}k</div>
+          <div className="font-display text-3xl">{fx((data.total_m3 ?? 0) / 1000, 1)}k</div>
           <div className="text-xs text-[var(--text-dim)]">m³</div>
         </div>
         <div className="card p-5">

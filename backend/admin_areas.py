@@ -141,7 +141,103 @@ async def resolve_responsible(db, village_name: str) -> Optional[Dict[str, Any]]
     }
 
 
-class AdminAreaCreate(BaseModel):
+class AdminAreaDemographics(BaseModel):
+    """İdari alanın demografik/tarımsal profili (2026-08-18).
+
+    Kaynak: kullanıcının sağladığı `turkiye_iller/ilceler/mahalleler.geojson`
+    dosyalarının `properties` bloğu. CLAUDE.md konvansiyon #8 gereği JSON blob
+    DEĞİL, tipli alanlar — bu sayede Query Engine'de filtrelenebilir,
+    SmartDataGrid'de kolon olur, harita popup'ında gösterilebilir ve ileride
+    karar motoruna sinyal olarak bağlanabilir (ör. ilçe bazlı baskın ürün).
+
+    ÜÇ SEVİYE TEK MODELDE: il dosyası ~18, ilçe/mahalle ~30 alan taşıyor ve
+    kümeler büyük ölçüde ÖRTÜŞÜYOR. Seviye başına ayrı model açmak, ortak
+    alanları (nüfus, gelir, CKS çiftçi sayısı, ürün/hayvan) üç kez tekrarlamak
+    demekti; hepsi Optional olduğu için tek modelde toplandılar — bir seviyede
+    olmayan alan basitçe None kalır.
+    """
+    # --- Kimlik/kod alanları (hiyerarşi bu KODLARLA kurulur, isimle DEĞİL) ---
+    il_plaka: Optional[int] = None
+    il_adi: Optional[str] = None
+    ilce_kodu: Optional[int] = None
+    ilce_adi: Optional[str] = None
+    mahalle_kodu: Optional[int] = None
+    mahalle_adi: Optional[str] = None
+    display_name: Optional[str] = None
+    bolge_adi: Optional[str] = None
+    # --- Demografi ---
+    nufus_toplam: Optional[int] = None
+    hane_sayisi: Optional[int] = None
+    hane_kisi_sayisi: Optional[float] = None
+    kirsal_nufus_orani_yuzde: Optional[float] = None       # sadece il dosyasında
+    kirsalsal_yerlesim: Optional[str] = None               # ilçe/mahalle: yerleşim sınıfı
+    yas_0_17_yuzde: Optional[float] = None
+    yas_18_49_yuzde: Optional[float] = None
+    yas_50_64_yuzde: Optional[float] = None
+    yas_65_ustu_yuzde: Optional[float] = None
+    egitim_ilkokul_yuzde: Optional[float] = None
+    egitim_orta_lise_yuzde: Optional[float] = None
+    egitim_yuksekogretim_yuzde: Optional[float] = None
+    hane_aylik_gelir_tl: Optional[float] = None
+    gelir_seviyesi_grubu: Optional[str] = None
+    # --- Tarımsal profil ---
+    kayitli_cks_ciftci_sayisi: Optional[int] = None
+    ciftci_yas_ortalamasi: Optional[float] = None
+    kadin_ciftci_orani_yuzde: Optional[float] = None
+    tarimsal_istihdam_orani_yuzde: Optional[float] = None
+    islenen_tarim_arazisi_dekar: Optional[float] = None
+    traktor_sayisi: Optional[int] = None
+    baskin_urun_grubu: Optional[str] = None
+    birinci_ana_urun: Optional[str] = None
+    birinci_urun_rekolte_ton: Optional[float] = None
+    ikinci_ana_urun: Optional[str] = None
+    ikinci_urun_rekolte_ton: Optional[float] = None
+    ucuncu_ana_urun: Optional[str] = None
+    ucuncu_urun_rekolte_ton: Optional[float] = None
+    kucukbas_hayvan_sayisi: Optional[int] = None
+    buyukbas_hayvan_sayisi: Optional[int] = None
+
+
+#: Demografi alanlarının makine-okunur listesi — import script'i, field_
+#: definitions seed'i ve harita popup'ı AYNI listeden beslenir (tek kaynak).
+DEMOGRAPHIC_FIELDS = list(AdminAreaDemographics.model_fields.keys())
+
+#: Harita popup'ında gösterilecek ÖZET alanlar (hepsi değil — popup küçük).
+#: Detayın tamamı Drawer'daki "Genel Bilgiler" bölümünde görünür.
+POPUP_FIELDS = [
+    "display_name", "nufus_toplam", "hane_sayisi", "kayitli_cks_ciftci_sayisi",
+    "islenen_tarim_arazisi_dekar", "baskin_urun_grubu", "birinci_ana_urun",
+    "hane_aylik_gelir_tl", "buyukbas_hayvan_sayisi", "kucukbas_hayvan_sayisi",
+]
+
+#: Türkçe etiketler — field_definitions seed'i ve popup bu sözlükten okur.
+DEMOGRAPHIC_LABELS = {
+    "il_plaka": "İl Plaka", "il_adi": "İl", "ilce_kodu": "İlçe Kodu", "ilce_adi": "İlçe",
+    "mahalle_kodu": "Mahalle Kodu", "mahalle_adi": "Mahalle", "display_name": "Tam Ad",
+    "bolge_adi": "Bölge",
+    "nufus_toplam": "Toplam Nüfus", "hane_sayisi": "Hane Sayısı",
+    "hane_kisi_sayisi": "Hane Başına Kişi", "kirsal_nufus_orani_yuzde": "Kırsal Nüfus Oranı (%)",
+    "kirsalsal_yerlesim": "Yerleşim Sınıfı",
+    "yas_0_17_yuzde": "Yaş 0-17 (%)", "yas_18_49_yuzde": "Yaş 18-49 (%)",
+    "yas_50_64_yuzde": "Yaş 50-64 (%)", "yas_65_ustu_yuzde": "Yaş 65+ (%)",
+    "egitim_ilkokul_yuzde": "Eğitim: İlkokul (%)", "egitim_orta_lise_yuzde": "Eğitim: Orta/Lise (%)",
+    "egitim_yuksekogretim_yuzde": "Eğitim: Yükseköğretim (%)",
+    "hane_aylik_gelir_tl": "Hane Aylık Gelir (TL)", "gelir_seviyesi_grubu": "Gelir Seviyesi",
+    "kayitli_cks_ciftci_sayisi": "Kayıtlı ÇKS Çiftçi Sayısı",
+    "ciftci_yas_ortalamasi": "Çiftçi Yaş Ortalaması",
+    "kadin_ciftci_orani_yuzde": "Kadın Çiftçi Oranı (%)",
+    "tarimsal_istihdam_orani_yuzde": "Tarımsal İstihdam Oranı (%)",
+    "islenen_tarim_arazisi_dekar": "İşlenen Tarım Arazisi (dekar)",
+    "traktor_sayisi": "Traktör Sayısı", "baskin_urun_grubu": "Baskın Ürün Grubu",
+    "birinci_ana_urun": "1. Ana Ürün", "birinci_urun_rekolte_ton": "1. Ürün Rekolte (ton)",
+    "ikinci_ana_urun": "2. Ana Ürün", "ikinci_urun_rekolte_ton": "2. Ürün Rekolte (ton)",
+    "ucuncu_ana_urun": "3. Ana Ürün", "ucuncu_urun_rekolte_ton": "3. Ürün Rekolte (ton)",
+    "kucukbas_hayvan_sayisi": "Küçükbaş Hayvan Sayısı",
+    "buyukbas_hayvan_sayisi": "Büyükbaş Hayvan Sayısı",
+}
+
+
+class AdminAreaCreate(AdminAreaDemographics):
     name: str
     area_type: str                                   # il | ilce | mahalle
     parent_id: Optional[str] = None                  # üst idari alan (admin_areas.id)
@@ -158,7 +254,7 @@ class AdminAreaCreate(BaseModel):
     farmer_count_est: Optional[int] = None
 
 
-class AdminAreaUpdate(BaseModel):
+class AdminAreaUpdate(AdminAreaDemographics):
     name: Optional[str] = None
     area_type: Optional[str] = None
     parent_id: Optional[str] = None
@@ -193,19 +289,75 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
     @api_router.get("/admin-areas")
     async def list_admin_areas(
         area_type: Optional[str] = None, parent_id: Optional[str] = None,
+        bbox: Optional[str] = None, limit: int = 1500,
         user=Depends(require_permission("admin_areas:view")),
         _feat=Depends(require_feature("admin_areas")),
     ):
-        """Liste/harita katmanı yanıtı — geometri Layer v1 performansı için sadeleştirilir."""
+        """Liste/harita katmanı yanıtı — geometri Layer v1 performansı için sadeleştirilir.
+
+        **`bbox` (2026-08-19)** — "minLon,minLat,maxLon,maxLat". Gerçek
+        il/ilçe/mahalle verisi yüklendikten sonra bu koleksiyonda 51 BİNDEN
+        fazla kayıt var; eski hâlde uç, ada göre sıralayıp ilk 2000'i
+        döndürüyordu — yani haritada hangi bölgeye bakılırsa bakılsın
+        alfabenin başındaki ilgisiz mahalleler geliyor, kullanıcının
+        ekranında "3-5 poligon" görünüyordu (canlıda bildirildi).
+        Artık harita görünür alanını gönderiyor, sunucu yalnızca o alanla
+        KESİŞEN sınırları veriyor (2dsphere indeksi zaten mevcut).
+        """
         query: Dict[str, Any] = {"is_active": {"$ne": False}}
         if area_type:
             query["area_type"] = area_type
         if parent_id:
             query["parent_id"] = parent_id
-        docs = await db.admin_areas.find(query, {"_id": 0}).sort("name", 1).to_list(2000)
+        if bbox:
+            try:
+                min_lon, min_lat, max_lon, max_lat = [float(v) for v in bbox.split(",")]
+            except (ValueError, AttributeError):
+                raise HTTPException(400, "bbox biçimi: minLon,minLat,maxLon,maxLat")
+            query["geometry"] = {"$geoIntersects": {"$geometry": {
+                "type": "Polygon",
+                "coordinates": [[[min_lon, min_lat], [max_lon, min_lat],
+                                 [max_lon, max_lat], [min_lon, max_lat], [min_lon, min_lat]]],
+            }}}
+        docs = await db.admin_areas.find(query, {"_id": 0}).limit(max(1, min(limit, 3000))).to_list(3000)
         for d in docs:
             d["geometry"] = _simplify_geometry(d.get("geometry"))
         return docs
+
+    @api_router.get("/admin-areas/at")
+    async def admin_areas_at_point(lon: float, lat: float,
+                                   user=Depends(require_permission("admin_areas:view")),
+                                   _feat=Depends(require_feature("admin_areas"))):
+        """Bir NOKTAYA düşen il / ilçe / mahalle üçlüsü.
+
+        Haritada bir parsele VEYA boş bir alana tıklandığında açılan popup
+        bunu çağırır: kullanıcı il/ilçe/mahalle/parsel bağlantılarından
+        birine tıklayıp o kaydın detayına gider (2026-08-19 kullanıcı isteği).
+
+        Eşleştirme GERÇEK SINIRLA ($geoIntersects) yapılır — parselin
+        `il`/`ilce` metin alanlarıyla DEĞİL: o alanlar içe aktarma sırasında
+        yazılır ve sınır düzeltmelerinden sonra bayatlayabilir.
+        """
+        point = {"type": "Point", "coordinates": [lon, lat]}
+        out: Dict[str, Any] = {}
+        for t in AREA_TYPES:
+            doc = await db.admin_areas.find_one(
+                {"area_type": t, "geometry": {"$geoIntersects": {"$geometry": point}}},
+                {"_id": 0, "id": 1, "name": 1, "area_type": 1, "nufus_toplam": 1,
+                 "kayitli_cks_ciftci_sayisi": 1, "islenen_tarim_arazisi_dekar": 1,
+                 "baskin_urun_grubu": 1})
+            out[t] = doc
+        return out
+
+    @api_router.get("/admin-areas/counts")
+    async def admin_area_counts(user=Depends(require_permission("admin_areas:view")),
+                                _feat=Depends(require_feature("admin_areas"))):
+        """Seviye başına kayıt sayısı — katman seçicisi "Mahalle (50.130)" gibi
+        gösterip kullanıcıya verinin gerçekten yüklü olduğunu bildirir."""
+        out = {}
+        for t in AREA_TYPES:
+            out[t] = await db.admin_areas.count_documents({"area_type": t, "is_active": {"$ne": False}})
+        return out
 
     @api_router.get("/admin-areas/{area_id}")
     async def get_admin_area(area_id: str, user=Depends(require_permission("admin_areas:view")),

@@ -100,6 +100,12 @@ proje.zip
 nginx/certs/*.pem
 nginx/reverse-proxy.conf
 
+# Cloudflare Tunnel — kimlik dosyası GİZLİDİR (tünelin tam yetkili anahtarı).
+# `config.yml` paylaşılabilir (yalnızca hostname→servis eşlemesi), kimlik
+# dosyası ASLA depoya girmemeli.
+cloudflared/*credentials*.json
+cloudflared/cert.pem
+
 # Temp files and artifacts
 *.txt
 *.docx

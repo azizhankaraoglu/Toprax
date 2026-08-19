@@ -14,7 +14,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "@/api";
-import { MapContainer, TileLayer, Polygon } from "react-leaflet";
+import { MapContainer, TileLayer, Polygon, Popup } from "react-leaflet";
+import AdminAreaPopupLinks from "@/components/AdminAreaPopupLinks";
+import MapClickAdminPopup from "@/components/MapClickAdminPopup";
 import { ArrowLeft, MapPin, Droplets, FlaskConical, Sprout, Award, Satellite, Radio, Plane, Pencil, Check, X, Plus, Calendar, Trash2, Landmark, Flame } from "lucide-react";
 import DynamicFieldsSection from "@/components/DynamicFieldsSection";
 import DocumentsTab from "@/components/DocumentsTab";
@@ -27,6 +29,7 @@ import GeoFileImport from "@/components/GeoFileImport";
 import VisitHistory from "@/components/VisitHistory";
 import FarmerSelect from "@/components/FarmerSelect";
 import RemoteSensingPanel from "@/components/RemoteSensingPanel";
+import ParcelInsightCards from "@/components/ParcelInsightCards";
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
 const SOIL_TYPES = ["Killi", "Kumlu", "Tınlı", "Kireçli", "Killi-Tınlı"];
@@ -79,6 +82,28 @@ export default function ParcelDetail() {
   }, []);
   const loadCycles = () => api.get("/production-cycles", { params: { parcel_id: id } }).then((r) => setCycles(r.data));
   useEffect(() => { loadCycles(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // İdari sınırlar (2026-08-19) — parselin bulunduğu il/ilçe/mahalle sınırı.
+  // `bbox` parselin kendi kutusu: 50 binlik mahalle koleksiyonundan yalnızca
+  // buraya düşenler gelir.
+  const [adminBoundaries, setAdminBoundaries] = useState([]);
+  useEffect(() => {
+    const g = data?.parcel?.geometry;
+    if (!g) return;
+    const pts = [];
+    (function walk(c) {
+      if (typeof c[0] === "number") pts.push(c);
+      else c.forEach(walk);
+    })(g.coordinates || []);
+    if (!pts.length) return;
+    const lons = pts.map((p) => p[0]);
+    const lats = pts.map((p) => p[1]);
+    const bbox = [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)].join(",");
+    Promise.all(["mahalle", "ilce"].map((t) =>
+      api.get("/admin-areas", { params: { area_type: t, bbox, limit: 30 } })
+         .then((r) => r.data).catch(() => [])
+    )).then((lists) => setAdminBoundaries(lists.flat()));
+  }, [data]);
 
   async function createCycle() {
     setCycleSaving(true);
@@ -201,10 +226,41 @@ export default function ParcelDetail() {
                          attribution="Tiles &copy; Esri"/>
               <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
                          attribution="Tiles &copy; Esri"/>
+              {/* İdari sınırlar (2026-08-19) — parselin bulunduğu mahalle/ilçe
+                  sınırı kesikli çizgiyle; parselin komşuluk bağlamını gösterir.
+                  Sadece bu noktayı kapsayan sınırlar çekilir (bbox = parsel). */}
+              {adminBoundaries.map((a) => {
+                const rings = a.geometry?.type === "MultiPolygon"
+                  ? a.geometry.coordinates.flat() : (a.geometry?.coordinates || []);
+                return rings.map((ring, i) => (
+                  <Polygon key={`${a.id}-${i}`}
+                           positions={ring.map(([lng, lat]) => [lat, lng])}
+                           pathOptions={{ color: "#60a5fa", fillOpacity: 0, weight: 2, dashArray: "6 4" }}>
+                    <Popup>
+                      <div style={{ minWidth: 170 }}>
+                        <b>{a.display_name || a.name}</b>
+                        <div style={{ fontSize: 11, opacity: 0.7 }}>
+                          {{ il: "İl", ilce: "İlçe", mahalle: "Mahalle/Köy" }[a.area_type]}
+                        </div>
+                        <button type="button" className="btn btn-ghost text-xs" style={{ marginTop: 6 }}
+                                onClick={() => nav(`/idari-alanlar/${a.id}`)}>
+                          Demografik detay →
+                        </button>
+                      </div>
+                    </Popup>
+                  </Polygon>
+                ));
+              })}
+
               <Polygon
                 positions={parcel.geometry.coordinates[0].map(([lng, lat]) => [lat, lng])}
                 pathOptions={{ color: riskColor, fillColor: riskColor, fillOpacity: 0.5, weight: 3 }}
-              />
+              >
+                <Popup maxWidth={280}>
+                  <AdminAreaPopupLinks lon={centerLng} lat={centerLat} parcel={parcel} compact />
+                </Popup>
+              </Polygon>
+              <MapClickAdminPopup />
             </MapContainer>
           )}
         </div>
@@ -468,8 +524,14 @@ export default function ParcelDetail() {
         )}
       </div>
 
-      {/* UZAKTAN ALGILAMA (EOSDA) — tekil parsel: analiz güncelle + NDVI zaman serisi + gün-gün slider */}
+      {/* UZAKTAN ALGILAMA (Toprax Uydu) — tekil parsel: analiz güncelle +
+          çok-indeksli zaman serisi + gün-gün slider */}
       <RemoteSensingPanel parcelId={id} />
+
+      {/* KARAR DESTEK ÖLÇÜMLERİ (2026-08-19) — güneş/gölge, su bütçesi,
+          kök sayısı, karbon ve toprak biyolojisi. Tavsiyeleri Sezon Karar
+          Takvimi üretir; bu kartlar ölçümü gösterir. */}
+      <ParcelInsightCards parcelId={id} />
 
       {/* GENEL BİLGİLER — IT-02 dinamik alanlar (Form Yönetimi'nden) + IT-04 düzenleme modu.
           NOT: fieldDefs boş olsa bile kart her zaman render edilir — aksi halde
@@ -780,9 +842,18 @@ export default function ParcelDetail() {
                 {yields.map((y) => (
                   <tr key={y.id} className="border-b border-[var(--border)]">
                     <td className="p-2.5 font-medium">{y.season}</td>
-                    <td className="p-2.5 text-[var(--text-dim)]">{y.expected_ton.toFixed(1)} t</td>
-                    <td className="p-2.5 text-[var(--primary)]">{y.actual_ton.toFixed(1)} t</td>
-                    <td className="p-2.5">%{y.polar_oran}</td>
+                    {/* 2026-08-19 — null-güvenli: bu alanlar veri kaynağına
+                        göre eksik olabiliyor (dış içe aktarma, kısmi kayıt).
+                        Eksik bir sayı YÜZÜNDEN TÜM SAYFA çökmemeli; canlıda
+                        `undefined.toFixed()` parsel detayını komple
+                        düşürüyordu. */}
+                    <td className="p-2.5 text-[var(--text-dim)]">
+                      {y.expected_ton != null ? `${Number(y.expected_ton).toFixed(1)} t` : "—"}
+                    </td>
+                    <td className="p-2.5 text-[var(--primary)]">
+                      {y.actual_ton != null ? `${Number(y.actual_ton).toFixed(1)} t` : "—"}
+                    </td>
+                    <td className="p-2.5">{y.polar_oran != null ? `%${y.polar_oran}` : "—"}</td>
                   </tr>
                 ))}
               </tbody>

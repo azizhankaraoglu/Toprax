@@ -41,6 +41,7 @@ pipeline (IT-28.2/28.3) — rapor §5'teki mimarinin sonraki katmanları.
 Bu dosya sadece "Katman 1 — Provider Abstraction" + tek bir somut tüketim
 noktasını (NDVI zaman serisi + yangın alarmı + tasking talebi) kurar.
 """
+import math
 import random
 import zlib
 import requests
@@ -509,26 +510,163 @@ def register_satellite_routes(api_router, db, current_user, require_permission, 
             result[capability] = {"active_provider": provider.name, "is_real": provider.name != "demo"}
         return result
 
+    # =====================================================================
+    # YANGIN YAKINLIK BARİYERLERİ (2026-08-19, kullanıcı isteği)
+    # =====================================================================
+    # "Tarla özelinde her tarla için 20 km yakınlık bariyeri çizelim ve
+    #  bildirim gönderelim çiftçiye; genel olarak kooperatif tarlalarının
+    #  50 km yakınındaki yangınları dashboard'da gösterelim."
+    #
+    # Neden iki farklı yarıçap: 20 km bir çiftçinin O GÜN müdahale/tedbir
+    # kararı vereceği mesafedir (duman, kıvılcım taşınması, tahliye);
+    # 50 km ise kooperatif yönetiminin bölgesel farkındalık mesafesidir.
+    PARCEL_FIRE_RADIUS_KM = 20.0
+    COOP_FIRE_RADIUS_KM = 50.0
+
+    def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """İki nokta arası mesafe (km). FIRMS bbox sorgusu KARE bir alan
+        döndürür; gerçek 'yakınlık' dairesel olduğu için sonuçlar burada
+        mesafeye göre yeniden süzülür — köşelerdeki uzak yangınlar
+        'yakınımda' diye raporlanmaz."""
+        r = 6371.0
+        p1, p2 = math.radians(lat1), math.radians(lat2)
+        dp = math.radians(lat2 - lat1)
+        dl = math.radians(lon2 - lon1)
+        a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+        return 2 * r * math.asin(min(1.0, math.sqrt(a)))
+
+    def _bbox_for_radius(lat: float, lon: float, radius_km: float):
+        """Yarıçapı kapsayan bbox — FIRMS alan sorgusu bbox ister."""
+        dlat = radius_km / 111.0
+        dlon = radius_km / (111.0 * max(0.1, math.cos(math.radians(lat))))
+        return (lon - dlon, lat - dlat, lon + dlon, lat + dlat)
+
+    def _centroid_of(geometry):
+        pts = []
+
+        def walk(node):
+            if isinstance(node, (int, float)):
+                return
+            if node and isinstance(node[0], (int, float)):
+                pts.append(node)
+                return
+            for child in node:
+                walk(child)
+
+        walk((geometry or {}).get("coordinates") or [])
+        if not pts:
+            return None
+        return (sum(p[1] for p in pts) / len(pts), sum(p[0] for p in pts) / len(pts))  # (lat, lon)
+
     @api_router.get("/satellite/fire-alerts/{parcel_id}")
-    async def fire_alerts(parcel_id: str, days: int = 3, user=Depends(current_user),
-                           _feat=Depends(require_feature("gis"))):
+    async def fire_alerts(parcel_id: str, days: int = 3, radius_km: float = PARCEL_FIRE_RADIUS_KM,
+                          user=Depends(current_user), _feat=Depends(require_feature("gis"))):
+        """Parselin `radius_km` (varsayılan 20 km) yarıçapındaki yangınlar.
+
+        Yanıt her yangın için parsele UZAKLIĞI da taşır — ekran "12 km
+        güneybatıda" diyebilsin; ham koordinat çiftçiye bir şey ifade etmez.
+        """
         parcel = await db.parcels.find_one({"id": parcel_id}, {"_id": 0})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")
         geometry = parcel.get("geometry") or parcel.get("geojson")
-        bbox = _geometry_bbox(geometry)
-        if not bbox:
-            return {"parcel_id": parcel_id, "provider": "demo", "alerts": [],
+        center = _centroid_of(geometry)
+        if not center:
+            return {"parcel_id": parcel_id, "provider": "demo", "alerts": [], "radius_km": radius_km,
                     "note": "Parsel geometrisi yok — yangın kontrolü yapılamadı"}
-        # Parsel çevresine ~2km tampon eklenir (küçük parsellerde FIRMS'in
-        # 375m piksel çözünürlüğü tek başına parseli kapsamayabilir).
-        buffered = (bbox[0] - 0.02, bbox[1] - 0.02, bbox[2] + 0.02, bbox[3] + 0.02)
+        lat, lon = center
         provider = await get_satellite_provider(db, "fire")
         try:
-            alerts = provider.get_fire_alerts(buffered, days=days)
+            raw = provider.get_fire_alerts(_bbox_for_radius(lat, lon, radius_km), days=days)
         except Exception as e:
             raise HTTPException(502, f"Yangın verisi alınamadı: {e}")
-        return {"parcel_id": parcel_id, "provider": provider.name, "alerts": alerts}
+
+        alerts = []
+        for a in raw or []:
+            alat, alon = a.get("latitude"), a.get("longitude")
+            if alat is None or alon is None:
+                continue
+            dist = _haversine_km(lat, lon, float(alat), float(alon))
+            if dist <= radius_km:
+                alerts.append({**a, "mesafe_km": round(dist, 1),
+                               "yon": _bearing_label(lat, lon, float(alat), float(alon))})
+        alerts.sort(key=lambda a: a["mesafe_km"])
+        return {"parcel_id": parcel_id, "provider": provider.name, "radius_km": radius_km,
+                "alerts": alerts, "en_yakin_km": alerts[0]["mesafe_km"] if alerts else None,
+                "parsel_merkezi": {"lat": lat, "lon": lon}}
+
+    def _bearing_label(lat1, lon1, lat2, lon2) -> str:
+        """Yangının parsele göre yönü (kuzeydoğu, güney…)."""
+        dlon = math.radians(lon2 - lon1)
+        y = math.sin(dlon) * math.cos(math.radians(lat2))
+        x = (math.cos(math.radians(lat1)) * math.sin(math.radians(lat2))
+             - math.sin(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.cos(dlon))
+        brng = (math.degrees(math.atan2(y, x)) + 360) % 360
+        dirs = ["kuzey", "kuzeydoğu", "doğu", "güneydoğu", "güney", "güneybatı", "batı", "kuzeybatı"]
+        return dirs[int((brng % 360) / 45 + 0.5) % 8]
+
+    @api_router.get("/satellite/fire-summary")
+    async def fire_summary(days: int = 2, radius_km: float = COOP_FIRE_RADIUS_KM,
+                           user=Depends(current_user), _feat=Depends(require_feature("gis"))):
+        """Kooperatif parsellerinin `radius_km` (varsayılan 50 km) yakınındaki
+        yangınların ÖZETİ — Dashboard'daki tek satırlık uyarı bunu tüketir.
+
+        Uygulama: tüm parsellerin kapsadığı alanın merkezinden TEK bir FIRMS
+        sorgusu yapılır (5.000 parsel için ayrı ayrı sorgu FIRMS kotasını
+        anında tüketirdi), sonra her yangın en yakın parsele göre süzülür.
+        """
+        parcels = await db.parcels.find(
+            {"is_active": {"$ne": False}, "geometry": {"$ne": None}},
+            {"_id": 0, "id": 1, "name": 1, "village": 1, "geometry": 1, "farmer_id": 1}
+        ).limit(3000).to_list(3000)
+        centers = []
+        for p in parcels:
+            c = _centroid_of(p.get("geometry"))
+            if c:
+                centers.append((c[0], c[1], p))
+        if not centers:
+            return {"available": False, "reason": "Sınırı tanımlı parsel yok", "yangin_sayisi": 0}
+
+        lats = [c[0] for c in centers]
+        lons = [c[1] for c in centers]
+        mid_lat, mid_lon = (min(lats) + max(lats)) / 2, (min(lons) + max(lons)) / 2
+        # Kooperatifin yayılımı + yarıçap kadar bbox
+        span_km = _haversine_km(min(lats), min(lons), max(lats), max(lons)) / 2
+        provider = await get_satellite_provider(db, "fire")
+        try:
+            raw = provider.get_fire_alerts(
+                _bbox_for_radius(mid_lat, mid_lon, span_km + radius_km), days=days)
+        except Exception as e:
+            return {"available": False, "reason": f"Yangın verisi alınamadı: {e}", "yangin_sayisi": 0}
+
+        hits = []
+        for a in raw or []:
+            alat, alon = a.get("latitude"), a.get("longitude")
+            if alat is None or alon is None:
+                continue
+            nearest = min(centers, key=lambda c: _haversine_km(c[0], c[1], float(alat), float(alon)))
+            dist = _haversine_km(nearest[0], nearest[1], float(alat), float(alon))
+            if dist <= radius_km:
+                hits.append({
+                    **a, "mesafe_km": round(dist, 1),
+                    "en_yakin_parsel": nearest[2].get("name"),
+                    "en_yakin_parsel_id": nearest[2].get("id"),
+                    "koy": nearest[2].get("village"),
+                    "yon": _bearing_label(nearest[0], nearest[1], float(alat), float(alon)),
+                })
+        hits.sort(key=lambda h: h["mesafe_km"])
+        kritik = [h for h in hits if h["mesafe_km"] <= PARCEL_FIRE_RADIUS_KM]
+        return {
+            "available": True, "provider": provider.name, "radius_km": radius_km, "gun": days,
+            "yangin_sayisi": len(hits), "kritik_sayisi": len(kritik),
+            "en_yakin": hits[0] if hits else None,
+            "etkilenen_koyler": sorted({h["koy"] for h in kritik if h.get("koy")}),
+            "yanginlar": hits[:50],
+            "mesaj": (f"{len(hits)} yangın {radius_km:.0f} km çevrede"
+                      + (f", en yakını {hits[0]['mesafe_km']} km {hits[0]['yon']}da "
+                         f"({hits[0]['en_yakin_parsel']})" if hits else "")
+                      if hits else f"{radius_km:.0f} km çevrede aktif yangın yok"),
+        }
 
     # =====================================================================
     # Denetim eklentisi (2026-07-25) — NASA FIRMS otomatik tarama + Parsel

@@ -8,6 +8,7 @@ değişikliği YOK. Route kayıt SIRASI korunur: register çağrısı server.py
 içinde bloğun orijinal konumundan yapılır (Starlette route-order tuzağı,
 bkz. CLAUDE.md /parcels/bulk-update notu).
 """
+import re
 import uuid
 import random
 import logging
@@ -155,8 +156,50 @@ def register_dashboard_routes(api_router, db, current_user, require_feature):
 
 
     @api_router.get("/notifications")
-    async def list_notifications(user=Depends(current_user)):
-        return await db.notifications.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(200)
+    async def list_notifications(
+        q: Optional[str] = None, channel: Optional[str] = None,
+        status: Optional[str] = None, module: Optional[str] = None,
+        date_from: Optional[str] = None, date_to: Optional[str] = None,
+        skip: int = 0, limit: int = 50,
+        user=Depends(current_user),
+    ):
+        """Bildirim listesi — sunucu tarafı filtre + sayfalama (2026-08-19).
+
+        Eskiden parametresiz olarak SON 200 bildirimi döndürüyordu ve ekran
+        hepsini tek seferde çekip client tarafında süzüyordu; bildirim sayısı
+        arttıkça hem yavaşlıyor hem eski kayıtlara hiç ulaşılamıyordu.
+
+        `module` filtresi drill-down içindir: bildirim artık ilgili kaydı
+        (`module` + `entity_id`) taşıyabilir, detay ekranı "Kayda git"
+        düğmesini bu alanlardan kurar.
+        """
+        filt: Dict[str, Any] = {}
+        if channel:
+            filt["channel"] = channel
+        if status == "okunmadi":
+            filt["status"] = {"$ne": "okundu"}
+        elif status:
+            filt["status"] = status
+        if module:
+            filt["module"] = module
+        if date_from or date_to:
+            rng: Dict[str, Any] = {}
+            if date_from:
+                rng["$gte"] = date_from
+            if date_to:
+                # Gün sonuna kadar: "2026-08-19" → "2026-08-19T23:59:59"
+                rng["$lte"] = f"{date_to}T23:59:59"
+            filt["created_at"] = rng
+        if q:
+            rx = {"$regex": re.escape(q), "$options": "i"}
+            filt["$or"] = [{"title": rx}, {"message": rx}]
+
+        total = await db.notifications.count_documents(filt)
+        unread = await db.notifications.count_documents({**filt, "status": {"$ne": "okundu"}})
+        items = await db.notifications.find(filt, {"_id": 0}).sort(
+            [("created_at", -1)]).skip(max(0, skip)).limit(max(1, min(limit, 200))).to_list(200)
+        return {"items": items, "total": total, "unread": unread,
+                "skip": skip, "limit": limit}
 
 
     @api_router.get("/notifications/unread-count")

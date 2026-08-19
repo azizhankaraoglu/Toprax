@@ -15,7 +15,8 @@ from fastapi.responses import FileResponse
 
 from .dto import (TaramaPolicy, RemoteSensingTaskCreate, ScanFrequency)
 from .indices import ALL_INDEX_CODES, INDEX_CATALOG
-from .providers import get_remote_sensing_provider
+from .providers import (get_remote_sensing_provider, SATELLITE_BRAND,
+                        PROVIDER_INTEGRATION_TYPES)
 from .tasks import create_task, process_pending_tasks
 from .scheduler import run_scheduler_tick, find_uncovered_parcels
 from .monitoring import get_monitoring_summary
@@ -156,10 +157,24 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
     @api_router.get("/remote-sensing/providers/status")
     async def rs_provider_status(user=Depends(require_permission("remote_sensing:view")),
                                   _feat=Depends(require_feature("remote_sensing"))):
+        """Aktif uzaktan algılama sağlayıcısının durumu.
+
+        2026-08-18 — iki değişiklik:
+          * `enabled` artık AKTİF sağlayıcının kendi entegrasyon kaydından
+            okunur (önceden HER ZAMAN `eosda` kaydına bakıyordu; varsayılan
+            GEE'ye geçtikten sonra bu, gerçek modda çalışan bir sistemi
+            ekranda "entegrasyon pasif" gösterirdi).
+          * `brand` — ekranlarda gösterilecek ad. Sağlayıcı adı bir uygulama
+            detayıdır; kullanıcı arayüzü markayı gösterir (bkz.
+            providers/__init__.py SATELLITE_BRAND).
+        """
         provider = await get_remote_sensing_provider(db)
-        integ = await db.integrations.find_one({"type": "eosda"}, {"_id": 0}) or {}
+        integ = await db.integrations.find_one({"type": PROVIDER_INTEGRATION_TYPES.get(provider.name, "eosda")},
+                                               {"_id": 0}) or {}
         return {
+            "brand": SATELLITE_BRAND,
             "active_provider": provider.name,
+            "integration_type": PROVIDER_INTEGRATION_TYPES.get(provider.name, "eosda"),
             "is_real": not getattr(provider, "mock_mode", True),
             "enabled": bool(integ.get("enabled")),
             "capabilities": provider.capabilities,
@@ -225,7 +240,14 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
         parcel_ids = body.get("parcel_ids") or ([body["parcel_id"]] if body.get("parcel_id") else [])
         if not parcel_ids:
             raise HTTPException(400, "parcel_ids veya parcel_id gerekli")
-        indices = body.get("indices") or ["ndvi"]
+        # 2026-08-18 — varsayılan indeks kümesi NDVI'den TÜM kataloğa çıktı:
+        # varsayılan sağlayıcı artık GEE/HLS ve orada 10 indeksin hepsi TEK
+        # sahne taramasında hesaplanıyor (ek istek/kota maliyeti YOK, bkz.
+        # gee_hls/service.py _add_indices ve tasks.py'deki maliyet istisnası).
+        # Sentinel-2 manuel getirme ucu bunu zaten yapıyordu; iki akış artık
+        # aynı davranışta. EOSDA'ya `provider_override` ile düşen bir tarama
+        # pahalıya gelirse politika kendi `indices` listesini verebilir.
+        indices = body.get("indices") or list(ALL_INDEX_CODES)
         # task_types listesi verilirse (ör. ["statistics","download"]) her parsel
         # için hem NDVI istatistiği hem uydu görüntüsü tek çağrıda kuyruğa alınır;
         # geriye dönük uyumlu: tekil task_type hâlâ desteklenir.

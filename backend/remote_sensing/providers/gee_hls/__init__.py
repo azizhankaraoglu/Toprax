@@ -11,7 +11,9 @@ yanıt şeması) korur; `GEEHLSProvider` AYNI mantığı `IRemoteSensingProvider
 arayüzüne sararak mevcut Tarama Politikası/scheduler/AI-yorumu/bildirim
 boru hattına da bağlar (bkz. service.py).
 """
-from .service import GEEHLSProvider, analyze_field
+from .service import (GEEHLSProvider, analyze_field, get_latest_thumbnail_url,
+                      normalize_indices, SENSOR_LABELS)
 from .routes import register_gee_hls_routes
 
-__all__ = ["GEEHLSProvider", "analyze_field", "register_gee_hls_routes"]
+__all__ = ["GEEHLSProvider", "analyze_field", "get_latest_thumbnail_url",
+           "normalize_indices", "SENSOR_LABELS", "register_gee_hls_routes"]

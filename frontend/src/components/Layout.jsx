@@ -7,7 +7,8 @@ import {
   Settings2, BarChart3, Truck, Bell, LogOut, Award, ChevronRight, FlaskConical,
   Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Sparkles,
   UserCog, ShieldCheck, LayoutList, Landmark, Compass, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, ClipboardCheck,
-  Workflow, CheckSquare, Inbox, Radio, FileBarChart2, Layers
+  Workflow, CheckSquare, Inbox, Radio, FileBarChart2, Layers,
+  CalendarClock, Bug, Factory
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
 import AnnouncementPopup from "@/components/AnnouncementPopup";
@@ -38,9 +39,13 @@ const navGroups = [
     title: "ÜRETİM",
     items: [
       { to: "/ekim", icon: Sprout, label: "Ekim Planlama", featureFlag: "planting" },
+      // Karar destek katmanı (2026-08-19) — ekim planlamadan hasada kadar.
+      { to: "/sezon-karar-takvimi", icon: CalendarClock, label: "Sezon Karar Takvimi" },
       { to: "/sulama", icon: Droplets, label: "Sulama & Kaynak", featureFlag: "irrigation" },
       { to: "/operasyon", icon: Settings2, label: "Operasyon", featureFlag: "operations" },
       { to: "/toprak", icon: FlaskConical, label: "Toprak Analizleri", featureFlag: "soil" },
+      { to: "/toprak-biyolojisi", icon: Bug, label: "Toprak Biyolojisi" },
+      { to: "/hasat-lojistigi", icon: Factory, label: "Hasat & Kampanya" },
     ]
   },
   {

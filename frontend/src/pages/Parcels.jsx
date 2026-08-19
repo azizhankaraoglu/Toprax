@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import AdminAreaPopupLinks from "@/components/AdminAreaPopupLinks";
+import MapClickAdminPopup from "@/components/MapClickAdminPopup";
 import api from "@/api";
 import { MapContainer, TileLayer, Polygon, Popup, Marker, useMapEvents, useMap } from "react-leaflet";
 import * as turf from "@turf/turf";
@@ -117,8 +119,17 @@ export default function Parcels() {
   const [importResult, setImportResult] = useState(null);
 
   // İDARİ SINIR KATMANI — IT-13.6 Layer v1 (aç/kapa, sadeleştirilmiş geometri)
+  //
+  // 2026-08-19 — SEVİYE SEÇİCİ GERİ GELDİ. Gerçek Türkiye verisi yüklendikten
+  // sonra koleksiyonda 81 il + 971 ilçe + 50.130 mahalle var; hepsini birden
+  // çizmek hem okunmaz bir harita hem ağır bir istek demek. Kullanıcı hangi
+  // seviyeyi istediğini seçer (varsayılan: il + ilçe), veriler harita görünür
+  // alanına göre (`bbox`) çekilir.
   const [showAdminAreas, setShowAdminAreas] = useState(false);
+  const [adminLevels, setAdminLevels] = useState({ il: true, ilce: true, mahalle: false });
   const [adminAreas, setAdminAreas] = useState([]);
+  const [adminCounts, setAdminCounts] = useState(null);
+  const [adminLoading, setAdminLoading] = useState(false);
 
   // SON HAL — sabit lookup filtre çubuğu (DB'deki gerçek distinct değerler).
   // Dashboard drill-down'ları URL parametresiyle gelir (?ekili=evet|hayir,
@@ -136,16 +147,50 @@ export default function Parcels() {
   const [contractByParcel, setContractByParcel] = useState(new Map());
   // SON HAL — popup içi "Görev ata" mini formu
   const [taskForm, setTaskForm] = useState(null); // {parcelId, task_type, date, msg}
+  // 2026-08-19 — popup'ta "Parsel" seçilince açılan işlem menüsü (parcel id)
+  const [popupParcelOpen, setPopupParcelOpen] = useState(null);
 
   const load = useCallback(() => {
     api.get("/parcels", { params: { limit: 1200 } }).then((r) => setParcels(r.data));
   }, []);
 
+  // Seçili seviyeleri, parsellerin kapladığı alana göre yükler. Parseller
+  // zaten yüklendiği için sınırı onlardan hesaplıyoruz — haritanın anlık
+  // görünümüne bağlamak her kaydırmada yeni istek demek olurdu.
+  const parcelBBox = useMemo(() => {
+    const pts = [];
+    parcels.forEach((p) => {
+      const g = p.geometry;
+      if (!g) return;
+      (function walk(c) {
+        if (typeof c[0] === "number") pts.push(c);
+        else c.forEach(walk);
+      })(g.coordinates || []);
+    });
+    if (pts.length === 0) return null;
+    const lons = pts.map((p) => p[0]);
+    const lats = pts.map((p) => p[1]);
+    const pad = 0.05;
+    return [Math.min(...lons) - pad, Math.min(...lats) - pad,
+            Math.max(...lons) + pad, Math.max(...lats) + pad].join(",");
+  }, [parcels]);
+
   useEffect(() => {
-    if (showAdminAreas && adminAreas.length === 0) {
-      api.get("/admin-areas").then((r) => setAdminAreas(r.data));
+    if (!showAdminAreas) return;
+    const levels = Object.entries(adminLevels).filter(([, on]) => on).map(([k]) => k);
+    if (levels.length === 0) { setAdminAreas([]); return; }
+    setAdminLoading(true);
+    Promise.all(levels.map((lvl) =>
+      api.get("/admin-areas", { params: { area_type: lvl, bbox: parcelBBox || undefined, limit: 1200 } })
+         .then((r) => r.data).catch(() => [])
+    )).then((lists) => setAdminAreas(lists.flat())).finally(() => setAdminLoading(false));
+  }, [showAdminAreas, adminLevels, parcelBBox]);
+
+  useEffect(() => {
+    if (showAdminAreas && !adminCounts) {
+      api.get("/admin-areas/counts").then((r) => setAdminCounts(r.data)).catch(() => {});
     }
-  }, [showAdminAreas, adminAreas.length]);
+  }, [showAdminAreas, adminCounts]);
 
   useEffect(() => {
     load();
@@ -553,6 +598,28 @@ export default function Parcels() {
         >
           <Layers size={14}/> İdari Sınırlar
         </button>
+        {/* 2026-08-19 — seviye kutucukları: hangi idari katmanın çizileceğini
+            kullanıcı seçer (eskiden hepsi birden yükleniyordu ve 50 binlik
+            mahalle verisinde harita kullanılamaz hale geliyordu). */}
+        {showAdminAreas && (
+          <div className="flex items-center gap-3 text-xs bg-[var(--surface-2)] rounded-lg px-3 py-1.5"
+               data-testid="admin-level-picker">
+            {[["il", "İl"], ["ilce", "İlçe"], ["mahalle", "Mahalle"]].map(([key, label]) => (
+              <label key={key} className="flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" checked={!!adminLevels[key]}
+                       onChange={(e) => setAdminLevels((s) => ({ ...s, [key]: e.target.checked }))}
+                       data-testid={`admin-level-${key}`} />
+                {label}
+                {adminCounts?.[key] != null && (
+                  <span className="text-[var(--text-dim)]">({adminCounts[key].toLocaleString("tr-TR")})</span>
+                )}
+              </label>
+            ))}
+            <span className="text-[var(--text-dim)]">
+              {adminLoading ? "yükleniyor…" : `${adminAreas.length} sınır çizili`}
+            </span>
+          </div>
+        )}
       </div>
       {toolMsg && (
         <div className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-3">
@@ -621,14 +688,32 @@ export default function Parcels() {
                   pathOptions={{ color: "#60a5fa", fillOpacity: 0, weight: 2, dashArray: "6 4" }}
                 >
                   <Popup>
-                    <div style={{ minWidth: 140 }}>
-                      <div style={{ fontWeight: 600 }}>{a.name}</div>
-                      <div style={{ fontSize: 12, opacity: 0.8 }}>{a.area_type}</div>
+                    <div style={{ minWidth: 200 }}>
+                      <div style={{ fontWeight: 600 }}>{a.display_name || a.name}</div>
+                      <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>
+                        {{ il: "İl", ilce: "İlçe", mahalle: "Mahalle/Köy" }[a.area_type] || a.area_type}
+                      </div>
+                      {[["nufus_toplam", "Nüfus"], ["kayitli_cks_ciftci_sayisi", "ÇKS Çiftçi"],
+                        ["islenen_tarim_arazisi_dekar", "İşlenen Arazi"], ["baskin_urun_grubu", "Baskın Ürün"]]
+                        .filter(([k]) => a[k] != null && a[k] !== "")
+                        .map(([k, label]) => (
+                          <div key={k} style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <span style={{ opacity: 0.7 }}>{label}</span>
+                            <b>{typeof a[k] === "number" ? a[k].toLocaleString("tr-TR") : a[k]}</b>
+                          </div>
+                        ))}
+                      <button type="button" className="btn btn-ghost" style={{ fontSize: 11, marginTop: 6 }}
+                              onClick={() => nav(`/idari-alanlar/${a.id}`)}>
+                        Demografik detay →
+                      </button>
                     </div>
                   </Popup>
                 </Polygon>
               ));
             })}
+
+            {/* Boş alana tıklama → il/ilçe/mahalle popup'ı (2026-08-19) */}
+            <MapClickAdminPopup />
 
             {/* Listeden seçilince haritayı seçili parsele uçur (SON HAL senkron) */}
             <MapFlyTo target={selected} />
@@ -686,7 +771,24 @@ export default function Parcels() {
                             )}
                           </tbody>
                         </table>
-                        <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
+                        {/* 2026-08-19 — İl / İlçe / Mahalle / Parsel bağlantıları.
+                            Konum bazlı sorgulanır ($geoIntersects), parseldeki
+                            metin alanlarına güvenilmez.
+                            "Parsel" seçilene kadar aşağıdaki işlem menüsü
+                            KAPALI durur (kullanıcı isteği): önce hangi seviyeyle
+                            ilgilendiğini seçer, sonra o seviyenin işlemleri açılır. */}
+                        <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px solid rgba(125,125,125,.25)" }}>
+                          <AdminAreaPopupLinks
+                            lon={p.geometry.coordinates[0][0][0]}
+                            lat={p.geometry.coordinates[0][0][1]}
+                            parcel={p}
+                            compact
+                            onParcelClick={() => setPopupParcelOpen(
+                              popupParcelOpen === p.id ? null : p.id)}
+                          />
+                        </div>
+                        <div style={{ gap: 4, marginTop: 8,
+                                      display: popupParcelOpen === p.id ? "grid" : "none" }}>
                           <button className="btn btn-primary text-xs" style={{ width: "100%" }}
                                   onClick={() => nav(`/parseller/${p.id}`)} data-testid="popup-parcel-detail">
                             Parsel detayına git

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "@/api";
 import { QuickAddPanel } from "@/components/QuickAdd";
@@ -304,16 +304,41 @@ export function Bildirimler() {
   // tek tık / toplu okundu işaretleme eklendi.
   // SON HAL #8 — bir satıra tıklamak artık sadece okundu işaretlemiyor,
   // detay sayfasına da götürüyor (/bildirimler/:id, NotificationDetail.jsx).
+  // 2026-08-19 — sunucu tarafı filtre + sayfalama. Eskiden TÜM bildirimler
+  // tek seferde çekilip client'ta süzülüyordu; kayıt sayısı arttıkça hem
+  // yavaşlıyor hem eski bildirimlere ulaşılamıyordu.
   const nav = useNavigate();
-  const notifsQ = useFetch("/notifications", { initialData: [] });
-  const notifs = notifsQ.data;
-  const [shown, setShown] = useState(30);
+  const [notifs, setNotifs] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [limit, setLimit] = useState(30);
   const [onlyUnread, setOnlyUnread] = useState(false);
-  const chBadge = { sms: "badge-b", whatsapp: "badge-a", push: "badge-c", in_app: "badge-neutral" };
+  const [q, setQ] = useState("");
+  const [channel, setChannel] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [busy, setBusy] = useState(false);
+  const chBadge = { sms: "badge-b", whatsapp: "badge-a", push: "badge-c", in_app: "badge-neutral", email: "badge-b" };
 
-  const filtered = onlyUnread ? notifs.filter((n) => n.status !== "okundu") : notifs;
-  const visible = filtered.slice(0, shown);
-  const unreadCount = notifs.filter((n) => n.status !== "okundu").length;
+  const load = useCallback(() => {
+    setBusy(true);
+    api.get("/notifications", {
+      params: {
+        limit, q: q || undefined, channel: channel || undefined,
+        status: onlyUnread ? "okunmadi" : undefined,
+        date_from: dateFrom || undefined,
+      },
+    }).then((r) => {
+      // Geriye uyum: eski sürüm düz dizi döndürüyordu.
+      const d = r.data;
+      setNotifs(Array.isArray(d) ? d : (d.items || []));
+      setTotal(Array.isArray(d) ? d.length : (d.total || 0));
+      setUnreadCount(Array.isArray(d) ? d.filter((n) => n.status !== "okundu").length : (d.unread || 0));
+    }).finally(() => setBusy(false));
+  }, [limit, q, channel, onlyUnread, dateFrom]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const visible = notifs;
 
   async function openNotification(n) {
     if (n.status !== "okundu") await api.put(`/notifications/${n.id}/read`);
@@ -321,8 +346,15 @@ export function Bildirimler() {
   }
   async function markAllRead() {
     await api.post("/notifications/mark-all-read");
-    notifsQ.reload();
+    load();
   }
+
+  // Gün bazlı gruplama — uzun listede tarih ayracı okumayı kolaylaştırır.
+  const groups = visible.reduce((acc, n) => {
+    const day = (n.created_at || "").slice(0, 10);
+    (acc[day] = acc[day] || []).push(n);
+    return acc;
+  }, {});
 
   return (
     <div className="p-8 max-w-[1000px]" data-testid="bildirimler-page">
@@ -330,7 +362,7 @@ export function Bildirimler() {
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <h1 className="font-display text-4xl">Bildirim Merkezi</h1>
         <div className="flex items-center gap-2">
-          <button onClick={() => { setOnlyUnread(!onlyUnread); setShown(30); }}
+          <button onClick={() => setOnlyUnread(!onlyUnread)}
                   className={`btn ${onlyUnread ? "btn-primary" : "btn-ghost"} text-xs`}
                   data-testid="notif-unread-filter">
             Okunmamışlar ({unreadCount})
@@ -343,34 +375,74 @@ export function Bildirimler() {
         </div>
       </div>
 
+      {/* Filtre çubuğu (2026-08-19) — arama/kanal/tarih sunucuda süzülür */}
+      <div className="card p-3 mb-4 flex items-end gap-2 flex-wrap">
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <label className="text-[11px] text-[var(--text-dim)]">Ara (başlık/mesaj)</label>
+          <input className="input" value={q} onChange={(e) => setQ(e.target.value)}
+                 placeholder="ör. sulama" data-testid="notif-search" />
+        </div>
+        <div>
+          <label className="text-[11px] text-[var(--text-dim)]">Kanal</label>
+          <select className="input" value={channel} onChange={(e) => setChannel(e.target.value)}
+                  data-testid="notif-channel">
+            <option value="">Hepsi</option>
+            {["in_app", "sms", "email", "whatsapp", "push"].map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-[11px] text-[var(--text-dim)]">Başlangıç tarihi</label>
+          <input className="input" type="date" value={dateFrom}
+                 onChange={(e) => setDateFrom(e.target.value)} data-testid="notif-date-from" />
+        </div>
+        <button className="btn btn-ghost text-xs" onClick={() => { setQ(""); setChannel(""); setDateFrom(""); }}>
+          Temizle
+        </button>
+        <div className="text-xs text-[var(--text-dim)] ml-auto">
+          {busy ? "yükleniyor…" : `${visible.length} / ${total} bildirim`}
+        </div>
+      </div>
+
       <div className="card overflow-hidden">
         {visible.length === 0 && (
           <div className="p-6 text-center text-[var(--text-dim)] text-sm">
             {onlyUnread ? "Okunmamış bildirim yok." : "Bildirim yok."}
           </div>
         )}
-        {visible.map((n) => (
-          <div key={n.id}
-               className={`p-4 border-b border-[var(--border)] flex items-start gap-4 cursor-pointer hover:bg-[var(--surface-2)] ${n.status !== "okundu" ? "bg-[var(--primary)]/5" : ""}`}
-               onClick={() => openNotification(n)}
-               data-testid={`notif-row-${n.id}`}
-               title="Detayları görmek için tıklayın">
-            <span className={`badge ${chBadge[n.channel]||"badge-neutral"}`}>{n.channel}</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium">{n.title}</div>
-              <div className="text-xs text-[var(--text-dim)] mt-0.5 break-words">{n.message}</div>
-              <div className="text-[10px] text-[var(--text-dim)] mt-1">{new Date(n.created_at).toLocaleString("tr-TR")}</div>
+        {/* Gün bazlı gruplama */}
+        {Object.entries(groups).map(([day, rows]) => (
+          <div key={day}>
+            <div className="px-4 py-2 text-[11px] uppercase tracking-wider text-[var(--text-dim)] bg-[var(--surface-2)]">
+              {day ? new Date(day).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" }) : "—"}
+              {" · "}{rows.length} bildirim
             </div>
-            <span className={`badge ${n.status==="okundu"?"badge-a":"badge-c"} shrink-0`}>{n.status}</span>
+            {rows.map((n) => (
+              <div key={n.id}
+                   className={`p-4 border-b border-[var(--border)] flex items-start gap-4 cursor-pointer hover:bg-[var(--surface-2)] ${n.status !== "okundu" ? "bg-[var(--primary)]/5" : ""}`}
+                   onClick={() => openNotification(n)}
+                   data-testid={`notif-row-${n.id}`}
+                   title="Detayları görmek için tıklayın">
+                <span className={`badge ${chBadge[n.channel] || "badge-neutral"}`}>{n.channel}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium">{n.title}</div>
+                  <div className="text-xs text-[var(--text-dim)] mt-0.5 break-words">{n.message}</div>
+                  <div className="text-[10px] text-[var(--text-dim)] mt-1">
+                    {new Date(n.created_at).toLocaleString("tr-TR")}
+                    {n.module && <span className="ml-2">· ilgili kayıt: {n.module}</span>}
+                  </div>
+                </div>
+                <span className={`badge ${n.status === "okundu" ? "badge-a" : "badge-c"} shrink-0`}>{n.status}</span>
+              </div>
+            ))}
           </div>
         ))}
       </div>
 
-      {filtered.length > shown && (
+      {total > visible.length && (
         <div className="mt-3 flex justify-center">
-          <button onClick={() => setShown((s) => s + 30)} className="btn btn-ghost text-xs"
+          <button onClick={() => setLimit((s) => s + 30)} className="btn btn-ghost text-xs"
                   data-testid="notif-load-more">
-            Daha fazla göster ({filtered.length - shown} kaldı)
+            Daha fazla göster ({total - visible.length} kaldı)
           </button>
         </div>
       )}

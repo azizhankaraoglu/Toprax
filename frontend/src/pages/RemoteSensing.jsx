@@ -1,11 +1,18 @@
 /**
- * UZAKTAN ALGILAMA (Remote Sensing / EOSDA) — FAZ 9.5 / IT-28.1
+ * UZAKTAN ALGILAMA (Toprax Uydu) — FAZ 9.5 / IT-28.1
  *
  * backend/remote_sensing paketinin yönetim yüzeyi: sağlayıcı durumu,
- * Monitoring özeti (EOSDA trial kotası dahil), Tarama Politikaları (admin
- * kural tanımlar — Communication Policy deseni), Task kuyruğu, "Politikasız
- * Parseller" uyarısı. EOSDA API key'i Ayarlar > Entegrasyonlar'dan girilir
- * (Karar 3) — bu ekran ayrı bir key alanı İCAT ETMEZ.
+ * Monitoring özeti, Tarama Politikaları (admin kural tanımlar —
+ * Communication Policy deseni), Task kuyruğu, "Politikasız Parseller"
+ * uyarısı. Kimlik bilgisi Ayarlar > Entegrasyonlar'dan girilir (Karar 3) —
+ * bu ekran ayrı bir anahtar alanı İCAT ETMEZ.
+ *
+ * 2026-08-18 — ekranda sağlayıcı adı (EOSDA/GEE) değil, hizmetin görünen
+ * adı **Toprax Uydu** yazar; metin `GET /remote-sensing/providers/status`
+ * yanıtındaki `brand` alanından gelir (tek kaynak: backend
+ * providers/__init__.py SATELLITE_BRAND). Motor varsayılan olarak Google
+ * Earth Engine + NASA HLS'tir; EOSDA bir Tarama Politikası'nda
+ * `provider_override` ile hâlâ seçilebilir.
  */
 import { useEffect, useState } from "react";
 import api from "@/api";
@@ -42,6 +49,10 @@ export default function RemoteSensing() {
   const [uncovered, setUncovered] = useState([]);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ name: "", frequency: "haftada_bir", priority: 0, indices: "ndvi" });
+
+  // Hizmetin görünen adı backend'den (SATELLITE_BRAND); durum çağrısı
+  // dönene kadar aynı ad yerel yedek olarak kullanılır.
+  const brand = status?.brand || "Toprax Uydu";
 
   const load = () => {
     api.get("/remote-sensing/providers/status").then((r) => setStatus(r.data)).catch(() => {});
@@ -90,7 +101,7 @@ export default function RemoteSensing() {
         <div>
           <div className="text-[11px] text-[var(--primary)] tracking-widest mb-1">UZAKTAN ALGILAMA</div>
           <h1 className="font-display text-4xl">Uzaktan Algılama</h1>
-          <p className="text-[var(--text-dim)] text-sm mt-1">EOSDA entegrasyonu · Tarama Politikaları · İzleme</p>
+          <p className="text-[var(--text-dim)] text-sm mt-1">{brand} · Tarama Politikaları · İzleme</p>
         </div>
         <button onClick={runScheduler} disabled={busy} className="btn btn-primary" data-testid="run-scheduler">
           <RefreshCw size={16}/> Tarama Turu Çalıştır
@@ -102,11 +113,15 @@ export default function RemoteSensing() {
         <div className="card p-4 mb-4 flex items-center gap-3">
           <Satellite size={18} className="text-[var(--primary)]"/>
           <div className="text-sm">
-            Aktif sağlayıcı: <span className="font-medium">{status.active_provider}</span>
+            Aktif servis: <span className="font-medium">{brand}</span>
+            {/* Teknik sağlayıcı adı (gee_hls/sentinel2/eosda) kullanıcı için
+                bir uygulama detayı — destek/hata ayıklamada işe yaradığı için
+                küçük punto not olarak duruyor, başlık olarak DEĞİL. */}
+            <span className="text-[11px] text-[var(--text-dim)] ml-1">({status.active_provider})</span>
             <span className={`badge ml-2 ${status.is_real ? "badge-a" : "badge-neutral"}`}>
               {status.is_real ? "GERÇEK" : "MOCK"}
             </span>
-            {!status.enabled && <span className="text-[var(--text-dim)] ml-2">· Entegrasyon pasif (Ayarlar › Entegrasyonlar › EOSDA)</span>}
+            {!status.enabled && <span className="text-[var(--text-dim)] ml-2">· Entegrasyon pasif (Ayarlar › Entegrasyonlar › {brand})</span>}
           </div>
         </div>
       )}
@@ -117,7 +132,14 @@ export default function RemoteSensing() {
           <KPI icon={Activity} label="Toplam API Çağrısı" value={fmt(mon.total_api_calls)} />
           <KPI icon={ListChecks} label="Başarılı / Hatalı" value={`${fmt(mon.success)} / ${fmt(mon.failed)}`} accent="bg-emerald-500/10 text-emerald-400" />
           <KPI icon={RefreshCw} label="Bekleyen" value={fmt(mon.pending)} accent="bg-amber-500/10 text-amber-400" />
-          <KPI icon={AlertTriangle} label="Trial Kalan" value={fmt(mon.trial_remaining)} suffix={`/${fmt(mon.trial_request_limit)}`} accent="bg-red-500/10 text-red-400" />
+          {/* "Trial Kalan" SADECE sabit bir deneme kotası olan sağlayıcılarda
+              anlamlıdır (EOSDA'nın 1000 istekli trial'ı). Toprax Uydu'da
+              böyle bir sabit limit yok — backend bu alanları null döner ve
+              kart gizlenir; uydurma bir "kalan kota" göstermek yanıltıcı
+              olurdu (bkz. backend remote_sensing/monitoring.py). */}
+          {mon.trial_request_limit != null && (
+            <KPI icon={AlertTriangle} label="Trial Kalan" value={fmt(mon.trial_remaining)} suffix={`/${fmt(mon.trial_request_limit)}`} accent="bg-red-500/10 text-red-400" />
+          )}
         </div>
       )}
 

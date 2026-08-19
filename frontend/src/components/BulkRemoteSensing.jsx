@@ -8,10 +8,17 @@
  *      (NDVI istatistiği + opsiyonel uydu görüntüsü). Sonuç parsel.remote_sensing'e
  *      tarih damgasıyla yazılır (geçmiş veriler saklanır — bkz. RemoteSensingPanel).
  *
- * Not: gerçek EOSDA çağrısı için Ayarlar › Entegrasyonlar › EOSDA anahtarı +
- * mock_mode kapalı olmalı; aksi halde deterministik MOCK veri üretilir.
+ * Not: gerçek uydu çağrısı için Ayarlar › Entegrasyonlar › Toprax Uydu
+ * kimlik bilgisi girilmiş + mock_mode kapalı olmalı; aksi halde
+ * deterministik MOCK veri üretilir.
+ *
+ * 2026-08-18 — indeks seçimi artık sabit iki checkbox (NDVI/NDRE) değil,
+ * `GET /remote-sensing/index-catalog`'tan gelen TÜM katalog (10 indeks,
+ * TR etiketleriyle — RemoteSensingPanel'in AYNI kaynağı, etiket metni
+ * hiçbir yerde hardcode edilmez). Varsayılan hepsi işaretli: Toprax Uydu
+ * hepsini tek sahne taramasında hesaplıyor, ek kota maliyeti yok.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "@/api";
 import FilterPanel from "@/components/FilterPanel";
 import { Satellite, RefreshCw, MapPin } from "lucide-react";
@@ -22,10 +29,21 @@ export default function BulkRemoteSensing({ title = "Toplu Uzaktan Algılama" })
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState(() => new Set());
-  const [indices, setIndices] = useState({ ndvi: true, ndre: false });
+  const [catalog, setCatalog] = useState({});      // code -> {label_tr, ...}
+  const [indices, setIndices] = useState({ ndvi: true });
   const [withImage, setWithImage] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
+
+  // Katalog gelince hepsini işaretli başlat (NDVI her hâlükârda seçili
+  // kalır — backend de onu her zaman listeye ekler).
+  useEffect(() => {
+    api.get("/remote-sensing/index-catalog").then((r) => {
+      const cat = r.data || {};
+      setCatalog(cat);
+      setIndices(Object.fromEntries(Object.keys(cat).map((c) => [c, true])));
+    }).catch(() => {});
+  }, []);
 
   const onResults = (items, t) => { setRows(items || []); setTotal(t || 0); setSelected(new Set()); setResult(null); };
 
@@ -48,7 +66,7 @@ export default function BulkRemoteSensing({ title = "Toplu Uzaktan Algılama" })
       });
       setResult({ ok: true, ...data });
     } catch (err) {
-      setResult({ ok: false, detail: err.response?.data?.detail || "Çalıştırılamadı (EOSDA yetkisi/entegrasyonu gerekli)." });
+      setResult({ ok: false, detail: err.response?.data?.detail || "Çalıştırılamadı (Toprax Uydu yetkisi/entegrasyonu gerekli)." });
     } finally {
       setBusy(false);
     }
@@ -71,9 +89,15 @@ export default function BulkRemoteSensing({ title = "Toplu Uzaktan Algılama" })
           {/* Kontrol çubuğu */}
           <div className="p-3 border-b border-[var(--border)] flex flex-wrap items-center gap-3">
             <div className="text-xs text-[var(--text-dim)]">{selected.size} / {rows.length} seçili (toplam {total})</div>
-            <div className="flex items-center gap-3 text-xs">
-              <label className="flex items-center gap-1"><input type="checkbox" checked={indices.ndvi} onChange={(e) => setIndices((i) => ({ ...i, ndvi: e.target.checked }))} /> NDVI</label>
-              <label className="flex items-center gap-1"><input type="checkbox" checked={indices.ndre} onChange={(e) => setIndices((i) => ({ ...i, ndre: e.target.checked }))} /> NDRE</label>
+            <div className="flex items-center gap-3 text-xs flex-wrap">
+              {Object.entries(catalog).map(([code, meta]) => (
+                <label key={code} className="flex items-center gap-1"
+                       title={meta.description_tr || ""}>
+                  <input type="checkbox" checked={!!indices[code]}
+                         onChange={(e) => setIndices((i) => ({ ...i, [code]: e.target.checked }))} />
+                  {code.toUpperCase()}{meta.is_estimated ? " (tahmini)" : ""}
+                </label>
+              ))}
               <label className="flex items-center gap-1"><input type="checkbox" checked={withImage} onChange={(e) => setWithImage(e.target.checked)} /> Uydu görüntüsü de indir</label>
             </div>
             <button onClick={run} disabled={busy || selected.size === 0 || idxList.length === 0}

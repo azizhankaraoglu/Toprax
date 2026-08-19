@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api from "@/api";
 import {
   Users, Map as MapIcon, FileText, TrendingUp, Wheat, Target,
-  ArrowUpRight, AlertTriangle, Satellite, Radio, Plane, Search, Sprout, X
+  ArrowUpRight, AlertTriangle, Satellite, Radio, Plane, Search, Sprout, X, Flame
 } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -162,6 +162,46 @@ function DashboardSearch() {
   );
 }
 
+/**
+ * FireBanner — kooperatif parsellerinin 50 km çevresindeki aktif yangınlar.
+ * Kaynak: NASA FIRMS (`GET /satellite/fire-summary`). Yangın yoksa hiçbir
+ * şey render edilmez; "yangın yok" bildirimi ekranı meşgul etmemeli.
+ */
+function FireBanner() {
+  const [fire, setFire] = useState(null);
+  const nav = useNavigate();
+
+  useEffect(() => {
+    api.get("/satellite/fire-summary", { params: { days: 2 } })
+      .then((r) => setFire(r.data)).catch(() => setFire(null));
+  }, []);
+
+  if (!fire?.available || !fire.yangin_sayisi) return null;
+  const kritik = fire.kritik_sayisi > 0;
+
+  return (
+    <button
+      onClick={() => nav("/uzaktan-algilama?view=yangin")}
+      data-testid="dashboard-fire-banner"
+      className={`w-full text-left card p-4 mb-4 flex items-center gap-3 hover:opacity-90 ${
+        kritik ? "border border-red-500/40 bg-red-500/10" : "border border-amber-500/30 bg-amber-500/5"}`}
+    >
+      <Flame size={20} className={kritik ? "text-red-400" : "text-amber-400"} />
+      <div className="flex-1">
+        <div className="text-sm font-medium">{fire.mesaj}</div>
+        <div className="text-xs text-[var(--text-dim)] mt-0.5">
+          {kritik
+            ? `${fire.kritik_sayisi} yangın 20 km kritik bariyerin içinde` +
+              (fire.etkilenen_koyler?.length ? ` · etkilenen köyler: ${fire.etkilenen_koyler.join(", ")}` : "")
+            : "Kritik bariyer (20 km) içinde yangın yok"}
+          {" · kaynak: NASA FIRMS"}
+        </div>
+      </div>
+      <span className="text-xs text-[var(--text-dim)]">Yangın haritası →</span>
+    </button>
+  );
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
 
@@ -188,6 +228,11 @@ export default function Dashboard() {
       </header>
 
       <DashboardSearch />
+
+      {/* YANGIN UYARI ŞERİDİ (2026-08-19) — kooperatif parsellerinin 50 km
+          çevresindeki aktif yangınlar. Tıklanınca yangın haritasına gider.
+          Yangın yoksa şerit sessizce gizlenir (boş uyarı gürültüdür). */}
+      <FireBanner />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <KPI icon={Users} label="Sözleşmeli Çiftçi" value={fmt(k.farmers_total)} to="/ciftciler" />

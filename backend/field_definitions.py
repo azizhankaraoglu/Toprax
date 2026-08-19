@@ -1016,14 +1016,59 @@ def register_field_definition_routes(api_router, db, current_user, require_permi
             ("admin_areas", "agricultural_area_dekar", "Tarım Alanı (dekar)", "decimal", "Demografi", 2, {}),
             ("admin_areas", "farmer_count_est", "Tahmini Çiftçi Sayısı", "number", "Demografi", 3, {}),
         ]
+
+        # 2026-08-19 — GERÇEK il/ilçe/mahalle dosyalarından gelen profil alanları.
+        #
+        # NEDEN GEREKLİ: `scripts/import_admin_areas.py` bu alanları dokümana
+        # tipli olarak yazıyor, ama field_definitions kaydı OLMADAN ekranda
+        # görünmüyorlardı — SmartDataGrid kolon listesini ve Query Engine'in
+        # filtrelenebilir alan whitelist'ini bu tablo besliyor (bkz.
+        # query_engine.get_filterable_map: CORE + field_definitions birleşimi).
+        # Kullanıcı geri bildirimi: "kolonlarda geojson dosyasında yer alan
+        # demografik veriler eklenmemiş".
+        #
+        # Etiketler ve alan listesi TEK KAYNAKTAN gelir: admin_areas.py'deki
+        # DEMOGRAPHIC_LABELS — burada tekrar yazılmaz (dosya değişince iki yeri
+        # elle senkron tutma tuzağına düşmemek için).
+        from admin_areas import DEMOGRAPHIC_LABELS       # yerel import: döngüsel bağımlılık yok
+        _INT_KEYS = {"il_plaka", "ilce_kodu", "mahalle_kodu", "nufus_toplam", "hane_sayisi",
+                     "kayitli_cks_ciftci_sayisi", "traktor_sayisi",
+                     "kucukbas_hayvan_sayisi", "buyukbas_hayvan_sayisi"}
+        _TEXT_KEYS = {"il_adi", "ilce_adi", "mahalle_adi", "display_name", "bolge_adi",
+                      "kirsalsal_yerlesim", "gelir_seviyesi_grubu", "baskin_urun_grubu",
+                      "birinci_ana_urun", "ikinci_ana_urun", "ucuncu_ana_urun"}
+
+        def _tab_for(key: str) -> str:
+            if key in ("il_plaka", "il_adi", "ilce_kodu", "ilce_adi", "mahalle_kodu",
+                       "mahalle_adi", "display_name", "bolge_adi"):
+                return "Kimlik"
+            if key.startswith(("nufus", "hane", "yas_", "egitim_", "kirsal", "gelir")):
+                return "Demografi"
+            return "Tarımsal Profil"
+
+        for i, (key, label) in enumerate(DEMOGRAPHIC_LABELS.items()):
+            ftype = "number" if key in _INT_KEYS else ("text" if key in _TEXT_KEYS else "decimal")
+            FIELDS.append(("admin_areas", key, label, ftype, _tab_for(key), 10 + i,
+                           # Hepsi filtrelenebilir: "Konya'da nüfusu 5000'in
+                           # üstündeki mahalleler" gibi sorgular Query Engine
+                           # üzerinden çalışsın (IT-08 whitelist mantığı).
+                           {"filterable": True}))
+
         created = 0
         for module, key, label, ftype, tab, order, extra in FIELDS:
             before = await db.field_definitions.count_documents({"module": module, "field_key": key})
             await _ensure_field_definition(module, key, label=label, field_type=ftype, tab=tab, order=order, **extra)
             if before == 0:
                 created += 1
+            else:
+                # _ensure_field_definition CREATE-ONLY'dir; önceden (dar haliyle)
+                # oluşmuş kayıtlara filtrelenebilirlik bayrağını burada ekliyoruz.
+                if extra.get("filterable"):
+                    await db.field_definitions.update_one(
+                        {"module": module, "field_key": key}, {"$set": {"filterable": True}})
 
-        return {"status": "seeded", "new_field_definitions": created}
+        return {"status": "seeded", "new_field_definitions": created,
+                "total_admin_area_fields": await db.field_definitions.count_documents({"module": "admin_areas"})}
 
     # -----------------------------------------------------------------
     # PİLOT SEED — Ortak seçim listeleri (Sulama Tipi / Ürün / Risk Seviyesi)

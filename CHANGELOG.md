@@ -2,6 +2,167 @@
 
 Bu dosya [Keep a Changelog](https://keepachangelog.com/tr/1.0.0/) ruhuyla tutulur.
 
+## [1.2] — Karar Destek Katmanı + Gerçek Türkiye/köy verisi (2026-08-19)
+
+Trial sürümü hedefiyle çok geniş bir tur: ölçüm katmanı (hava, güneş, toprak
+biyolojisi, kök sayısı), karar katmanı (su bütçesi, polar/hasat zamanı, sezon
+karar takvimi), gerçek il/ilçe/mahalle verisi ve 5 köyün gerçek parselleri.
+
+### Veri temeli
+- **İdari alanlar:** yeni `scripts/import_admin_areas.py` ile **81 il + 971 ilçe
+  + 50.130 mahalle** içe aktarıldı (133 MB'lık mahalle dosyası akış halinde
+  okunur — nginx/parser sınırlarına takılmaz). Hiyerarşi il_plaka→ilce_kodu→
+  mahalle_kodu ile kurulur.
+  - **İki gerçek veri kalitesi sorunu düzeltildi:** (1) 22 ilin `il_plaka`
+    değeri 0'dı (adında Türkçe harf olanlar) → resmî plaka tablosundan
+    yeniden türetildi; düzeltilmeden 81 il veritabanında 64 kayda düşüyordu.
+    (2) Adlar cp1252 mojibake taşıyordu ("AÄŸri"); karışık metinlerde
+    (`"Marmaraereğlisi, TekirdaÄŸ"`) yalnızca bozuk parçalar onarılıyor.
+  - `AdminAreaDemographics` ile ~30 tipli kolon (nüfus, hane, yaş/eğitim,
+    gelir, ÇKS çiftçi, işlenen arazi, traktör, baskın ürün, hayvan sayıları)
+    + `field_definitions` seed'i → SmartDataGrid kolonu ve filtre olarak gelir.
+- **5 köyün gerçek parselleri:** `scripts/seed_villages.py` — 5.053 parsel,
+  241 çiftçi, 23.808 sözleşme/sezon/ekim, 19.029 verim+kantar, 71.594 sulama.
+  Kaynak dosyalardaki kapalı `LineString`'ler poligona çevrildi; delikli
+  parseller (halka içinde halka) ayrıştırıldı; alan gerçek geometriden
+  hesaplandı.
+- **Harita performansı:** `GET /admin-areas` artık `bbox` + seviye filtresi
+  alıyor. Eskiden 51 bin kayıttan alfabetik ilk 2000'i döndürüyordu; kullanıcı
+  haritada "3-5 poligon" görüyordu.
+
+### Yeni ölçüm modülleri
+- `weather.py` — Open-Meteo (güncel + 16 gün tahmin, ET0, radyasyon) +
+  ERA5-Land (GEE, iklim normalleri) + büyüme derece-gün (GDD).
+- `remote_sensing/solar.py` — Copernicus DEM GLO-30'dan eğim/bakı + saatlik
+  gölge profili + ürün bazlı güneş yeterliliği.
+- `soil_biology.py` — 18 organizmalık katalog (Heterodera schachtii dahil),
+  9 mikrobiyal ölçüm, ağırlıklı toprak sağlığı skoru.
+- `crop_stand.py` — ekim geometrisinden kök sayısı + uydu eğrisinden ürün
+  tahmini. **Uydudan tek bitki sayılamaz** (bkz. `docs/vhr-fizibilite.md`).
+
+### Yeni karar modülleri
+- `water_budget.py` — FAO-56 toprak su dengesi; sulama ihtiyacı mm ve m³.
+- `polar_engine.py` — polar tahmini (açıklanabilir katkı dökümü + güven
+  aralığı), ekim penceresi, olgunlaşma endeksi, söküm penceresi.
+- `season_planner.py` — fenolojik aşamaya (GDD) göre karar kartları; kabul
+  edilen karar mevcut Saha Görevi/sulama kaydına yazılır.
+- `confidence.py` — her tavsiyede "ölçüldü / tahmin / eksik" rozeti.
+- `sustainability.py` — karbon ayak izi + iyileştirme önerileri + fayda raporu.
+- `harvest_logistics.py` — fabrika kampanya çizelgesi + kantar randevusu.
+- `agronomy.py` — toplu sorgu artık **yüzdelik uygunluk + gerekçe** döner,
+  köy/mahalle ve idari sınır poligonuyla filtrelenir; sonuç üzerinde toplu
+  mesaj, toplu ekim, **toplu sözleşme** (`POST /contracts/bulk-create`) ve
+  CSV çıktı.
+
+### Yangın (NASA FIRMS)
+- Parsel bazlı **20 km yakınlık bariyeri** (mesafe + yön ile) ve kooperatif
+  geneli **50 km özeti**; Dashboard'da tıklanabilir uyarı şeridi.
+
+### Yerel LLM
+- `toprax-ollama` GPU'lu ayağa kaldırıldı; `qwen3:8b` ve `qwen3:14b` kuruldu,
+  `backend/ollama/Modelfile.toprax` ile `toprax-ai:8b`/`:14b` üretildi.
+- **Ölçüm (RTX 5070, 8 GB VRAM):** 8B **31,2 token/sn** (32 sn/yanıt) —
+  14B **2,2 token/sn** (212 sn/yanıt, VRAM taşıp CPU'ya iniyor). 14B, 60 sn'lik
+  istek zaman aşımını aştığı için **8B aktif edildi**; 14B kurulu kalıyor.
+
+### Düzeltilen gerçek hatalar
+- **Service Worker HTML döndürüyordu:** başarısız bir JS/CSS parçası isteğinde
+  `caches.match("/")` ile index.html dönüyordu → "unknown error when fetching
+  the script" + yarım yüklenen uygulama ("l is not a function"). Artık HTML
+  yedeği yalnızca navigasyon isteklerinde verilir; cache sürümü v2.
+- **Parsel/çiftçi/verimlilik ekranları çöküyordu** (`undefined.toFixed`,
+  `undefined.toLowerCase`) → yeni `lib/num.js` (fx/fmtNum/ratio) ile
+  null-güvenli hale getirildi; eksik veri "—" gösterir, sayfa düşmez.
+- **Parsel seçici boş görünüyordu:** `parcel-search` 2 karakter yazılmadan boş
+  liste dönüyordu; artık odaklanınca ilk 20 parsel gelir.
+- **`seed-defaults` kendini onarır:** ürün kataloğu migrasyondan bozuk gelmişse
+  (label "pancar", tek match_term) kanonik değerlerle tamamlanır — bozukken
+  münavebe/polar sinyalleri sessizce boş kalıyordu.
+
+### Altyapı
+- `cloudflared/config.yml` + kimlik dosyası eklendi: tünel bağlanıyor ama
+  **hiçbir hostname bir servise eşlenmediği için tüm alan adları 503**
+  dönüyordu. Artık toprax.com.tr / demo. / app. → `toprax-frontend:80`.
+
+**Doğrulama:** 62/62 pytest yeşil; 157 frontend dosyası babel ile hatasız;
+canlı Docker'da uçtan uca — Sezon Karar Takvimi gerçek parselde 3 karar üretti
+(GDD 936, su açığı 220 mm/eşik 121 mm, veri güveni %35 dökümüyle), idari alan
+seçici 81/971/50.130 sayılarıyla çalıştı, parsel popup'ı il/ilçe/mahalle/parsel
+bağlantılarını verdi, tünelden üç alan adı da 200 döndü.
+
+## [Yayınlanmadı] — "Toprax Uydu": çok-indeksli GEE analizi + UI'da EOSDA'nın yerini alması (2026-08-18)
+
+> Build ALINMADI (kullanıcı kararı: başka iyileştirmeler de gelecek, derleme
+> toplu yapılacak). Backend konteyneri bu değişikliklerle güncellendi ve canlı
+> doğrulandı; frontend değişiklikleri sıradaki toplu derlemede devreye girer.
+
+### 1. GEE/HLS sağlayıcısı 10 indekse çıktı (Çiftçi AI'dan port)
+`backend/remote_sensing/providers/gee_hls/service.py` Faz 9C'de bilinçli
+olarak sadece NDVI üretiyordu. Çiftçi AI projesinde (`backend/services/
+satellite_service.py`) olgunlaşmış çok-indeksli boru hattı TOPRAX'a taşındı:
+katalogdaki 10 indeksin tamamı (NDVI/NDRE/RECI/CCCI/NDWI/MSI/MSAVI/SAVI/EVI/
+LAI), sensör ayrımı (S30/L30), gerçek renkli küçük resim, yeni
+`get_latest_thumbnail_url()` ve `POST /v1/field-thumbnail` ucu. `indices`
+parametresi opsiyonel — verilmezse tüm katalog (GEE hepsini TEK sahne
+taramasında hesaplar, ek kota maliyeti YOK).
+
+**Bu sırada bulunan GERÇEK hata (TOPRAX'ta):** S30 ve L30 koleksiyonları
+harmonize edilmeden birleştirilip `normalizedDifference(["B5","B4"])`
+kullanılıyordu. HLS'te bant adları tek hanelidir ve L30'da B5 = NIR iken
+S30'da B5 = Red Edge 1'dir (NIR = B8A) — yani Sentinel-2 sahnelerinde
+NDVI SİSTEMATİK OLARAK YANLIŞ hesaplanıyordu. Artık iki koleksiyon ortak
+bant setine çevrildikten sonra birleşiyor.
+
+Çiftçi AI'da canlı yaşanmış üç tuzak da yorumlarıyla korundu: (a) yansıma
+değerleri GEE'de zaten 0-1 ölçeğinde — ikinci kez `0.0001` ile çarpmak
+sabit içeren formülleri (SAVI/MSAVI/EVI/LAI) ve RGB render'ını sıfırlar;
+(b) Landsat'ta Red Edge yok, sabit (projeksiyonsuz) bantlarla tamamlanıyor
+ve küçük resim üretilirken RGB bantları ÖNCE seçilmezse görüntü tamamen
+siyah çıkıyor; (c) Earth Engine tarih biçimi JODA kalıbıdır (`yyyy-MM-dd`,
+`YYYY-MM-DD` değil). Landsat sahnelerinde Red Edge'e dayalı indeksler
+(NDRE/RECI/CCCI) sıfır DEĞİL `null` döner.
+
+### 2. Uzaktan algılamanın adı artık "Toprax Uydu", motoru GEE
+Kullanıcı isteği: *"UI'da EOSDA olan yerlerin hepsine GEE entegrasyonunu
+yerleştir ve adına Toprax Uydu de."*
+- `providers/__init__.py`: `SATELLITE_BRAND = "Toprax Uydu"` (ekranlarda
+  gösterilecek TEK kaynak), `DEFAULT_PROVIDER = "gee_hls"` (eskiden `eosda`),
+  `PROVIDER_INTEGRATION_TYPES` eşlemesi.
+- `services.py` durum ucu artık AKTİF sağlayıcının entegrasyon kaydına bakıyor
+  (sabit `eosda` yerine) ve `brand` döndürüyor; manuel senkron varsayılanı
+  NDVI'den TÜM kataloğa çıktı.
+- `monitoring.py` sağlayıcı-bağımsız oldu; EOSDA trial kotası alanları
+  yalnızca EOSDA aktifken doldurulur, aksi halde `null` (uydurma kota yerine
+  dürüst "yok"). Ekran o KPI kartını gizler.
+- `tasks.py`: GEE için kota muhasebesi tarama başına 1 birim (indeks başına
+  3 değil) — aksi halde Monitoring kotayı 30 kat şişik gösteriyordu.
+- Frontend: Ayarlar › Entegrasyonlar'daki EOSDA kartı yerine **Toprax Uydu**
+  kartı (servis hesabı e-postası + JSON anahtar + proje + mock);
+  `RemoteSensingPanel`/`RemoteSensing`/`BulkRemoteSensing`/`ParcelDetail`
+  metinleri `brand` alanından besleniyor; toplu analiz ekranı sabit iki
+  checkbox yerine katalogdan gelen 10 indeksi listeliyor; panelin çok-indeksli
+  grafiği artık "S2 varsa S2" yerine EN ÇOK İNDEKS TAŞIYAN seriyi kullanıyor.
+
+**EOSDA silinmedi:** sınıfı, entegrasyon tipi ve `provider_override:"eosda"`
+yolu duruyor — sadece varsayılan olmaktan ve ekranlardan çıktı.
+
+### Doğrulama
+- `tests/test_gee_hls_indices.py` (12 yeni test) — indeks doğrulama, mock seri
+  şekli, Landsat'ta `null` kuralı, provider sözleşmesi. Tüm paket: **62/62 yeşil**.
+- Değişen `.py` dosyaları `py_compile`, değişen 5 `.jsx` babel ile hatasız.
+- **Canlı GEE:** gerçek servis hesabı Integration Center'a kaydedildi; gerçek
+  parselde (Hacıveli Tarlası 1) `POST /remote-sensing/manual-sync` → **119
+  ölçüm × 10 indeks**, `api_calls: 1`, `provider: gee_hls`; parselin
+  `remote_sensing.last_indices` alanı 10 indeksle doldu; L30 noktalarında
+  Red Edge indeksleri yok (beklenen). `providers/status` → `brand: "Toprax
+  Uydu"`, `is_real: true`.
+
+### Bilinen dış engel (kod dışı)
+Servis hesabında `earthengine.thumbnails.create` yetkisi YOK → sayısal analiz
+çalışıyor ama **uydu görüntüsü üretilemiyor**. Google Cloud Console'da hizmet
+hesabına *Earth Engine Resource Writer* rolü verilmeli. Kod bunu çökmeden
+yönetir (görüntü alanı `null` döner, analiz tamamlanır).
+
 ## [1.1] — Ollama düzeltme + GEE canlı doğrulama + NASA FIRMS + TAKBİS/MERNİS UI + Harita + Integration Hub (2026-07-25, Build 25072026-0431)
 
 Önceki build'in (25072026-0324) hemen ardından kullanıcı canlı testte 5 şey

@@ -109,7 +109,17 @@ async def run_task(db, task: dict, provider) -> dict:
             # (bkz. eosda.py request_statistics) — yani TÜM istenen indeksler
             # işlenir, sadece daha fazla alt-istekle; muhasebe bu yüzden
             # sağlayıcı farkı gözetmeden tam indeks sayısı üzerinden yapılır.
-            api_calls += len(indices) * EOSDA_REQUESTS_PER_INDEX
+            #
+            # İSTİSNA (2026-08-18) — GEE/HLS: Earth Engine TEK bir sahne
+            # taramasında istenen TÜM indeksleri aynı anda hesaplar (bkz.
+            # gee_hls/service.py _add_indices), yani indeks sayısı istek
+            # sayısını ARTIRMAZ. Burada indeks başına 3 birim saymak
+            # Monitoring ekranındaki kotayı olduğundan 30 kat yüksek
+            # gösterirdi; bu sağlayıcı için tarama başına 1 birim sayılır.
+            if getattr(provider, "name", "") == "gee_hls":
+                api_calls += 1
+            else:
+                api_calls += len(indices) * EOSDA_REQUESTS_PER_INDEX
             status = _poll(provider, task_id)
             series = provider.parse_statistics(status.result, indices=indices)
             summary = {"points": len(series), "indices": indices}

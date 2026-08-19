@@ -39,15 +39,22 @@ services:
       start_period: 20s
     networks:
       - toprax-net
-    # GPU varsa (NVIDIA + nvidia-container-toolkit kurulu) aşağıdaki bloğun
-    # yorumunu kaldırın — CPU'da da çalışır, sadece daha yavaştır.
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    # GPU (2026-08-19'da AÇILDI): bu makinede NVIDIA RTX 5070 Laptop / 8 GB
+    # VRAM var ve Docker Desktop NVIDIA çalışma zamanını sunuyor. `qwen3:8b`
+    # 4-bit nicemlemeyle ~5 GB yer kaplar, yani GPU'ya sığar; CPU'da aynı
+    # model dakikalar sürerken GPU'da ~15 sn'de yanıt veriyor (Çiftçi AI'da
+    # ölçüldü, bkz. Modelfile.toprax başlığı).
+    #
+    # GPU'suz bir makinede bu blok "could not select device driver" hatası
+    # verir — o durumda aşağıdaki 6 satır yorum satırına alınır, uygulama
+    # CPU'da çalışmaya devam eder (sadece yavaş).
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
 volumes:
   ollama_models:

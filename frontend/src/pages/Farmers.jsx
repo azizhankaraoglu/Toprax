@@ -167,9 +167,12 @@ export default function Farmers() {
                 <td className="p-4 text-[var(--text-dim)] flex items-center gap-2"><Phone size={12}/>{f.phone}</td>
                 {/* SON HAL — karne rozeti "neden bu skor?" sayfasına gider */}
                 <td className="p-4" onClick={(e) => { e.stopPropagation(); nav(`/karne/${f.id}`); }}>
-                  <span className={`badge badge-${f.karne_score.toLowerCase()} cursor-pointer`}
+                  {/* 2026-08-19 — null-güvenli: karne notu henüz hesaplanmamış
+                      (ör. dışarıdan içe aktarılmış) bir çiftçide
+                      `undefined.toLowerCase()` TÜM LİSTEYİ çökertiyordu. */}
+                  <span className={`badge badge-${(f.karne_score || "neutral").toLowerCase()} cursor-pointer`}
                         title="Karne analizini aç" data-testid={`karne-badge-${f.member_no}`}>
-                    {f.karne_score} · {f.karne_points}
+                    {f.karne_score || "—"} · {f.karne_points ?? "—"}
                   </span>
                 </td>
                 <td className="p-4 text-[var(--text-dim)]">{f.membership_year}</td>

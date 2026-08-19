@@ -1,8 +1,14 @@
 /**
- * RemoteSensingPanel — tekil parsel için Uzaktan Algılama (EOSDA) kartı.
+ * RemoteSensingPanel — tekil parsel için Uzaktan Algılama (Toprax Uydu) kartı.
+ *
+ * 2026-08-18 — ekranlarda artık SAĞLAYICI adı (EOSDA/GEE) değil, hizmetin
+ * kullanıcıya görünen adı olan **Toprax Uydu** yazar; metin backend'in
+ * `GET /remote-sensing/providers/status` yanıtındaki `brand` alanından gelir
+ * (tek kaynak: providers/__init__.py SATELLITE_BRAND), burada hardcode
+ * EDİLMEZ. Motor varsayılan olarak Google Earth Engine + NASA HLS'tir.
  *
  * - Sağlayıcı durumu (GERÇEK/MOCK) + "Uydu Analizini Güncelle" (manuel sync:
- *   NDVI istatistiği + uydu görüntüsü tek çağrıda kuyruğa alınır).
+ *   indeks istatistiği + uydu görüntüsü tek çağrıda kuyruğa alınır).
  * - NDVI zaman serisi grafiği (tarih bazlı — geçmiş veriler saklanır).
  * - Gün-gün ZAMAN SLIDER'ı: her tarihteki NDVI (renk kodlu) + uydu görüntüsü
  *   (varsa) + bulut oranı; Oynat/Duraklat ile otomatik ilerler.
@@ -64,6 +70,11 @@ export default function RemoteSensingPanel({ parcelId }) {
   const [indexLabels, setIndexLabels] = useState({});
   const [hiddenLines, setHiddenLines] = useState(() => new Set(CANOPY_CODES.filter((c) => c !== "ndvi")));
 
+  // Hizmetin görünen adı backend'den gelir (tek kaynak: SATELLITE_BRAND).
+  // Durum çağrısı henüz dönmediyse/başarısızsa aynı ad yerel yedek olarak
+  // kullanılır — ekranda bir an boş etiket görünmesin.
+  const brand = status?.brand || "Toprax Uydu";
+
   const load = () => {
     api.get("/remote-sensing/providers/status").then((r) => setStatus(r.data)).catch(() => {});
     // Bug fix (2026-07-25) — ÖNCEDEN burada `s.provider !== "sentinel2"`
@@ -82,23 +93,42 @@ export default function RemoteSensingPanel({ parcelId }) {
     api.get("/remote-sensing/index-catalog").then((r) => setIndexLabels(r.data || {})).catch(() => {});
   }, []);
 
-  const statEosda = useMemo(() => stats.find((s) => s.provider !== "sentinel2"), [stats]);
+  // Ana sağlayıcı ("Toprax Uydu" = varsayılan GEE/HLS; EOSDA'ya düşen eski
+  // kayıtlar da buraya girer) ile Sentinel-2 serileri AYRI tutulur. Ayrım
+  // ölçütü `provider !== "sentinel2"` — sağlayıcı adı değişse de (eosda →
+  // gee_hls) bu mantık çalışmaya devam eder.
+  const statPrimary = useMemo(() => stats.find((s) => s.provider !== "sentinel2"), [stats]);
   const statS2 = useMemo(() => stats.find((s) => s.provider === "sentinel2"), [stats]);
-  const seriesEosda = useMemo(
-    () => (statEosda?.series || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "")),
-    [statEosda]
+  const seriesPrimary = useMemo(
+    () => (statPrimary?.series || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "")),
+    [statPrimary]
   );
   const seriesS2 = useMemo(
     () => (statS2?.series || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "")),
     [statS2]
   );
-  // Slider/görüntü zaman çizgisi: EOSDA varsa öncelikli (mevcut davranışla
-  // en tutarlı, image pane EOSDA odaklı), yoksa Sentinel-2.
-  const series = seriesEosda.length ? seriesEosda : seriesS2;
-  // Çok-indeksli grafikler için kaynak: Sentinel-2 8 ek indeksi hesaplar
-  // (EOSDA en fazla 3 indeksle sınırlı — bkz. eosda.py), o yüzden S2 varsa
-  // ondan, yoksa EOSDA'dan (sadece NDVI/istekte belirtilenler) beslenir.
-  const indexSeries = seriesS2.length ? seriesS2 : seriesEosda;
+  // Slider/görüntü zaman çizgisi: ana sağlayıcı varsa öncelikli (image pane
+  // ona göre kurulu), yoksa Sentinel-2.
+  const series = seriesPrimary.length ? seriesPrimary : seriesS2;
+  // Çok-indeksli grafiklerin kaynağı: HANGİ SERİ DAHA ÇOK İNDEKS TAŞIYORSA o.
+  //
+  // 2026-08-18 — eskiden kural "S2 varsa her zaman S2" idi; gerekçesi
+  // EOSDA'nın istek başına en fazla 3 indeksle sınırlı olmasıydı (bkz.
+  // eosda.py). Toprax Uydu (GEE/HLS) 10 indeksin hepsini TEK taramada
+  // ürettiği için bu kural artık veri KAYBETTİRİR: daha zengin ana seri
+  // varken daha dar bir S2 serisine düşülürdü. Ölçüt sabit sağlayıcı
+  // tercihi değil, gerçek indeks kapsamı.
+  const indexCoverage = (s) => {
+    const codes = new Set();
+    (s || []).forEach((p) => Object.keys(p || {}).forEach((k) => {
+      if (k !== "date" && k !== "cloud_pct" && k !== "sensor" && p[k] != null) codes.add(k);
+    }));
+    return codes.size;
+  };
+  const indexSeries = useMemo(
+    () => (indexCoverage(seriesS2) > indexCoverage(seriesPrimary) ? seriesS2 : seriesPrimary),
+    [seriesS2, seriesPrimary]
+  );
 
   const toggleLine = (code) => setHiddenLines((prev) => {
     const next = new Set(prev);
@@ -108,8 +138,9 @@ export default function RemoteSensingPanel({ parcelId }) {
 
   // Görüntüler tarihe göre sıralı — seçili tarihte görüntü YOKSA o tarihten
   // ÖNCEKİ en yeni görüntü gösterilir ("son bilinen görüntü"), aksi halde tek
-  // bir tarih dışında hep "görüntü yok" görünürdü. EOSDA (sol) ve Sentinel-2
-  // (sağ) görüntüleri `provider` alanına göre AYRI listelerdir.
+  // bir tarih dışında hep "görüntü yok" görünürdü. Ana sağlayıcı (sol, Toprax
+  // Uydu) ve Sentinel-2 (sağ) görüntüleri `provider` alanına göre AYRI
+  // listelerdir.
   const sortedImages = useMemo(
     () => images.filter((im) => im.capture_date && im.stored_name && im.provider !== "sentinel2")
                 .slice().sort((a, b) => (a.capture_date || "").localeCompare(b.capture_date || "")),
@@ -181,13 +212,16 @@ export default function RemoteSensingPanel({ parcelId }) {
     try {
       const { data } = await api.post("/remote-sensing/manual-sync", {
         parcel_id: parcelId,
-        task_types: ["statistics", "download"],   // NDVI istatistiği + true-color uydu görüntüsü (gerçek EOSDA)
-        indices: ["ndvi"],
+        task_types: ["statistics", "download"],   // indeks istatistiği + gerçek renkli uydu görüntüsü
+        // `indices` BİLİNÇLİ OLARAK GÖNDERİLMEZ — backend varsayılanı artık
+        // TÜM katalog (10 indeks) ve Toprax Uydu bunların hepsini tek sahne
+        // taramasında hesaplıyor (ek kota maliyeti YOK). Burada ["ndvi"]
+        // göndermek, ekrandaki diğer 9 grafiği boş bırakırdı.
       });
       setMsg(summarizeRsResult(data, "Analiz"));
       load();
     } catch (err) {
-      setMsg(err.response?.data?.detail || "Analiz başlatılamadı (EOSDA yetkisi/entegrasyonu gerekli).");
+      setMsg(err.response?.data?.detail || `Analiz başlatılamadı (${brand} yetkisi/entegrasyonu gerekli).`);
     } finally {
       setBusy(false);
     }
@@ -208,7 +242,8 @@ export default function RemoteSensingPanel({ parcelId }) {
   }
 
   // Yerel diske kaydedilmiş PNG'yi (stored_name) kendi güvenli ucumuzdan sun.
-  // (EOSDA'nın imzalı result_url'i geçici/çapraz-köken olduğundan doğrudan
+  // (Sağlayıcıların imzalı result_url'i geçici/çapraz-köken olduğundan —
+  // EOSDA'da da, Earth Engine'in getThumbURL bağlantısında da — doğrudan
   // kullanılmaz.)
   const imgSrc = curImg?.stored_name
     ? `${BACKEND_URL || ""}/api/remote-sensing/images/file/${curImg.stored_name}?token=${localStorage.getItem("token") || ""}`
@@ -222,7 +257,7 @@ export default function RemoteSensingPanel({ parcelId }) {
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Satellite size={18} className="text-[var(--primary)]" />
-          <h3 className="font-display text-lg">Uzaktan Algılama (EOSDA + Sentinel-2)</h3>
+          <h3 className="font-display text-lg">Uzaktan Algılama ({brand})</h3>
           {status && (
             <span className={`badge ${status.is_real ? "badge-a" : "badge-neutral"}`}>
               {status.is_real ? "GERÇEK" : "MOCK"}
@@ -242,16 +277,16 @@ export default function RemoteSensingPanel({ parcelId }) {
 
       {status && !status.enabled && (
         <div className="text-[11px] text-amber-400 mb-3">
-          EOSDA entegrasyonu pasif — Ayarlar › Entegrasyonlar › EOSDA'dan anahtar girip aktive edin (aktif olana kadar MOCK veriyle çalışır).
+          {brand} entegrasyonu pasif — Ayarlar › Entegrasyonlar › {brand}'dan kimlik bilgisi girip aktive edin (aktif olana kadar MOCK veriyle çalışır).
         </div>
       )}
       {msg && <div className="text-xs text-[var(--text-dim)] mb-3">{msg}</div>}
       {s2Msg && <div className="text-xs text-[var(--text-dim)] mb-3">{s2Msg}</div>}
 
-      {seriesEosda.length === 0 && seriesS2.length === 0 ? (
+      {seriesPrimary.length === 0 && seriesS2.length === 0 ? (
         <div className="text-sm text-[var(--text-dim)] py-6 text-center border border-dashed border-[var(--border)] rounded-lg">
           Bu parsel için henüz uzaktan algılama verisi yok.<br />
-          <span className="text-xs">"Uydu Analizini Güncelle" ile NDVI istatistiği ve uydu görüntüsü çekin.</span>
+          <span className="text-xs">"Uydu Analizini Güncelle" ile indeks istatistikleri ve uydu görüntüsü çekin.</span>
         </div>
       ) : (
         <>
@@ -320,9 +355,9 @@ export default function RemoteSensingPanel({ parcelId }) {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Sol: EOSDA görüntüsü */}
+              {/* Sol: ana sağlayıcının (Toprax Uydu) gerçek renkli görüntüsü */}
               <div>
-                <div className="text-[10px] text-[var(--text-dim)] uppercase tracking-wider mb-1">EOSDA</div>
+                <div className="text-[10px] text-[var(--text-dim)] uppercase tracking-wider mb-1">{brand}</div>
                 <div className="aspect-video rounded-lg overflow-hidden border border-[var(--border)] flex items-center justify-center relative"
                      style={{ background: `${ndviColor(cur?.ndvi)}22` }}>
                   {imgSrc && !imgError ? (
@@ -339,7 +374,7 @@ export default function RemoteSensingPanel({ parcelId }) {
                       <ImageIcon size={28} className="mx-auto mb-1" style={{ color: ndviColor(cur?.ndvi) }} />
                       <div className="text-xs text-[var(--text-dim)]">
                         {status && !status.is_real
-                          ? "MOCK modda gerçek raster gelmez — EOSDA gerçek moda alınmalı"
+                          ? `MOCK modda gerçek raster gelmez — ${brand} gerçek moda alınmalı`
                           : images.length === 0
                             ? "Bu parsel için henüz uydu görüntüsü indirilmedi — “Uydu Analizini Güncelle”ye basın (render ~1-2 dk sürer)."
                             : "Seçili tarihten önce görüntü yok — slider'ı sağa (daha yeni tarihe) çekin."}

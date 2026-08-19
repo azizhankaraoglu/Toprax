@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import api from "@/api";
 import { TrendingUp, Award, Target } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
+import { fx, ratio } from "@/lib/num";
 
 const fmt = (n) => new Intl.NumberFormat("tr-TR").format(n);
 
@@ -48,15 +49,16 @@ export default function Verimlilik() {
           <h3 className="font-display text-lg mb-1">En Verimli 10 Parsel</h3>
           <div className="text-xs text-[var(--text-dim)] mb-3">2025 sezonu</div>
           <div className="space-y-1.5 max-h-[260px] overflow-y-auto scrollbar">
-            {data.top_parcels.slice(0, 10).map((p, i) => (
+            {(data.top_parcels || []).slice(0, 10).map((p, i) => (
               <div key={p.id} className="flex items-center justify-between p-2 bg-[var(--surface-2)] rounded">
                 <div>
                   <div className="text-xs text-[var(--text-dim)]">#{i+1}</div>
-                  <div className="text-sm font-medium">{(p.actual_ton/p.area_dekar).toFixed(2)} t/da</div>
+                  {/* Null-güvenli: eksik verim/alan sayfayı düşürmemeli */}
+                  <div className="text-sm font-medium">{ratio(p.actual_ton, p.area_dekar)} t/da</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-[var(--text-dim)]">{p.area_dekar.toFixed(0)} dekar</div>
-                  <div className="text-sm text-[var(--primary)]">{p.actual_ton.toFixed(1)} ton</div>
+                  <div className="text-xs text-[var(--text-dim)]">{fx(p.area_dekar, 0)} dekar</div>
+                  <div className="text-sm text-[var(--primary)]">{fx(p.actual_ton, 1)} ton</div>
                 </div>
               </div>
             ))}

@@ -22,6 +22,10 @@ import { KullaniciYonetimi, OzelRoller } from "@/pages/UserManagement";
 import { Sozlesmeler, Lojistik, Karne, Bildirimler } from "@/pages/Other";
 import ContractDetail from "@/pages/ContractDetail";
 import EkimKaydi from "@/pages/EkimKaydi";
+import SezonKararTakvimi from "@/pages/SezonKararTakvimi";
+import AdminAreaDetail from "@/pages/AdminAreaDetail";
+import ToprakBiyolojisi from "@/pages/ToprakBiyolojisi";
+import HasatLojistigi from "@/pages/HasatLojistigi";
 import KarneDetail from "@/pages/KarneDetail";
 import Profil from "@/pages/Profil";
 import { FormListesi, FormBuilder, FormDoldur, FormDashboard } from "@/pages/Forms";
@@ -99,6 +103,11 @@ function App() {
             <Route path="/sozlesmeler" element={<Sozlesmeler />} />
             <Route path="/sozlesmeler/:id" element={<ContractDetail />} />
             <Route path="/ekim" element={<EkimKaydi />} />
+            {/* Karar destek katmanı (2026-08-19) */}
+            <Route path="/idari-alanlar/:id" element={<AdminAreaDetail />} />
+            <Route path="/sezon-karar-takvimi" element={<SezonKararTakvimi />} />
+            <Route path="/toprak-biyolojisi" element={<ToprakBiyolojisi />} />
+            <Route path="/hasat-lojistigi" element={<HasatLojistigi />} />
             <Route path="/toprak" element={<Toprak />} />
             <Route path="/sulama" element={<Sulama />} />
             <Route path="/operasyon" element={<Operasyon />} />

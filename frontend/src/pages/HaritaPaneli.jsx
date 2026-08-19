@@ -47,6 +47,20 @@ const LAYER_CATALOG = [
 ];
 const DEFAULT_LAYERS = ["parcels"];
 
+// İdari sınır popup'ında gösterilecek profil alanları (2026-08-19).
+// AdminAreaManagement.jsx'teki POPUP_FIELDS ile AYNI liste — iki ekran da
+// aynı özeti göstersin diye; oradan import ETMEK yerine burada tekrarlanır,
+// çünkü o sayfa ağır (SmartDataGrid + Drawer + GeoFileImport) ve harita
+// paneline zincirleme bağımlılık getirirdi.
+const ADMIN_POPUP_FIELDS = [
+  ["il_adi", "İl"], ["ilce_adi", "İlçe"], ["mahalle_adi", "Mahalle"],
+  ["nufus_toplam", "Nüfus"], ["hane_sayisi", "Hane"],
+  ["kayitli_cks_ciftci_sayisi", "ÇKS Çiftçi"],
+  ["islenen_tarim_arazisi_dekar", "İşlenen Arazi (dekar)"],
+  ["baskin_urun_grubu", "Baskın Ürün"], ["birinci_ana_urun", "1. Ürün"],
+  ["hane_aylik_gelir_tl", "Hane Geliri (TL)"],
+];
+
 // IT-23 — field_tasks katmanı: 11 backend durumu basit bir renk gruplamasına indirger
 // (Kanban'ın 8+1 sütununa AYNI kabaca eşleşir, harita için sadeleştirilmiş).
 const FIELD_TASK_STATUS_COLOR = {
@@ -251,6 +265,8 @@ export default function HaritaPaneli() {
   const [visibleLayers, setVisibleLayers] = useState(DEFAULT_LAYERS);
   const [layersOpen, setLayersOpen] = useState(false);
   const [adminAreas, setAdminAreas] = useState([]);
+  // Hangi idari seviyelerin çizileceği (Parcels.jsx ile AYNI varsayılan).
+  const [adminLevels, setAdminLevels] = useState({ il: true, ilce: true, mahalle: false });
 
   // IT-15 — çizim aracıyla seçim (polygon/rectangle/circle → içindeki parseller)
   const [drawSelectActive, setDrawSelectActive] = useState(false);
@@ -361,12 +377,24 @@ export default function HaritaPaneli() {
     })();
   }, []);
 
-  // İdari Sınırlar katmanı ilk açıldığında (Parcels.jsx'teki aynı tembel-yükleme kalıbı)
+  // İdari Sınırlar katmanı — HARİTANIN GÖRÜNÜR ALANINA göre yüklenir.
+  //
+  // 2026-08-19: gerçek Türkiye verisi (81 il + 971 ilçe + 50.130 mahalle)
+  // yüklendikten sonra parametresiz çağrı, alfabetik ilk 2000 kaydı
+  // döndürüyor ve haritada bakılan bölgeyle alakasız birkaç poligon
+  // görünüyordu. Artık `bbox` + seviye filtresi kullanılıyor
+  // (Parcels.jsx'teki AYNI düzeltme).
   useEffect(() => {
-    if (visibleLayers.includes("admin_areas") && adminAreas.length === 0) {
-      api.get("/admin-areas").then((r) => setAdminAreas(r.data));
-    }
-  }, [visibleLayers, adminAreas.length]);
+    if (!visibleLayers.includes("admin_areas") || !mapBounds) return;
+    const bbox = [mapBounds.getWest(), mapBounds.getSouth(),
+                  mapBounds.getEast(), mapBounds.getNorth()].join(",");
+    const levels = Object.entries(adminLevels).filter(([, on]) => on).map(([k]) => k);
+    if (!levels.length) { setAdminAreas([]); return; }
+    Promise.all(levels.map((lvl) =>
+      api.get("/admin-areas", { params: { area_type: lvl, bbox, limit: 1000 } })
+         .then((r) => r.data).catch(() => [])
+    )).then((lists) => setAdminAreas(lists.flat()));
+  }, [visibleLayers, adminLevels, mapBounds]);
 
   // IT-17 — Zaman Makinesi açıkken slider her değiştiğinde (veya ilk
   // açıldığında) o tarihteki NDVI/risk anlık görüntüsünü çeker.
@@ -845,10 +873,26 @@ export default function HaritaPaneli() {
               <div className="text-xs text-[var(--text-dim)] uppercase tracking-wider mb-2">Görünür Katmanlar</div>
               <div className="space-y-1.5">
                 {LAYER_CATALOG.map((l) => (
-                  <label key={l.key} className="flex items-center gap-2 text-xs cursor-pointer">
-                    <input type="checkbox" checked={visibleLayers.includes(l.key)} onChange={() => toggleLayer(l.key)} />
-                    {l.label}
-                  </label>
+                  <div key={l.key}>
+                    <label className="flex items-center gap-2 text-xs cursor-pointer">
+                      <input type="checkbox" checked={visibleLayers.includes(l.key)} onChange={() => toggleLayer(l.key)} />
+                      {l.label}
+                    </label>
+                    {/* İdari sınırlarda seviye seçimi — 50 binlik mahalle
+                        katmanı istenmeden açılmasın (2026-08-19). */}
+                    {l.key === "admin_areas" && visibleLayers.includes("admin_areas") && (
+                      <div className="pl-6 pt-1 flex flex-col gap-1">
+                        {[["il", "İl"], ["ilce", "İlçe"], ["mahalle", "Mahalle"]].map(([key, label]) => (
+                          <label key={key} className="flex items-center gap-2 text-[11px] cursor-pointer text-[var(--text-dim)]">
+                            <input type="checkbox" checked={!!adminLevels[key]}
+                                   onChange={(e) => setAdminLevels((s) => ({ ...s, [key]: e.target.checked }))}
+                                   data-testid={`map-admin-level-${key}`} />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
               <button onClick={() => setLayersOpen(false)} className="btn text-xs w-full justify-center mt-3">
@@ -1160,6 +1204,9 @@ export default function HaritaPaneli() {
           <MapSync onChange={onMapChange} />
           <CoordinateReadout />
           <MeasureLayer active={measureActive} onResult={setMeasureResult} />
+          {/* Boş alana tıklama → il/ilçe/mahalle popup'ı. Çizim/seçim aracı
+              açıkken devre dışı (tıklama o araca ait). */}
+          <MapClickAdminPopup disabled={measureActive || drawSelectActive} />
 
           {/* İdari Sınırlar katmanı — IT-13.6/Parcels.jsx ile aynı desen */}
           {visibleLayers.includes("admin_areas") && adminAreas.map((a) => {
@@ -1172,9 +1219,29 @@ export default function HaritaPaneli() {
                 pathOptions={{ color: "#60a5fa", fillOpacity: 0, weight: 2, dashArray: "6 4" }}
               >
                 <Popup>
-                  <div style={{ minWidth: 140 }}>
-                    <div style={{ fontWeight: 600 }}>{a.name}</div>
-                    <div style={{ fontSize: 12, opacity: 0.8 }}>{a.area_type}</div>
+                  {/* 2026-08-19 — popup artık sadece ad/tip DEĞİL, gerçek
+                      il/ilçe/mahalle dosyasından gelen demografik ve tarımsal
+                      profili gösteriyor (kullanıcı talebi). Alan listesi
+                      AdminAreaManagement.jsx'teki POPUP_FIELDS ile aynı;
+                      değeri olmayan satır hiç basılmaz (boş "—" satırlarıyla
+                      popup şişmesin). */}
+                  <div style={{ minWidth: 200, maxWidth: 260 }}>
+                    <div style={{ fontWeight: 600 }}>{a.display_name || a.name}</div>
+                    <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 4 }}>
+                      {{ il: "İl", ilce: "İlçe", mahalle: "Mahalle" }[a.area_type] || a.area_type}
+                    </div>
+                    {ADMIN_POPUP_FIELDS.map(([key, label]) => (
+                      a[key] === null || a[key] === undefined || a[key] === "" ? null : (
+                        <div key={key} style={{ fontSize: 12, display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <span style={{ opacity: 0.7 }}>{label}</span>
+                          <b>{typeof a[key] === "number" ? a[key].toLocaleString("tr-TR") : a[key]}</b>
+                        </div>
+                      )
+                    ))}
+                    <button type="button" className="btn btn-ghost text-xs" style={{ marginTop: 6, width: "100%" }}
+                            onClick={() => nav(`/idari-alanlar/${a.id}`)}>
+                      Demografik detay →
+                    </button>
                   </div>
                 </Popup>
               </Polygon>
@@ -1239,6 +1306,13 @@ export default function HaritaPaneli() {
                         Sezon {latestCycleByParcel.get(p.id).year} · {CYCLE_STATUS_LABELS[latestCycleByParcel.get(p.id).status] || latestCycleByParcel.get(p.id).status}
                       </div>
                     )}
+
+                    {/* İl/İlçe/Mahalle/Parsel bağlantıları (2026-08-19) */}
+                    <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px solid rgba(125,125,125,.25)" }}>
+                      <AdminAreaPopupLinks
+                        lon={p.__centroid?.[1]} lat={p.__centroid?.[0]} parcel={p} compact
+                      />
+                    </div>
 
                     <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                       <button onClick={() => nav(moduleDetailPath("parcels", p))} className="btn btn-ghost text-[10px] px-2 py-1">

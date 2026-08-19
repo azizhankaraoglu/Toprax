@@ -23,12 +23,42 @@ _PROVIDERS = {
     "up42": UP42RSProvider,
 }
 
+#: Uzaktan algılamanın kullanıcıya görünen ADI. Ekranlarda sağlayıcı adı
+#: (EOSDA/Sentinel-2/GEE) DEĞİL bu marka gösterilir — sağlayıcı bir
+#: uygulama detayıdır ve değişebilir; kullanıcı için hizmetin adı sabittir.
+#: Frontend bu değeri `GET /remote-sensing/providers/status` üzerinden
+#: okur, HİÇBİR ekranda metin olarak tekrarlanmaz (indices.py'nin "tek
+#: kaynak" ilkesiyle AYNI).
+SATELLITE_BRAND = "Toprax Uydu"
+
+#: Sağlayıcı seçilmediğinde kullanılan varsayılan.
+#: 2026-08-18 — EOSDA'dan `gee_hls`'e alındı: GEE/HLS ücretsiz kotayla
+#: çalışır, TEK taramada 10 indeksin hepsini üretir (EOSDA'da indeks
+#: başına 3 istek maliyeti vardır, bkz. dto.EOSDA_REQUESTS_PER_INDEX) ve
+#: Sentinel-2 + Landsat 8/9'u birlikte kullandığı için ziyaret sıklığı
+#: daha yüksektir. EOSDA sınıfı KALDIRILMADI — Tarama Politikası'nda
+#: `provider_override:"eosda"` ile hâlâ seçilebilir.
+DEFAULT_PROVIDER = "gee_hls"
+
+#: Sağlayıcı adı → Integration Center'daki entegrasyon tipi. Durum/monitoring
+#: uçları hangi kaydın `enabled`/`mock_mode` bayrağına bakacağını buradan
+#: çözer; sabit "eosda" varsayımı varsayılan değişince yanlış olurdu.
+#: BURADA durur (services.py'de değil) — monitoring.py de kullanıyor ve
+#: services.py zaten monitoring'i import ediyor (döngüsel import olurdu).
+PROVIDER_INTEGRATION_TYPES = {
+    "gee_hls": "google_earth_engine",
+    "sentinel2": "sentinel_hub",
+    "eosda": "eosda",
+    "planet": "planet_labs",
+    "up42": "up42",
+}
+
 
 async def get_remote_sensing_provider(db, tenant_id: str = None,
                                       provider_override: str = None) -> IRemoteSensingProvider:
     """Tenant'ın aktif RS sağlayıcısını döner. provider_override (Tarama
-    Politikası) verilmişse onu dener; yoksa varsayılan EOSDA."""
-    itype = provider_override or "eosda"
+    Politikası) verilmişse onu dener; yoksa varsayılan (DEFAULT_PROVIDER)."""
+    itype = provider_override or DEFAULT_PROVIDER
 
     if itype == "sentinel2":
         # Denetim Faz 5 — YENİ bir entegrasyon tipi EKLENMEDİ, mevcut
@@ -69,4 +99,6 @@ async def get_remote_sensing_provider(db, tenant_id: str = None,
     return cls()
 
 
-__all__ = ["IRemoteSensingProvider", "EOSDAProvider", "Sentinel2Provider", "get_remote_sensing_provider"]
+__all__ = ["IRemoteSensingProvider", "EOSDAProvider", "Sentinel2Provider", "GEEHLSProvider",
+           "get_remote_sensing_provider", "SATELLITE_BRAND", "DEFAULT_PROVIDER",
+           "PROVIDER_INTEGRATION_TYPES"]

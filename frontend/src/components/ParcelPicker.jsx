@@ -21,14 +21,17 @@ export default function ParcelPicker({ value, onSelect, placeholder, testId = "p
   const [open, setOpen] = useState(false);
   const timer = useRef(null);
 
+  // 2026-08-19 — boş sorguda da liste getirilir (ilk 20 parsel). Eskiden
+  // 2 karakter yazılana kadar hiçbir şey gösterilmiyordu; kullanıcı kutuya
+  // tıklayıp boş ekran görünce "parseller gelmiyor" diye bildiriyordu.
+  // Backend de artık boş `q` için ilk kayıtları döndürüyor.
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    if (q.trim().length < 2) { setResults([]); return; }
     timer.current = setTimeout(() => {
-      api.get(`/ekim-planlama/parcel-search?q=${encodeURIComponent(q)}`)
-        .then((r) => { setResults(r.data); setOpen(true); })
+      api.get(`/ekim-planlama/parcel-search?q=${encodeURIComponent(q.trim())}`)
+        .then((r) => setResults(r.data))
         .catch(() => setResults([]));
-    }, 300);
+    }, q.trim() ? 300 : 0);
     return () => timer.current && clearTimeout(timer.current);
   }, [q]);
 
@@ -55,8 +58,8 @@ export default function ParcelPicker({ value, onSelect, placeholder, testId = "p
       <input
         className="input" data-testid={testId}
         placeholder={placeholder || "İl, ilçe, mahalle, ada, parsel no veya ad ile ara…"}
-        value={q} onChange={(e) => setQ(e.target.value)}
-        onFocus={() => results.length && setOpen(true)}
+        value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 200)}
       />
       {open && results.length > 0 && (

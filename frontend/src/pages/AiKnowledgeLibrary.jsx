@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import api from "@/api";
 import { Brain, Database, CheckSquare, Boxes, Activity, Play, RefreshCw } from "lucide-react";
+import DatasetEditor from "@/components/DatasetEditor";
 
 // SON HAL #4 — "Eğit" tıklanınca patlıyor şikayeti: /ai/models/{id}/train
 // gövdesiz (body'siz) çağrılıyordu, backend'in Dict[str, Any] parametresinin
@@ -87,6 +88,8 @@ function LibraryTab() {
   const [msg, setMsg] = useState("");
   const [newDs, setNewDs] = useState({ name: "", source_type: "mobil" });
   const [busy, setBusy] = useState(false);
+  // Satıra tıklanınca açılan dataset içerik editörü (RAG besleme).
+  const [openDataset, setOpenDataset] = useState(null);
 
   const load = () => {
     api.get("/ai/datasets").then((r) => setDatasets(r.data.items || [])).catch(() => {});
@@ -145,12 +148,25 @@ function LibraryTab() {
               <th className="p-3">Ad</th><th className="p-3">Kaynak</th><th className="p-3">Kayıt</th><th className="p-3">Durum</th>
             </tr></thead>
             <tbody>{datasets.map((d) => (
-              <tr key={d.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-2)]">
+              <tr key={d.id}
+                  className={`border-b border-[var(--border)] hover:bg-[var(--surface-2)] cursor-pointer ${
+                    openDataset?.id === d.id ? "bg-[var(--surface-2)]" : ""}`}
+                  onClick={() => setOpenDataset(openDataset?.id === d.id ? null : d)}
+                  data-testid={`dataset-row-${d.id}`}
+                  title="İçeriğini düzenlemek için tıklayın">
                 <td className="p-3">{d.name}</td><td className="p-3">{d.source_type}</td>
                 <td className="p-3">{d.record_count || 0}</td><td className="p-3"><Badge value={d.status} /></td>
               </tr>))}</tbody>
           </table>}
       </div>
+
+      {/* 2026-08-19 — datasetin İÇİNİ düzenleme (RAG besleme): resim/PDF/video
+          + etiket + açıklama. Kullanıcı isteği üzerine eklendi; önceden
+          dataset oluşturulabiliyor ama içine bilgi eklenemiyordu. */}
+      {openDataset && (
+        <DatasetEditor dataset={openDataset} taxonomy={taxonomy}
+                       onClose={() => setOpenDataset(null)} onChanged={load} />
+      )}
 
       <div className="card overflow-hidden">
         <div className="p-4 border-b border-[var(--border)] font-display text-lg">Bilgi Kayıtları ({records.length})</div>

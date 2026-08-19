@@ -17,6 +17,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "@/api";
+import { fx, ratio } from "@/lib/num";
 import { MapContainer, TileLayer, Polygon } from "react-leaflet";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { ArrowLeft, Phone, Mail, MapPin, Award, Wallet, Droplets, FileText, Map as MapIcon, Calendar, Info, Pencil, Check, X, Paperclip, Trash2 } from "lucide-react";
@@ -508,7 +509,7 @@ export default function FarmerDetail() {
                 <div key={p.id} onClick={() => nav(`/parseller/${p.id}`)} className="p-3 border-b border-[var(--border)] cursor-pointer hover:bg-[var(--surface-2)]">
                   <div className="flex justify-between">
                     <span className="font-mono text-xs text-[var(--text-dim)]">{p.parcel_code}</span>
-                    <span className="text-xs text-[var(--primary)]">{p.area_dekar.toFixed(1)} da</span>
+                    <span className="text-xs text-[var(--primary)]">{fx(p.area_dekar, 1)} da</span>
                   </div>
                   <div className="text-sm mt-1">{p.name}</div>
                   <div className="text-xs text-[var(--text-dim)] mt-0.5">{p.soil_type} · {p.irrigation}</div>
@@ -558,9 +559,10 @@ export default function FarmerDetail() {
                   <tr key={y.id} className="border-b border-[var(--border)]">
                     <td className="p-3 font-medium">{y.season}</td>
                     <td className="p-3">{y.area_dekar} da</td>
-                    <td className="p-3 text-[var(--text-dim)]">{y.expected_ton.toFixed(1)} t</td>
-                    <td className="p-3 text-[var(--primary)]">{y.actual_ton.toFixed(1)} t</td>
-                    <td className="p-3">{(y.actual_ton / y.area_dekar).toFixed(2)} t/da</td>
+                    {/* Null-güvenli (2026-08-19): eksik alan sayfayı düşürmesin */}
+                    <td className="p-3 text-[var(--text-dim)]">{fx(y.expected_ton, 1)} t</td>
+                    <td className="p-3 text-[var(--primary)]">{fx(y.actual_ton, 1)} t</td>
+                    <td className="p-3">{ratio(y.actual_ton, y.area_dekar)} t/da</td>
                     <td className="p-3">%{y.polar_oran}</td>
                   </tr>
                 ))}

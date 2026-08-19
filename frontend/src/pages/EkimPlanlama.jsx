@@ -56,10 +56,93 @@ export default function EkimPlanlama() {
   // --- Toplu Sorgu (bu sene X ekimi için en uygun parseller) ---
   const [bulkSeason, setBulkSeason] = useState(new Date().getFullYear());
   const [bulkIl, setBulkIl] = useState("");
+  const [bulkIlce, setBulkIlce] = useState("");
+  const [bulkKoy, setBulkKoy] = useState("");
+  const [bulkMinAlan, setBulkMinAlan] = useState("");
   const [bulkTopN, setBulkTopN] = useState(20);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkResult, setBulkResult] = useState(null);
   const [bulkError, setBulkError] = useState("");
+  // Sonuç listesindeki seçim + toplu eylem geri bildirimi (2026-08-19)
+  const [selectedBulk, setSelectedBulk] = useState(new Set());
+  const [bulkActionMsg, setBulkActionMsg] = useState("");
+
+  const bulkFilters = () => ({
+    crop, season: Number(bulkSeason),
+    il: bulkIl || undefined, ilce: bulkIlce || undefined, koy: bulkKoy || undefined,
+    min_alan_dekar: bulkMinAlan ? Number(bulkMinAlan) : undefined,
+    top_n: Number(bulkTopN) || undefined,
+  });
+
+  const toggleBulk = (id) => setSelectedBulk((s) => {
+    const n = new Set(s);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+
+  const selectAllSuitable = () => setSelectedBulk(new Set(
+    (bulkResult?.results || []).filter((r) => !r.blocking && r.score >= 60).map((r) => r.parcel_id)
+  ));
+
+  async function bulkMessage() {
+    const content = window.prompt(
+      "Çiftçilere gönderilecek mesaj:",
+      `Sayın üyemiz, ${cropLabel(crop)} ekimi için parseliniz uygun bulunmuştur. Detay için kooperatifimize başvurunuz.`);
+    if (!content) return;
+    setBulkActionMsg("Mesajlar gönderiliyor…");
+    try {
+      const { data } = await api.post("/ekim-planlama/bulk-message", {
+        parcel_ids: [...selectedBulk], channel: "sms", content,
+      });
+      setBulkActionMsg(`${data.toplam_ciftci} çiftçiye gönderim: ${data.gonderilen} başarılı, ${data.basarisiz} başarısız.`);
+    } catch (e) {
+      setBulkActionMsg(e.response?.data?.detail || "Mesaj gönderilemedi.");
+    }
+  }
+
+  async function bulkPlanting() {
+    const variety = window.prompt("Ekim planı için çeşit:", varieties[0]?.label || "");
+    if (!variety) return;
+    setBulkActionMsg("Ekim planları oluşturuluyor…");
+    try {
+      // Yeni uç YAZILMADI — mevcut /plantings/bulk-create kullanılıyor.
+      const { data } = await api.post("/plantings/bulk-create", {
+        parcel_ids: [...selectedBulk], season: Number(bulkSeason),
+        crop: cropLabel(crop), variety,
+        planting_date: `${bulkSeason}-04-01`,
+        expected_harvest_date: `${bulkSeason}-10-01`,
+      });
+      setBulkActionMsg(`${data.created ?? data.olusturulan ?? 0} ekim planı oluşturuldu.`);
+    } catch (e) {
+      setBulkActionMsg(e.response?.data?.detail || "Ekim planı oluşturulamadı.");
+    }
+  }
+
+  async function bulkContract() {
+    const variety = window.prompt("Sözleşme çeşidi:", varieties[0]?.label || "");
+    if (!variety) return;
+    setBulkActionMsg("Sözleşmeler oluşturuluyor…");
+    try {
+      const { data } = await api.post("/contracts/bulk-create", {
+        parcel_ids: [...selectedBulk], season: Number(bulkSeason),
+        crop: cropLabel(crop), variety, status: "taslak",
+      });
+      setBulkActionMsg(`${data.olusturulan} sözleşme oluşturuldu, ${data.atlanan} parsel atlandı (zaten sözleşmeli).`);
+    } catch (e) {
+      setBulkActionMsg(e.response?.data?.detail || "Sözleşme oluşturulamadı.");
+    }
+  }
+
+  async function exportCsv() {
+    const res = await api.post("/ekim-planlama/bulk-analyze/export", bulkFilters(),
+                               { responseType: "blob" });
+    const url = URL.createObjectURL(new Blob([res.data], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ekim-uygunluk-${crop}-${bulkSeason}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   // --- Bilgi kütüphanesi ---
   const [rules, setRules] = useState([]);
@@ -418,6 +501,24 @@ export default function EkimPlanlama() {
                 <input className="input" placeholder="ör. Konya" style={{ width: 150 }}
                        value={bulkIl} onChange={(e) => setBulkIl(e.target.value)} data-testid="bulk-il-input" />
               </div>
+              {/* 2026-08-19 — coğrafi kapsam köy/mahalle seviyesine indi:
+                  "Konya Ereğli'de pancara uygun tarlalar hangileri" sorusu
+                  ancak bu üç alanla tam sorulabiliyor. */}
+              <div>
+                <label className="muted" style={{ fontSize: 12 }}>İlçe (opsiyonel)</label>
+                <input className="input" placeholder="ör. Ereğli" style={{ width: 150 }}
+                       value={bulkIlce} onChange={(e) => setBulkIlce(e.target.value)} data-testid="bulk-ilce-input" />
+              </div>
+              <div>
+                <label className="muted" style={{ fontSize: 12 }}>Köy/Mahalle (opsiyonel)</label>
+                <input className="input" placeholder="ör. Kuzucu" style={{ width: 160 }}
+                       value={bulkKoy} onChange={(e) => setBulkKoy(e.target.value)} data-testid="bulk-koy-input" />
+              </div>
+              <div>
+                <label className="muted" style={{ fontSize: 12 }}>Min. alan (dekar)</label>
+                <input className="input" type="number" style={{ width: 120 }}
+                       value={bulkMinAlan} onChange={(e) => setBulkMinAlan(e.target.value)} data-testid="bulk-min-alan" />
+              </div>
               <div>
                 <label className="muted" style={{ fontSize: 12 }}>En iyi kaç sonuç</label>
                 <input className="input" type="number" style={{ width: 100 }}
@@ -432,29 +533,93 @@ export default function EkimPlanlama() {
 
           {bulkResult && (
             <div className="card" data-testid="bulk-result">
+              {/* Özet şeridi — kaç parsel uygun, kaç dekar, kaç çiftçi */}
+              {bulkResult.ozet && (
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
+                  {[["Uygun parsel", bulkResult.ozet.uygun_parsel],
+                    ["Uygun alan", `${bulkResult.ozet.uygun_alan_dekar} dekar`],
+                    ["İlgili çiftçi", bulkResult.ozet.ilgili_ciftci_sayisi],
+                    ["Ortalama uygunluk", `%${bulkResult.ozet.ortalama_uygunluk ?? "—"}`],
+                    ["Engellenen", bulkResult.ozet.engellenen_parsel]].map(([l, v]) => (
+                    <div key={l}>
+                      <div className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>{l}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700 }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
                 Toplam {bulkResult.total_candidates} parsel · {bulkResult.scanned} tanesi tarandı
                 {bulkResult.truncated && (
                   <span> — <b>tarama {bulkResult.scanned} parselle SINIRLANDI</b>, tüm havuz taranmadı</span>
                 )} · {bulkResult.results.length} sonuç gösteriliyor
               </div>
+
+              {/* EYLEM ÇUBUĞU (2026-08-19) — seçili parseller üzerinde toplu iş */}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center",
+                            padding: 10, background: "var(--surface-2)", borderRadius: 8, marginBottom: 12 }}>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {selectedBulk.size} parsel seçili
+                </span>
+                <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={selectAllSuitable}>
+                  Uygun olanları seç
+                </button>
+                <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setSelectedBulk(new Set())}>
+                  Temizle
+                </button>
+                <div style={{ flex: 1 }} />
+                <button className="btn btn-ghost" style={{ fontSize: 12 }}
+                        disabled={!selectedBulk.size} onClick={bulkMessage} data-testid="bulk-message-btn">
+                  Sahiplerine Mesaj
+                </button>
+                <button className="btn btn-ghost" style={{ fontSize: 12 }}
+                        disabled={!selectedBulk.size} onClick={bulkPlanting} data-testid="bulk-planting-btn">
+                  Toplu Ekim Planı
+                </button>
+                <button className="btn btn-ghost" style={{ fontSize: 12 }}
+                        disabled={!selectedBulk.size} onClick={bulkContract} data-testid="bulk-contract-btn">
+                  Toplu Sözleşme
+                </button>
+                <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={exportCsv}
+                        data-testid="bulk-export-btn">
+                  CSV İndir
+                </button>
+              </div>
+              {bulkActionMsg && (
+                <p style={{ color: "var(--primary)", fontSize: 13, marginBottom: 10 }}>{bulkActionMsg}</p>
+              )}
+
               <table className="table">
                 <thead>
-                  <tr><th>Parsel</th><th>İl/İlçe</th><th>Alan (dekar)</th><th>Skor</th><th>Karar</th><th>Öne Çıkan Bulgu</th></tr>
+                  <tr>
+                    <th style={{ width: 30 }}></th>
+                    <th>Parsel</th><th>Çiftçi</th><th>İl/İlçe/Köy</th><th>Alan (dekar)</th>
+                    <th>Uygunluk</th><th>Karar</th><th>Sebep</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {bulkResult.results.map((r) => (
                     <tr key={r.parcel_id}>
+                      <td>
+                        <input type="checkbox" checked={selectedBulk.has(r.parcel_id)}
+                               onChange={() => toggleBulk(r.parcel_id)} />
+                      </td>
                       <td>{r.name || "—"}</td>
-                      <td className="muted">{[r.il, r.ilce].filter(Boolean).join(" / ") || "—"}</td>
+                      <td className="muted">{r.farmer_name || "—"}</td>
+                      <td className="muted">{[r.il, r.ilce, r.mahalle].filter(Boolean).join(" / ") || "—"}</td>
                       <td>{r.area_dekar ?? "—"}</td>
-                      <td style={{ fontWeight: 700 }}>{r.score}</td>
+                      <td style={{ fontWeight: 700 }}>
+                        {r.uygunluk_yuzde != null ? `%${r.uygunluk_yuzde}` : "—"}
+                      </td>
                       <td>
                         <span className={`badge ${DECISION_BADGE[r.decision]?.cls || "badge-neutral"}`}>
                           {DECISION_BADGE[r.decision]?.text || r.decision}
                         </span>
                       </td>
-                      <td className="muted">{r.top_issues[0]?.name || "—"}</td>
+                      <td className="muted" style={{ maxWidth: 320 }} title={r.ozet_sebep}>
+                        {r.ozet_sebep || r.top_issues?.[0]?.name || "—"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
