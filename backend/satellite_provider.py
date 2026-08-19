@@ -43,6 +43,7 @@ noktasını (NDVI zaman serisi + yangın alarmı + tasking talebi) kurar.
 """
 import math
 import random
+import time
 import zlib
 import requests
 import uuid
@@ -210,8 +211,9 @@ class NasaFirmsProvider(SatelliteProvider):
     name = "nasa_firms"
     AREA_URL = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
 
-    def __init__(self, map_key: str, timeout: int = 15):
+    def __init__(self, map_key: str, timeout: int = 30):
         self.map_key = map_key
+        # 15 sn NASA'nın yavaş anlarında yetmiyordu (bkz. get_fire_alerts).
         self.timeout = timeout
 
     def get_ndvi_time_series(self, parcel_id: str, geometry: Optional[dict] = None) -> List[Dict]:
@@ -221,8 +223,23 @@ class NasaFirmsProvider(SatelliteProvider):
         min_lon, min_lat, max_lon, max_lat = bbox
         days = max(1, min(days, 10))   # FIRMS area API 1-10 gün destekler
         url = f"{self.AREA_URL}/{self.map_key}/VIIRS_SNPP_NRT/{min_lon},{min_lat},{max_lon},{max_lat}/{days}"
-        resp = requests.get(url, timeout=self.timeout)
-        resp.raise_for_status()
+        # 2026-08-19 — TEKRAR DENEME. NASA FIRMS zaman zaman birkaç saniyeliğine
+        # yanıt vermiyor (canlıda görüldü: aynı istek önce ConnectTimeout,
+        # 2 dakika sonra 0,7 sn'de HTTP 200). Tek denemede pes etmek, çalışan
+        # bir entegrasyonu ekranda "veri alınamadı" gibi gösteriyordu.
+        last_err = None
+        resp = None
+        for attempt in range(3):
+            try:
+                resp = requests.get(url, timeout=self.timeout)
+                resp.raise_for_status()
+                break
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+                if attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))
+        if resp is None:
+            raise last_err
         lines = resp.text.strip().splitlines()
         if len(lines) < 2:
             return []
@@ -583,7 +600,14 @@ def register_satellite_routes(api_router, db, current_user, require_permission, 
 
         alerts = []
         for a in raw or []:
-            alat, alon = a.get("latitude"), a.get("longitude")
+            # ⚠️ Sağlayıcı `lat`/`lon` döndürür (bkz. NasaFirmsProvider.
+            # get_fire_alerts) — `latitude`/`longitude` DEĞİL. İlk yazımda
+            # uzun adlar okunuyordu ve HER yangın sessizce elenip liste boş
+            # kalıyordu; FIRMS o gün hiç yangın döndürmediği için hata fark
+            # edilmiyordu. Her iki ad da kabul ediliyor (ileride sağlayıcı
+            # değişirse kırılmasın).
+            alat = a.get("lat", a.get("latitude"))
+            alon = a.get("lon", a.get("longitude"))
             if alat is None or alon is None:
                 continue
             dist = _haversine_km(lat, lon, float(alat), float(alon))
@@ -641,7 +665,9 @@ def register_satellite_routes(api_router, db, current_user, require_permission, 
 
         hits = []
         for a in raw or []:
-            alat, alon = a.get("latitude"), a.get("longitude")
+            # Sağlayıcı `lat`/`lon` döndürür (yukarıdaki not).
+            alat = a.get("lat", a.get("latitude"))
+            alon = a.get("lon", a.get("longitude"))
             if alat is None or alon is None:
                 continue
             nearest = min(centers, key=lambda c: _haversine_km(c[0], c[1], float(alat), float(alon)))
