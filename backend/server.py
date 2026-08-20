@@ -460,6 +460,12 @@ register_case_routes(api_router, db, current_user, require_permission, log_audit
 from vra import register_vra_routes
 register_vra_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
+# 2026-08-20 (OTURUM-DEVAM madde 10) — Demo Senaryo Oynatıcı: gerçek ekranlara
+# giden, sistemdeki en dolu çiftçi/parsel/sezon zincirini kullanan bir sunum
+# turu. `scripts/demo_scenario.py` (repo kökü) tamamlayıcı seed script'idir.
+from demo_scenario import register_demo_scenario_routes
+register_demo_scenario_routes(api_router, db, current_user, require_feature)
+
 # PR-04 (ROADMAP-URUNLESTIRME.md): Migration Runner + Surum Yukseltme/Geri
 # Alma. raw_db kullanir (tenant filtresiz) -- migration'lar sema seviyesinde
 # calisir. Surum numarasi Health Center'da (platform_core.py) gorunur.

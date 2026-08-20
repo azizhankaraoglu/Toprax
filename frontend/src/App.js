@@ -11,6 +11,7 @@ import Parcels from "@/pages/Parcels";
 import ParcelDetail from "@/pages/ParcelDetail";
 import HaritaPaneli from "@/pages/HaritaPaneli";
 import Vra from "@/pages/Vra";
+import DemoScenario from "@/pages/DemoScenario";
 import RemoteSensing from "@/pages/RemoteSensing";
 import ProductionCycleDetail from "@/pages/ProductionCycleDetail";
 import Sulama from "@/pages/Sulama";
@@ -125,6 +126,7 @@ function App() {
             <Route path="/uydu" element={<UyduGorunutu />} />
             <Route path="/uzaktan-algilama" element={<RemoteSensing />} />
             <Route path="/vra" element={<Vra />} />
+            <Route path="/senaryo-oynatici" element={<DemoScenario />} />
             <Route path="/copilot" element={<AICopilot />} />
             <Route path="/hastalik" element={<HastalikTespiti />} />
             <Route path="/saha" element={<SahaPWA />} />

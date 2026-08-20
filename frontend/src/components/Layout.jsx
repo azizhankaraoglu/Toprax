@@ -8,7 +8,7 @@ import {
   Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Sparkles,
   UserCog, ShieldCheck, LayoutList, Landmark, Compass, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, ClipboardCheck,
   Workflow, CheckSquare, Inbox, Radio, FileBarChart2, Layers,
-  CalendarClock, Bug, Factory, BrainCircuit, Leaf, LayoutGrid
+  CalendarClock, Bug, Factory, BrainCircuit, Leaf, LayoutGrid, PlayCircle
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
 import AnnouncementPopup from "@/components/AnnouncementPopup";
@@ -144,6 +144,7 @@ const navGroups = [
       { to: "/bize-ulasin", icon: Inbox, label: "Bize Ulaşın", featureFlag: "case_management" },
       { to: "/integration-hub", icon: Cable, label: "Integration Hub", featureFlag: "integration_hub" },
       { to: "/audit", icon: Activity, label: "Audit Log", adminTierOnly: true, featureFlag: "audit" },
+      { to: "/senaryo-oynatici", icon: PlayCircle, label: "Senaryoyu Oynat", adminTierOnly: true, featureFlag: "demo_scenario" },
       // SON HAL (2026-07-23) — Geliştirici Portalı / Platform Core /
       // Experience Profile / Ayarlar buradan KALDIRILDI: kullanıcı isteği
       // üzerine bunlar artık kooperatifin kendi Sistem menüsünden değil,
