@@ -67,13 +67,36 @@ def _get_transformer(source_epsg: Optional[int]):
     return Transformer.from_crs(CRS.from_epsg(source_epsg), CRS.from_epsg(4326), always_xy=True)
 
 
+def _close_linestring_to_polygon(geometry: Dict[str, Any]) -> Dict[str, Any]:
+    """2026-08-20 — parsel sınır dosyalarının bazı kaynakları (TKGM Parsel
+    Sorgu dışa aktarımları dahil, bkz. köy GeoJSON'ları) geometriyi Polygon
+    YERİNE LineString olarak yazar; ring genelde ZATEN kapalıdır (ilk/son
+    koordinat eşit) ama tip alanı yanlıştır. `_parse_kml_dxf`'in DXF
+    yolundaki "closed" tespitiyle AYNI ilke — bir LineString'in ilk ve son
+    noktası eşitse (veya neredeyse eşitse, ~1e-7 derece toleransla) bu
+    aslında bir parsel poligonudur, Polygon'a çevrilir. Eşit DEĞİLSE
+    (gerçekten açık bir çizgi — yol/kanal gibi) dokunulmadan LineString
+    kalır, uydurma bir kapatma YAPILMAZ."""
+    if geometry.get("type") != "LineString":
+        return geometry
+    coords = geometry.get("coordinates") or []
+    if len(coords) < 3:
+        return geometry
+    first, last = coords[0], coords[-1]
+    is_closed = abs(first[0] - last[0]) < 1e-7 and abs(first[1] - last[1]) < 1e-7
+    if not is_closed:
+        return geometry
+    ring = coords if coords[0] == coords[-1] else [*coords, coords[0]]
+    return {"type": "Polygon", "coordinates": [ring]}
+
+
 def _parse_geojson(content: bytes) -> List[Dict[str, Any]]:
     data = json.loads(content)
     if data.get("type") == "FeatureCollection":
-        return [{"geometry": f["geometry"], "properties": f.get("properties") or {}} for f in data["features"]]
+        return [{"geometry": _close_linestring_to_polygon(f["geometry"]), "properties": f.get("properties") or {}} for f in data["features"]]
     if data.get("type") == "Feature":
-        return [{"geometry": data["geometry"], "properties": data.get("properties") or {}}]
-    return [{"geometry": data, "properties": {}}]  # çıplak geometry objesi
+        return [{"geometry": _close_linestring_to_polygon(data["geometry"]), "properties": data.get("properties") or {}}]
+    return [{"geometry": _close_linestring_to_polygon(data), "properties": {}}]  # çıplak geometry objesi
 
 
 def _parse_kml(content: bytes) -> List[Dict[str, Any]]:

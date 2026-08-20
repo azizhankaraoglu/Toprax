@@ -8,6 +8,7 @@ değişikliği YOK. Route kayıt SIRASI korunur: register çağrısı server.py
 içinde bloğun orijinal konumundan yapılır (Starlette route-order tuzağı,
 bkz. CLAUDE.md /parcels/bulk-update notu).
 """
+import re
 import uuid
 import random
 import logging
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 from geo_validation import validate_geometry
+from geo_import import _close_linestring_to_polygon
 from platform_core import check_and_consume_limit
 
 
@@ -700,6 +702,15 @@ def register_parcel_routes(api_router, db, current_user, require_permission, req
             mahalle = pick("mahalle", "mahalle_adi", "mahalle_ad", "koy", "koy_adi")
             ada = pick("ada_no", "ada", "adano")
             parsel = pick("parsel_no_tapu", "parsel", "parselno", "pin")
+            # 2026-08-20 — bazı kaynaklar (köy sınır dosyaları) ada/parseli AYRI
+            # alanlar yerine TEK bir "Name"/"name" özelliğinde "101/10" (ada/
+            # parsel) formatında verir — TKGM Parsel Sorgu'nun kendi kadastro
+            # gösterim biçimi. ada/parsel AYRI alanlardan zaten bulunduysa buna
+            # DOKUNULMAZ (mevcut, daha spesifik alanlar önceliklidir).
+            if ada is None and parsel is None:
+                combined = pick("name", "isim", "ad")
+                if combined and re.fullmatch(r"\d+/\d+", str(combined).strip()):
+                    ada, parsel = str(combined).strip().split("/")
             if il is not None:
                 out["il"] = str(il)
             if ilce is not None:
@@ -719,6 +730,14 @@ def register_parcel_routes(api_router, db, current_user, require_permission, req
             try:
                 geom = feat.get("geometry")
                 props = feat.get("properties", {}) or {}
+                # 2026-08-20 — bazı kaynaklar (TKGM Parsel Sorgu dahil, bkz.
+                # köy sınır dosyaları) parsel poligonunu Polygon YERİNE kapalı
+                # bir LineString olarak yazar; `geo_import.py` ile AYNI ilkeyle
+                # (ilk/son nokta eşitse) Polygon'a çevrilir — açık bir çizgiyse
+                # (yol/kanal) dokunulmaz, aşağıdaki "Parsel değil" kontrolü onu
+                # yine reddeder.
+                if geom:
+                    geom = _close_linestring_to_polygon(geom)
                 if not geom or geom.get("type") != "Polygon":
                     gtype = (geom or {}).get("type") or "geometri yok"
                     # Nokta/çizgi bir parsel OLAMAZ (alanı yok) — kullanıcı KML/GeoJSON

@@ -1,0 +1,3824 @@
+[
+  {
+    "id": "29323b50-4941-4a3f-89df-f2d52cb5fd43",
+    "name": "Abditolu 101/1",
+    "ada_no": "593",
+    "parsel_no_tapu": "101/1"
+  },
+  {
+    "id": "b81ceb23-0c7d-4747-a37e-ba90fee54cce",
+    "name": "Abditolu 101/10",
+    "ada_no": "705",
+    "parsel_no_tapu": "101/10"
+  },
+  {
+    "id": "c4bcf37f-37f3-4c2f-ad1b-2067f7797428",
+    "name": "Abditolu 101/12",
+    "ada_no": "362",
+    "parsel_no_tapu": "101/12"
+  },
+  {
+    "id": "44d576db-c4f2-4683-bcbd-f53168859d74",
+    "name": "Abditolu 101/13",
+    "ada_no": "172",
+    "parsel_no_tapu": "101/13"
+  },
+  {
+    "id": "19d17249-5c05-4da1-b355-8b3809dbfd28",
+    "name": "Abditolu 101/15",
+    "ada_no": "716",
+    "parsel_no_tapu": "101/15"
+  },
+  {
+    "id": "752adf30-133f-420a-93a7-d66246d8f934",
+    "name": "Abditolu 101/16",
+    "ada_no": "136",
+    "parsel_no_tapu": "101/16"
+  },
+  {
+    "id": "80efc425-ea59-46bb-9b1b-a5b17bfc7463",
+    "name": "Abditolu 101/17",
+    "ada_no": "173",
+    "parsel_no_tapu": "101/17"
+  },
+  {
+    "id": "a5e35dd0-507c-4971-bffe-7124957d9ca4",
+    "name": "Abditolu 101/18",
+    "ada_no": "453",
+    "parsel_no_tapu": "101/18"
+  },
+  {
+    "id": "280af0ee-684a-4115-b158-d0337d056382",
+    "name": "Abditolu 101/19",
+    "ada_no": "814",
+    "parsel_no_tapu": "101/19"
+  },
+  {
+    "id": "95e9323d-5f29-4f6d-a547-5c93162aab77",
+    "name": "Abditolu 101/20",
+    "ada_no": "307",
+    "parsel_no_tapu": "101/20"
+  },
+  {
+    "id": "7084cf8e-d0bf-4f60-9e0e-1b2d93110931",
+    "name": "Abditolu 101/21",
+    "ada_no": "300",
+    "parsel_no_tapu": "101/21"
+  },
+  {
+    "id": "71447834-f854-4058-ae37-a02407ed978b",
+    "name": "Abditolu 101/22",
+    "ada_no": "650",
+    "parsel_no_tapu": "101/22"
+  },
+  {
+    "id": "095e099e-74ea-44f1-8c49-143edda87048",
+    "name": "Abditolu 101/3",
+    "ada_no": "873",
+    "parsel_no_tapu": "101/3"
+  },
+  {
+    "id": "693304d8-e095-4358-b196-2b6f9b4d8631",
+    "name": "Abditolu 101/4",
+    "ada_no": "984",
+    "parsel_no_tapu": "101/4"
+  },
+  {
+    "id": "32ffc6c5-eb01-4afb-b449-3f9c1f7d57fe",
+    "name": "Abditolu 101/6",
+    "ada_no": "428",
+    "parsel_no_tapu": "101/6"
+  },
+  {
+    "id": "d3001c3c-7058-4c25-a5ed-cc2ac190cd4e",
+    "name": "Abditolu 101/7",
+    "ada_no": "702",
+    "parsel_no_tapu": "101/7"
+  },
+  {
+    "id": "91293765-878c-4d90-95a4-9b152bebb7ae",
+    "name": "Abditolu 101/8",
+    "ada_no": "926",
+    "parsel_no_tapu": "101/8"
+  },
+  {
+    "id": "c7817747-6743-4649-ad46-540ad52192b6",
+    "name": "Abditolu 101/9",
+    "ada_no": "681",
+    "parsel_no_tapu": "101/9"
+  },
+  {
+    "id": "0de67f5c-7199-493e-a751-c2b1276fe925",
+    "name": "Abditolu 102/1",
+    "ada_no": "388",
+    "parsel_no_tapu": "102/1"
+  },
+  {
+    "id": "fc8f6cd2-b8a6-40d5-b58c-f5f067022d22",
+    "name": "Abditolu 102/10",
+    "ada_no": "300",
+    "parsel_no_tapu": "102/10"
+  },
+  {
+    "id": "972011b0-ee06-4d80-8d80-54f243a1e93f",
+    "name": "Abditolu 102/2",
+    "ada_no": "508",
+    "parsel_no_tapu": "102/2"
+  },
+  {
+    "id": "a83dc0ec-ffe1-4b96-9e3e-fc3808b1eaa3",
+    "name": "Abditolu 102/3",
+    "ada_no": "625",
+    "parsel_no_tapu": "102/3"
+  },
+  {
+    "id": "81431f4e-21a5-4684-859a-da10569bba55",
+    "name": "Abditolu 102/4",
+    "ada_no": "991",
+    "parsel_no_tapu": "102/4"
+  },
+  {
+    "id": "a9366170-febc-46fb-9d92-88a60728c9f2",
+    "name": "Abditolu 102/5",
+    "ada_no": "658",
+    "parsel_no_tapu": "102/5"
+  },
+  {
+    "id": "3bcd0c82-eea0-4912-8cae-ffd80e392f53",
+    "name": "Abditolu 102/6",
+    "ada_no": "460",
+    "parsel_no_tapu": "102/6"
+  },
+  {
+    "id": "081aff20-b48f-400e-9a46-4921246e1e56",
+    "name": "Abditolu 102/7",
+    "ada_no": "576",
+    "parsel_no_tapu": "102/7"
+  },
+  {
+    "id": "dde7a7a7-2c3c-45a9-a8c6-bc5d3eb340ec",
+    "name": "Abditolu 102/8",
+    "ada_no": "813",
+    "parsel_no_tapu": "102/8"
+  },
+  {
+    "id": "81f5fd4e-69b3-48a3-b068-add63808cabb",
+    "name": "Abditolu 102/9",
+    "ada_no": "309",
+    "parsel_no_tapu": "102/9"
+  },
+  {
+    "id": "07817e0f-6594-4600-96ec-9375620acbf1",
+    "name": "Abditolu 103/1",
+    "ada_no": "531",
+    "parsel_no_tapu": "103/1"
+  },
+  {
+    "id": "17aae16c-cac2-4ce5-843c-a9864e6d3dbb",
+    "name": "Abditolu 103/10",
+    "ada_no": "609",
+    "parsel_no_tapu": "103/10"
+  },
+  {
+    "id": "97eae202-38e4-4c1b-883b-c32afe9db9cd",
+    "name": "Abditolu 103/11",
+    "ada_no": "595",
+    "parsel_no_tapu": "103/11"
+  },
+  {
+    "id": "5f202c23-401f-4f13-aa3f-a232c63eb63c",
+    "name": "Abditolu 103/12",
+    "ada_no": "870",
+    "parsel_no_tapu": "103/12"
+  },
+  {
+    "id": "29706eca-2dc0-4f37-9b38-0ffd68c2ec20",
+    "name": "Abditolu 103/13",
+    "ada_no": "412",
+    "parsel_no_tapu": "103/13"
+  },
+  {
+    "id": "d4e40952-4b2b-4f64-807c-5f8097ed49ae",
+    "name": "Abditolu 103/14",
+    "ada_no": "146",
+    "parsel_no_tapu": "103/14"
+  },
+  {
+    "id": "5cd8469b-f8f2-4de3-bb90-38dcef3896b0",
+    "name": "Abditolu 103/2",
+    "ada_no": "565",
+    "parsel_no_tapu": "103/2"
+  },
+  {
+    "id": "fc55b364-15f2-44b6-aa22-8b52ecd7bec7",
+    "name": "Abditolu 103/3",
+    "ada_no": "753",
+    "parsel_no_tapu": "103/3"
+  },
+  {
+    "id": "2dc53cfa-406d-4a77-8d24-f9a62777ef6d",
+    "name": "Abditolu 103/4",
+    "ada_no": "698",
+    "parsel_no_tapu": "103/4"
+  },
+  {
+    "id": "94941747-2de4-4be9-b53e-d4aaa29d0e44",
+    "name": "Abditolu 103/5",
+    "ada_no": "332",
+    "parsel_no_tapu": "103/5"
+  },
+  {
+    "id": "74c385ff-1a60-4cd7-8396-14cb2368b144",
+    "name": "Abditolu 103/6",
+    "ada_no": "490",
+    "parsel_no_tapu": "103/6"
+  },
+  {
+    "id": "f0d94d78-fd4c-43db-a893-85a058eb8732",
+    "name": "Abditolu 103/7",
+    "ada_no": "387",
+    "parsel_no_tapu": "103/7"
+  },
+  {
+    "id": "9d3b6b60-f6ed-4680-9deb-854c99808af3",
+    "name": "Abditolu 103/8",
+    "ada_no": "851",
+    "parsel_no_tapu": "103/8"
+  },
+  {
+    "id": "01a39a7d-aa03-4a45-a181-a42621657e1b",
+    "name": "Abditolu 103/9",
+    "ada_no": "768",
+    "parsel_no_tapu": "103/9"
+  },
+  {
+    "id": "4efce5e5-d38e-4606-8459-5a95f4526538",
+    "name": "Abditolu 104/1",
+    "ada_no": "543",
+    "parsel_no_tapu": "104/1"
+  },
+  {
+    "id": "9330418f-4ede-428c-b85f-3f8709b13d48",
+    "name": "Abditolu 104/10",
+    "ada_no": "432",
+    "parsel_no_tapu": "104/10"
+  },
+  {
+    "id": "316e4bc1-4b4d-47c2-aab7-5077482b0952",
+    "name": "Abditolu 104/11",
+    "ada_no": "424",
+    "parsel_no_tapu": "104/11"
+  },
+  {
+    "id": "8718712a-5460-445a-ab68-84b7e4665a84",
+    "name": "Abditolu 104/12",
+    "ada_no": "244",
+    "parsel_no_tapu": "104/12"
+  },
+  {
+    "id": "37f3707a-b905-4d01-bdaf-c6b47db386f4",
+    "name": "Abditolu 104/13",
+    "ada_no": "608",
+    "parsel_no_tapu": "104/13"
+  },
+  {
+    "id": "fc223db2-3f86-47c0-8d53-2a720856389e",
+    "name": "Abditolu 104/14",
+    "ada_no": "771",
+    "parsel_no_tapu": "104/14"
+  },
+  {
+    "id": "1c10e3a1-9754-44ae-bb8b-9170b16123b8",
+    "name": "Abditolu 104/15",
+    "ada_no": "656",
+    "parsel_no_tapu": "104/15"
+  },
+  {
+    "id": "7b82d827-c385-48af-bf33-05d934dc9ac5",
+    "name": "Abditolu 104/2",
+    "ada_no": "148",
+    "parsel_no_tapu": "104/2"
+  },
+  {
+    "id": "cfbc0276-42cb-4d93-90c5-5ce9c23290b1",
+    "name": "Abditolu 104/3",
+    "ada_no": "328",
+    "parsel_no_tapu": "104/3"
+  },
+  {
+    "id": "2d388e55-f152-49a2-9df4-4faa42b1d0c2",
+    "name": "Abditolu 104/4",
+    "ada_no": "802",
+    "parsel_no_tapu": "104/4"
+  },
+  {
+    "id": "a41faf91-166c-4130-96e0-ffceaf694d33",
+    "name": "Abditolu 104/5",
+    "ada_no": "270",
+    "parsel_no_tapu": "104/5"
+  },
+  {
+    "id": "ca312ccc-d7d5-4885-8d54-ce14226ddc62",
+    "name": "Abditolu 104/6",
+    "ada_no": "924",
+    "parsel_no_tapu": "104/6"
+  },
+  {
+    "id": "e529aa13-3399-4366-9afe-276c2f808b87",
+    "name": "Abditolu 104/7",
+    "ada_no": "336",
+    "parsel_no_tapu": "104/7"
+  },
+  {
+    "id": "1429c2f3-9583-43f9-a205-058470e7738d",
+    "name": "Abditolu 104/8",
+    "ada_no": "737",
+    "parsel_no_tapu": "104/8"
+  },
+  {
+    "id": "a4974ef5-fb92-49e1-ac9a-913dceeaed4c",
+    "name": "Abditolu 104/9",
+    "ada_no": "148",
+    "parsel_no_tapu": "104/9"
+  },
+  {
+    "id": "873372fd-6199-417f-8495-90c56b7e25de",
+    "name": "Abditolu 105/1",
+    "ada_no": "484",
+    "parsel_no_tapu": "105/1"
+  },
+  {
+    "id": "c12c15d3-f921-41d2-8fb9-ea6e86188c0f",
+    "name": "Abditolu 105/2",
+    "ada_no": "374",
+    "parsel_no_tapu": "105/2"
+  },
+  {
+    "id": "665f6acc-924c-44e0-b01d-0c355f295780",
+    "name": "Abditolu 105/3",
+    "ada_no": "554",
+    "parsel_no_tapu": "105/3"
+  },
+  {
+    "id": "a18f3e8a-dd6d-4d30-9cc7-9b28a2955142",
+    "name": "Abditolu 105/4",
+    "ada_no": "150",
+    "parsel_no_tapu": "105/4"
+  },
+  {
+    "id": "7a2cab3f-70e7-41b6-9cb9-2104975d7401",
+    "name": "Abditolu 105/5",
+    "ada_no": "711",
+    "parsel_no_tapu": "105/5"
+  },
+  {
+    "id": "ee84f14c-fce6-49af-986f-223eabe046c3",
+    "name": "Abditolu 105/6",
+    "ada_no": "554",
+    "parsel_no_tapu": "105/6"
+  },
+  {
+    "id": "8a5005d1-830b-44db-976c-7d61b76b0a01",
+    "name": "Abditolu 106/1",
+    "ada_no": "564",
+    "parsel_no_tapu": "106/1"
+  },
+  {
+    "id": "72996cfd-3d42-4869-afd1-f9b090bf6e05",
+    "name": "Abditolu 106/10",
+    "ada_no": "556",
+    "parsel_no_tapu": "106/10"
+  },
+  {
+    "id": "f64b5302-dd34-401c-af18-39ad083dfcc9",
+    "name": "Abditolu 106/11",
+    "ada_no": "145",
+    "parsel_no_tapu": "106/11"
+  },
+  {
+    "id": "767fc2a1-d9d3-4204-84f5-f33b6a4f8742",
+    "name": "Abditolu 106/12",
+    "ada_no": "348",
+    "parsel_no_tapu": "106/12"
+  },
+  {
+    "id": "02b0ab81-70fb-41e0-9726-40a02591d7ef",
+    "name": "Abditolu 106/2",
+    "ada_no": "509",
+    "parsel_no_tapu": "106/2"
+  },
+  {
+    "id": "5b53dade-229f-45ff-8d9c-1d3683951f95",
+    "name": "Abditolu 106/3",
+    "ada_no": "671",
+    "parsel_no_tapu": "106/3"
+  },
+  {
+    "id": "266f569e-fa86-4297-86a7-e27b5bee8124",
+    "name": "Abditolu 106/4",
+    "ada_no": "338",
+    "parsel_no_tapu": "106/4"
+  },
+  {
+    "id": "a8059ab6-3111-45b0-8d6c-cf40f34bd21a",
+    "name": "Abditolu 106/7",
+    "ada_no": "537",
+    "parsel_no_tapu": "106/7"
+  },
+  {
+    "id": "d67960d0-efc5-4cd8-a5d5-db20cc2ece5e",
+    "name": "Abditolu 106/8",
+    "ada_no": "546",
+    "parsel_no_tapu": "106/8"
+  },
+  {
+    "id": "86805c16-54a4-4bc0-b0a2-7fdb39e87789",
+    "name": "Abditolu 106/9",
+    "ada_no": "117",
+    "parsel_no_tapu": "106/9"
+  },
+  {
+    "id": "08997e77-799c-4ccf-86ee-463ebf0b36ed",
+    "name": "Abditolu 107/1",
+    "ada_no": "102",
+    "parsel_no_tapu": "107/1"
+  },
+  {
+    "id": "5073d0a2-3215-4903-b517-d7300f522dac",
+    "name": "Abditolu 107/2",
+    "ada_no": "581",
+    "parsel_no_tapu": "107/2"
+  },
+  {
+    "id": "fc62bc25-05e2-40e1-881a-31638787b141",
+    "name": "Abditolu 107/3",
+    "ada_no": "415",
+    "parsel_no_tapu": "107/3"
+  },
+  {
+    "id": "8a2009a6-0f54-45c5-b8bd-42b2fa26379d",
+    "name": "Abditolu 107/4",
+    "ada_no": "586",
+    "parsel_no_tapu": "107/4"
+  },
+  {
+    "id": "7ecda837-8e11-4abe-800c-38ff5cbd2bfd",
+    "name": "Abditolu 108/1",
+    "ada_no": "963",
+    "parsel_no_tapu": "108/1"
+  },
+  {
+    "id": "302f3d59-f0c9-4a9e-ab0b-0daea328750b",
+    "name": "Abditolu 108/2",
+    "ada_no": "870",
+    "parsel_no_tapu": "108/2"
+  },
+  {
+    "id": "9e2fd111-15b6-4c8e-9702-b3ab6895c1b1",
+    "name": "Abditolu 108/3",
+    "ada_no": "406",
+    "parsel_no_tapu": "108/3"
+  },
+  {
+    "id": "b42fbf8a-e893-4a87-a45a-05e48e1ee110",
+    "name": "Abditolu 108/4",
+    "ada_no": "706",
+    "parsel_no_tapu": "108/4"
+  },
+  {
+    "id": "6b606d70-3e2d-4244-859b-70cd66c4300d",
+    "name": "Abditolu 108/5",
+    "ada_no": "332",
+    "parsel_no_tapu": "108/5"
+  },
+  {
+    "id": "0f3b7ae8-1e28-4e17-8322-e95f3c19478a",
+    "name": "Abditolu 109/1",
+    "ada_no": "306",
+    "parsel_no_tapu": "109/1"
+  },
+  {
+    "id": "b9fed5c2-a545-4249-a401-1c8097de8c19",
+    "name": "Abditolu 109/10",
+    "ada_no": "579",
+    "parsel_no_tapu": "109/10"
+  },
+  {
+    "id": "53e93b9a-2406-40f6-92c6-9da83aef67d7",
+    "name": "Abditolu 109/11",
+    "ada_no": "159",
+    "parsel_no_tapu": "109/11"
+  },
+  {
+    "id": "373f14cf-8e6f-486f-bb41-5548972fb33c",
+    "name": "Abditolu 109/12",
+    "ada_no": "856",
+    "parsel_no_tapu": "109/12"
+  },
+  {
+    "id": "c7c68325-4732-42a7-9ab1-bf7b9ece6c4d",
+    "name": "Abditolu 109/13",
+    "ada_no": "477",
+    "parsel_no_tapu": "109/13"
+  },
+  {
+    "id": "463e9128-bdcf-4f6f-85b3-d5ac0245d283",
+    "name": "Abditolu 109/14",
+    "ada_no": "797",
+    "parsel_no_tapu": "109/14"
+  },
+  {
+    "id": "f625e4ec-c0b7-4602-806e-b05f5ef3c497",
+    "name": "Abditolu 109/15",
+    "ada_no": "436",
+    "parsel_no_tapu": "109/15"
+  },
+  {
+    "id": "525c8175-2fd6-4abd-9125-b80f403fc713",
+    "name": "Abditolu 109/16",
+    "ada_no": "429",
+    "parsel_no_tapu": "109/16"
+  },
+  {
+    "id": "2fc1720d-f278-4b32-a843-089e53175a59",
+    "name": "Abditolu 109/17",
+    "ada_no": "477",
+    "parsel_no_tapu": "109/17"
+  },
+  {
+    "id": "bab687db-fcab-47a9-be88-ab119a6fe147",
+    "name": "Abditolu 109/2",
+    "ada_no": "641",
+    "parsel_no_tapu": "109/2"
+  },
+  {
+    "id": "eff637d9-8bfb-4450-bdcf-afba96b24012",
+    "name": "Abditolu 109/3",
+    "ada_no": "674",
+    "parsel_no_tapu": "109/3"
+  },
+  {
+    "id": "0b98e732-c9f7-4fb4-8d8a-a3cdf072483c",
+    "name": "Abditolu 109/4",
+    "ada_no": "651",
+    "parsel_no_tapu": "109/4"
+  },
+  {
+    "id": "9434300c-f1bf-4c60-ba48-3126102b541b",
+    "name": "Abditolu 109/5",
+    "ada_no": "195",
+    "parsel_no_tapu": "109/5"
+  },
+  {
+    "id": "d7681ecc-5746-4f45-837c-98a8301ccdf2",
+    "name": "Abditolu 109/6",
+    "ada_no": "764",
+    "parsel_no_tapu": "109/6"
+  },
+  {
+    "id": "c809aed7-5a3a-4ea9-b18f-a4f92ea2303d",
+    "name": "Abditolu 109/7",
+    "ada_no": "257",
+    "parsel_no_tapu": "109/7"
+  },
+  {
+    "id": "f50264cd-d719-457e-8554-1681246dff4d",
+    "name": "Abditolu 109/8",
+    "ada_no": "719",
+    "parsel_no_tapu": "109/8"
+  },
+  {
+    "id": "d6716346-cfbc-4442-838a-c89b232652c0",
+    "name": "Abditolu 109/9",
+    "ada_no": "706",
+    "parsel_no_tapu": "109/9"
+  },
+  {
+    "id": "538d34e8-30fb-4bae-9656-83a3d2e69567",
+    "name": "Abditolu 110/1",
+    "ada_no": "591",
+    "parsel_no_tapu": "110/1"
+  },
+  {
+    "id": "65b1b888-a74a-44fd-a442-38a29945bf19",
+    "name": "Abditolu 110/10",
+    "ada_no": "710",
+    "parsel_no_tapu": "110/10"
+  },
+  {
+    "id": "326a7e35-e5cb-494e-be96-3c5db12b4021",
+    "name": "Abditolu 110/11",
+    "ada_no": "141",
+    "parsel_no_tapu": "110/11"
+  },
+  {
+    "id": "1617d1e7-4538-4fbd-9005-7ac92faa4f1b",
+    "name": "Abditolu 110/12",
+    "ada_no": "750",
+    "parsel_no_tapu": "110/12"
+  },
+  {
+    "id": "5681a9ca-0608-4209-a5b6-998b1e5cb6c0",
+    "name": "Abditolu 110/14",
+    "ada_no": "239",
+    "parsel_no_tapu": "110/14"
+  },
+  {
+    "id": "b823535a-cf41-4ddb-892b-cf5e238b9cf4",
+    "name": "Abditolu 110/15",
+    "ada_no": "851",
+    "parsel_no_tapu": "110/15"
+  },
+  {
+    "id": "e15c5ee4-18f1-4081-a90f-7c9811166c2d",
+    "name": "Abditolu 110/16",
+    "ada_no": "824",
+    "parsel_no_tapu": "110/16"
+  },
+  {
+    "id": "e88d9290-0749-4dd5-bc26-c2f1f9f719ef",
+    "name": "Abditolu 110/17",
+    "ada_no": "243",
+    "parsel_no_tapu": "110/17"
+  },
+  {
+    "id": "e429b2c7-8f9b-4cb9-8a7b-e3ccc3e18505",
+    "name": "Abditolu 110/18",
+    "ada_no": "156",
+    "parsel_no_tapu": "110/18"
+  },
+  {
+    "id": "f6f2e4b5-34e6-408c-8ceb-966ea8cc7d79",
+    "name": "Abditolu 110/19",
+    "ada_no": "414",
+    "parsel_no_tapu": "110/19"
+  },
+  {
+    "id": "81aded25-adde-4402-8eb3-5d9e84107583",
+    "name": "Abditolu 110/20",
+    "ada_no": "959",
+    "parsel_no_tapu": "110/20"
+  },
+  {
+    "id": "49d16f60-9a82-4418-b8a6-52faa223cba9",
+    "name": "Abditolu 110/3",
+    "ada_no": "900",
+    "parsel_no_tapu": "110/3"
+  },
+  {
+    "id": "0e3ba471-500e-41d4-bf57-a3bbcfaf687f",
+    "name": "Abditolu 110/4",
+    "ada_no": "824",
+    "parsel_no_tapu": "110/4"
+  },
+  {
+    "id": "c5cdc9f1-1a03-44c8-9565-6eec2154dac0",
+    "name": "Abditolu 110/5",
+    "ada_no": "998",
+    "parsel_no_tapu": "110/5"
+  },
+  {
+    "id": "c46dd2bb-887d-41f7-93ce-cfd3daaa4052",
+    "name": "Abditolu 110/6",
+    "ada_no": "141",
+    "parsel_no_tapu": "110/6"
+  },
+  {
+    "id": "24845763-cbba-497e-813c-ba0f27b4a16c",
+    "name": "Abditolu 110/7",
+    "ada_no": "726",
+    "parsel_no_tapu": "110/7"
+  },
+  {
+    "id": "8695a550-558e-40c8-ab54-f5e9322a1cdc",
+    "name": "Abditolu 110/8",
+    "ada_no": "919",
+    "parsel_no_tapu": "110/8"
+  },
+  {
+    "id": "538645ed-9cf2-468a-a542-90459ea526f4",
+    "name": "Abditolu 110/9",
+    "ada_no": "680",
+    "parsel_no_tapu": "110/9"
+  },
+  {
+    "id": "963e5413-5be1-499f-a449-d4f1c9743a66",
+    "name": "Abditolu 111/1",
+    "ada_no": "698",
+    "parsel_no_tapu": "111/1"
+  },
+  {
+    "id": "5f6e4ebe-09ca-486b-84f5-7f430d550708",
+    "name": "Abditolu 111/10",
+    "ada_no": "500",
+    "parsel_no_tapu": "111/10"
+  },
+  {
+    "id": "fcc0599f-c8d8-4a90-b3e6-14609e6a3566",
+    "name": "Abditolu 111/11",
+    "ada_no": "961",
+    "parsel_no_tapu": "111/11"
+  },
+  {
+    "id": "d2a77fb8-a686-45b9-8b5b-acca2de04a65",
+    "name": "Abditolu 111/12",
+    "ada_no": "627",
+    "parsel_no_tapu": "111/12"
+  },
+  {
+    "id": "5fece8aa-6952-4a21-98ce-9b1740ded838",
+    "name": "Abditolu 111/13",
+    "ada_no": "123",
+    "parsel_no_tapu": "111/13"
+  },
+  {
+    "id": "9c640c52-8753-4b9a-bb2e-61913309b541",
+    "name": "Abditolu 111/14",
+    "ada_no": "303",
+    "parsel_no_tapu": "111/14"
+  },
+  {
+    "id": "2a354575-e469-4b2a-aabc-52b03815b644",
+    "name": "Abditolu 111/15",
+    "ada_no": "889",
+    "parsel_no_tapu": "111/15"
+  },
+  {
+    "id": "fcfe4a1a-af02-427c-87d7-2aa99943d9cf",
+    "name": "Abditolu 111/16",
+    "ada_no": "973",
+    "parsel_no_tapu": "111/16"
+  },
+  {
+    "id": "8144faf3-b968-4496-8498-0a98e65162b1",
+    "name": "Abditolu 111/2",
+    "ada_no": "124",
+    "parsel_no_tapu": "111/2"
+  },
+  {
+    "id": "5933129c-4eb9-4997-99bc-eff343c66704",
+    "name": "Abditolu 111/4",
+    "ada_no": "851",
+    "parsel_no_tapu": "111/4"
+  },
+  {
+    "id": "50dfa3b6-0d63-43a5-9af6-e38722e6cc49",
+    "name": "Abditolu 111/7",
+    "ada_no": "520",
+    "parsel_no_tapu": "111/7"
+  },
+  {
+    "id": "79c10080-89cb-4e86-a4d9-57e9408967b4",
+    "name": "Abditolu 111/8",
+    "ada_no": "772",
+    "parsel_no_tapu": "111/8"
+  },
+  {
+    "id": "5ed23a61-f70e-4394-afc0-ceabde72c8dd",
+    "name": "Abditolu 111/9",
+    "ada_no": "765",
+    "parsel_no_tapu": "111/9"
+  },
+  {
+    "id": "2c3cbbe4-dc95-480a-bd50-271e7f6662c6",
+    "name": "Abditolu 112/1",
+    "ada_no": "840",
+    "parsel_no_tapu": "112/1"
+  },
+  {
+    "id": "7e66f553-b1db-4f9b-af72-cbf7ddcdcc7b",
+    "name": "Abditolu 112/10",
+    "ada_no": "600",
+    "parsel_no_tapu": "112/10"
+  },
+  {
+    "id": "9feb66de-03b0-4394-a7d7-83171ea914c7",
+    "name": "Abditolu 112/2",
+    "ada_no": "375",
+    "parsel_no_tapu": "112/2"
+  },
+  {
+    "id": "48d2fe48-a807-4dd3-bf3b-8ac04ccc4ee2",
+    "name": "Abditolu 112/3",
+    "ada_no": "447",
+    "parsel_no_tapu": "112/3"
+  },
+  {
+    "id": "d2761afa-3a16-48a2-981f-10b63d44bd68",
+    "name": "Abditolu 112/4",
+    "ada_no": "397",
+    "parsel_no_tapu": "112/4"
+  },
+  {
+    "id": "d8976d22-1352-419b-9afd-a9f42a30aba8",
+    "name": "Abditolu 112/5",
+    "ada_no": "970",
+    "parsel_no_tapu": "112/5"
+  },
+  {
+    "id": "78067715-6864-4bb8-85fe-f5f4fa4dbf3a",
+    "name": "Abditolu 112/6",
+    "ada_no": "540",
+    "parsel_no_tapu": "112/6"
+  },
+  {
+    "id": "464cebf2-99e0-4bc9-9a47-596e721f0417",
+    "name": "Abditolu 112/7",
+    "ada_no": "290",
+    "parsel_no_tapu": "112/7"
+  },
+  {
+    "id": "835cb9be-4449-4d14-aa52-e0b7f270290e",
+    "name": "Abditolu 112/9",
+    "ada_no": "227",
+    "parsel_no_tapu": "112/9"
+  },
+  {
+    "id": "dcf665c8-bcf6-4a02-9234-ee277b2cc546",
+    "name": "Abditolu 113/1",
+    "ada_no": "194",
+    "parsel_no_tapu": "113/1"
+  },
+  {
+    "id": "0b085f75-3096-40ea-b53d-0a4e2ea73fc2",
+    "name": "Abditolu 113/2",
+    "ada_no": "843",
+    "parsel_no_tapu": "113/2"
+  },
+  {
+    "id": "70d5ebc9-b72c-48bf-8263-50a9bf0e87b5",
+    "name": "Abditolu 114/1",
+    "ada_no": "532",
+    "parsel_no_tapu": "114/1"
+  },
+  {
+    "id": "2ea867e8-d952-4bb4-afcb-4344601fef6b",
+    "name": "Abditolu 114/2",
+    "ada_no": "113",
+    "parsel_no_tapu": "114/2"
+  },
+  {
+    "id": "7cd8da9a-fdab-4b98-87ba-5154aad9631a",
+    "name": "Abditolu 114/3",
+    "ada_no": "138",
+    "parsel_no_tapu": "114/3"
+  },
+  {
+    "id": "161f9ed9-3e72-4851-8abe-3bd59fd2ba84",
+    "name": "Abditolu 114/4",
+    "ada_no": "569",
+    "parsel_no_tapu": "114/4"
+  },
+  {
+    "id": "20580ebe-a3d2-4c97-831c-6b96908cfcc2",
+    "name": "Abditolu 114/5",
+    "ada_no": "320",
+    "parsel_no_tapu": "114/5"
+  },
+  {
+    "id": "63802aa6-e4c2-4228-a566-c69e71a22e68",
+    "name": "Abditolu 114/6",
+    "ada_no": "586",
+    "parsel_no_tapu": "114/6"
+  },
+  {
+    "id": "a439052c-b7f5-45a1-a841-835fba30af96",
+    "name": "Abditolu 115/1",
+    "ada_no": "234",
+    "parsel_no_tapu": "115/1"
+  },
+  {
+    "id": "08edfcae-83bc-4e36-983a-56c4b5cda0aa",
+    "name": "Abditolu 115/10",
+    "ada_no": "127",
+    "parsel_no_tapu": "115/10"
+  },
+  {
+    "id": "79778467-a4b5-4584-9daa-5cbbd90ac63e",
+    "name": "Abditolu 115/11",
+    "ada_no": "506",
+    "parsel_no_tapu": "115/11"
+  },
+  {
+    "id": "9982378c-5ade-44c2-973b-f45c5ce77305",
+    "name": "Abditolu 115/12",
+    "ada_no": "387",
+    "parsel_no_tapu": "115/12"
+  },
+  {
+    "id": "5d29356d-e268-446b-9995-8c9e26faa7c9",
+    "name": "Abditolu 115/13",
+    "ada_no": "708",
+    "parsel_no_tapu": "115/13"
+  },
+  {
+    "id": "61cc3a82-f073-4cc5-ac55-e07ad5a59f4b",
+    "name": "Abditolu 115/2",
+    "ada_no": "709",
+    "parsel_no_tapu": "115/2"
+  },
+  {
+    "id": "5177ad3e-333c-4b72-b98f-c835c92787fb",
+    "name": "Abditolu 115/3",
+    "ada_no": "314",
+    "parsel_no_tapu": "115/3"
+  },
+  {
+    "id": "1f34bc3c-4e98-4b88-8519-821f9fd22820",
+    "name": "Abditolu 115/4",
+    "ada_no": "891",
+    "parsel_no_tapu": "115/4"
+  },
+  {
+    "id": "fac401da-b466-4b9d-87f7-b76395b19a10",
+    "name": "Abditolu 115/5",
+    "ada_no": "412",
+    "parsel_no_tapu": "115/5"
+  },
+  {
+    "id": "53dfbc94-5f55-4725-922a-ed148f65f1aa",
+    "name": "Abditolu 115/6",
+    "ada_no": "284",
+    "parsel_no_tapu": "115/6"
+  },
+  {
+    "id": "3f297eb5-e086-4b15-8d10-990de02c1573",
+    "name": "Abditolu 115/7",
+    "ada_no": "293",
+    "parsel_no_tapu": "115/7"
+  },
+  {
+    "id": "e78f8f3e-7b38-4b2b-8d68-81f32767a16b",
+    "name": "Abditolu 115/8",
+    "ada_no": "627",
+    "parsel_no_tapu": "115/8"
+  },
+  {
+    "id": "1e370178-6144-4080-bea0-c30b463eceaf",
+    "name": "Abditolu 115/9",
+    "ada_no": "866",
+    "parsel_no_tapu": "115/9"
+  },
+  {
+    "id": "c0c3eb2c-8da7-44bc-9f13-324861360c41",
+    "name": "Abditolu 116/1",
+    "ada_no": "299",
+    "parsel_no_tapu": "116/1"
+  },
+  {
+    "id": "c419eadb-ddd7-4d97-ba28-af8c68225ef5",
+    "name": "Abditolu 116/2",
+    "ada_no": "129",
+    "parsel_no_tapu": "116/2"
+  },
+  {
+    "id": "a2847b1d-c073-4d3a-bb2e-c331ded9a643",
+    "name": "Abditolu 116/3",
+    "ada_no": "860",
+    "parsel_no_tapu": "116/3"
+  },
+  {
+    "id": "c9c4b1d6-506a-489a-adf4-ca45b8fc64bf",
+    "name": "Abditolu 116/4",
+    "ada_no": "244",
+    "parsel_no_tapu": "116/4"
+  },
+  {
+    "id": "c36d8329-aee1-4c55-b794-eb746f63ff3f",
+    "name": "Abditolu 117/1",
+    "ada_no": "662",
+    "parsel_no_tapu": "117/1"
+  },
+  {
+    "id": "47869f6e-7391-4de4-82f7-47fa6160a208",
+    "name": "Abditolu 117/11",
+    "ada_no": "940",
+    "parsel_no_tapu": "117/11"
+  },
+  {
+    "id": "49927477-994a-4c9c-96e1-5c22d87a02a6",
+    "name": "Abditolu 117/12",
+    "ada_no": "376",
+    "parsel_no_tapu": "117/12"
+  },
+  {
+    "id": "58739143-22cd-4738-be15-3b52cd29ee38",
+    "name": "Abditolu 117/13",
+    "ada_no": "334",
+    "parsel_no_tapu": "117/13"
+  },
+  {
+    "id": "542f5176-2d05-4dd6-ac4f-57bd5e4d5d6a",
+    "name": "Abditolu 117/14",
+    "ada_no": "977",
+    "parsel_no_tapu": "117/14"
+  },
+  {
+    "id": "108a8f0f-9cd6-4f4d-9529-49967dbe1e76",
+    "name": "Abditolu 117/15",
+    "ada_no": "490",
+    "parsel_no_tapu": "117/15"
+  },
+  {
+    "id": "76a523fd-101c-4802-9da8-8b52262c0dfb",
+    "name": "Abditolu 117/16",
+    "ada_no": "820",
+    "parsel_no_tapu": "117/16"
+  },
+  {
+    "id": "3bf66473-c31c-4d2f-b37b-196b7e14c32e",
+    "name": "Abditolu 117/2",
+    "ada_no": "552",
+    "parsel_no_tapu": "117/2"
+  },
+  {
+    "id": "f0e41dc0-d3c8-4747-93b7-a67ea43ffff2",
+    "name": "Abditolu 117/3",
+    "ada_no": "885",
+    "parsel_no_tapu": "117/3"
+  },
+  {
+    "id": "deb58d78-6712-4fda-bda5-d6db71277eec",
+    "name": "Abditolu 117/4",
+    "ada_no": "435",
+    "parsel_no_tapu": "117/4"
+  },
+  {
+    "id": "e4abb007-974a-4f87-82be-c52a1f9211de",
+    "name": "Abditolu 117/5",
+    "ada_no": "582",
+    "parsel_no_tapu": "117/5"
+  },
+  {
+    "id": "6f91ce80-db58-4ded-92d0-b966425f7d71",
+    "name": "Abditolu 117/6",
+    "ada_no": "410",
+    "parsel_no_tapu": "117/6"
+  },
+  {
+    "id": "6094cbc5-a98b-4616-a20e-8a8a02b511f1",
+    "name": "Abditolu 117/7",
+    "ada_no": "147",
+    "parsel_no_tapu": "117/7"
+  },
+  {
+    "id": "b21fbdb0-8595-45ed-99f5-31c225ab0836",
+    "name": "Abditolu 117/8",
+    "ada_no": "388",
+    "parsel_no_tapu": "117/8"
+  },
+  {
+    "id": "8b3d3b6b-6364-480b-b958-e4f3222087e4",
+    "name": "Abditolu 117/9",
+    "ada_no": "344",
+    "parsel_no_tapu": "117/9"
+  },
+  {
+    "id": "00ea12be-4d79-4c67-8300-678887bc3e0b",
+    "name": "Abditolu 118/1",
+    "ada_no": "716",
+    "parsel_no_tapu": "118/1"
+  },
+  {
+    "id": "048c1d67-b2a4-47e7-8646-87d9bd52e5ca",
+    "name": "Abditolu 118/2",
+    "ada_no": "375",
+    "parsel_no_tapu": "118/2"
+  },
+  {
+    "id": "c482eeee-0786-41c0-8a7f-4c0bf2a9cbe7",
+    "name": "Abditolu 118/3",
+    "ada_no": "250",
+    "parsel_no_tapu": "118/3"
+  },
+  {
+    "id": "d3dbcca4-1823-41fd-b1ae-496fcb9ebb33",
+    "name": "Abditolu 118/4",
+    "ada_no": "356",
+    "parsel_no_tapu": "118/4"
+  },
+  {
+    "id": "2b7b6d42-2086-4db0-b30c-683024245718",
+    "name": "Abditolu 118/5",
+    "ada_no": "999",
+    "parsel_no_tapu": "118/5"
+  },
+  {
+    "id": "7205652b-aed9-417d-b5c5-cba1d2126b45",
+    "name": "Abditolu 119/1",
+    "ada_no": "483",
+    "parsel_no_tapu": "119/1"
+  },
+  {
+    "id": "2c2d13c7-8c67-489b-8374-ed4abe620cf6",
+    "name": "Abditolu 119/10",
+    "ada_no": "668",
+    "parsel_no_tapu": "119/10"
+  },
+  {
+    "id": "82447d96-25af-4f8e-b9f4-b357187b5b2e",
+    "name": "Abditolu 119/11",
+    "ada_no": "419",
+    "parsel_no_tapu": "119/11"
+  },
+  {
+    "id": "840c2b9e-b0c6-4adf-8b8d-d8b7fd730e9c",
+    "name": "Abditolu 119/12",
+    "ada_no": "616",
+    "parsel_no_tapu": "119/12"
+  },
+  {
+    "id": "5bb8eefa-8c3c-4e6f-b905-da7decab7d04",
+    "name": "Abditolu 119/13",
+    "ada_no": "547",
+    "parsel_no_tapu": "119/13"
+  },
+  {
+    "id": "d4c981f6-ee88-4aff-84cd-18b106aa0899",
+    "name": "Abditolu 119/2",
+    "ada_no": "268",
+    "parsel_no_tapu": "119/2"
+  },
+  {
+    "id": "d6a2e264-b83c-4a1a-a3b1-d5eeac2e2206",
+    "name": "Abditolu 119/3",
+    "ada_no": "525",
+    "parsel_no_tapu": "119/3"
+  },
+  {
+    "id": "3ef5e5ac-cc59-4383-a5af-af337fc1069a",
+    "name": "Abditolu 119/4",
+    "ada_no": "847",
+    "parsel_no_tapu": "119/4"
+  },
+  {
+    "id": "10257975-9d32-4de4-811f-b5bfd8010f50",
+    "name": "Abditolu 119/5",
+    "ada_no": "591",
+    "parsel_no_tapu": "119/5"
+  },
+  {
+    "id": "dce6bd30-d06a-493f-9a70-7ecbe3705753",
+    "name": "Abditolu 119/6",
+    "ada_no": "181",
+    "parsel_no_tapu": "119/6"
+  },
+  {
+    "id": "583cfb59-5b79-4d69-b031-0f8e2e456670",
+    "name": "Abditolu 119/7",
+    "ada_no": "619",
+    "parsel_no_tapu": "119/7"
+  },
+  {
+    "id": "c9e79316-7274-4772-ba6c-5b7e8676a068",
+    "name": "Abditolu 119/8",
+    "ada_no": "162",
+    "parsel_no_tapu": "119/8"
+  },
+  {
+    "id": "a975dc46-24c3-48b0-adab-be9ed9f7f29f",
+    "name": "Abditolu 119/9",
+    "ada_no": "831",
+    "parsel_no_tapu": "119/9"
+  },
+  {
+    "id": "2d517eaf-d193-432e-bec3-8a33b7c58a8d",
+    "name": "Abditolu 120/1",
+    "ada_no": "520",
+    "parsel_no_tapu": "120/1"
+  },
+  {
+    "id": "697c8e62-7679-42f8-9e33-29b153b7a39f",
+    "name": "Abditolu 120/10",
+    "ada_no": "356",
+    "parsel_no_tapu": "120/10"
+  },
+  {
+    "id": "4a8de6fa-b8d6-4bb8-866f-21219525789d",
+    "name": "Abditolu 120/11",
+    "ada_no": "307",
+    "parsel_no_tapu": "120/11"
+  },
+  {
+    "id": "d93491b8-80cc-4fc2-9921-c9582857e246",
+    "name": "Abditolu 120/12",
+    "ada_no": "127",
+    "parsel_no_tapu": "120/12"
+  },
+  {
+    "id": "7fa76b3d-9c3f-42c3-afe5-101140eb0084",
+    "name": "Abditolu 120/2",
+    "ada_no": "744",
+    "parsel_no_tapu": "120/2"
+  },
+  {
+    "id": "7ed24f36-b88e-4420-931d-ed1fee6af97a",
+    "name": "Abditolu 120/3",
+    "ada_no": "484",
+    "parsel_no_tapu": "120/3"
+  },
+  {
+    "id": "04a15bf7-a8eb-4172-a2b3-5fbe941298eb",
+    "name": "Abditolu 120/4",
+    "ada_no": "297",
+    "parsel_no_tapu": "120/4"
+  },
+  {
+    "id": "04591cfb-801e-4f2e-9315-665a29156dca",
+    "name": "Abditolu 120/5",
+    "ada_no": "640",
+    "parsel_no_tapu": "120/5"
+  },
+  {
+    "id": "f6dffb5b-c547-4e44-aae9-72c66f35093d",
+    "name": "Abditolu 120/6",
+    "ada_no": "110",
+    "parsel_no_tapu": "120/6"
+  },
+  {
+    "id": "4d5bd9d3-fe67-4baa-8b59-15218e45781a",
+    "name": "Abditolu 120/7",
+    "ada_no": "269",
+    "parsel_no_tapu": "120/7"
+  },
+  {
+    "id": "48a26192-6b55-409b-b393-fd1034ee4e61",
+    "name": "Abditolu 120/8",
+    "ada_no": "859",
+    "parsel_no_tapu": "120/8"
+  },
+  {
+    "id": "1392e9e6-5c59-4dfd-8913-1bb82e501fbd",
+    "name": "Abditolu 120/9",
+    "ada_no": "242",
+    "parsel_no_tapu": "120/9"
+  },
+  {
+    "id": "6bb77b70-1a0c-49cb-9ed0-6155b66e570d",
+    "name": "Abditolu 121/10",
+    "ada_no": "214",
+    "parsel_no_tapu": "121/10"
+  },
+  {
+    "id": "54c4a461-cc9e-44e7-9c4e-a62663e24c64",
+    "name": "Abditolu 121/11",
+    "ada_no": "778",
+    "parsel_no_tapu": "121/11"
+  },
+  {
+    "id": "4b80b420-d38e-4f36-8b52-b4bf3486d17b",
+    "name": "Abditolu 121/12",
+    "ada_no": "484",
+    "parsel_no_tapu": "121/12"
+  },
+  {
+    "id": "38dbfee3-c454-4687-bc74-9b6ce2258ac7",
+    "name": "Abditolu 121/13",
+    "ada_no": "327",
+    "parsel_no_tapu": "121/13"
+  },
+  {
+    "id": "cbcab8b1-511e-4026-ae04-010d3fbe4aaa",
+    "name": "Abditolu 121/14",
+    "ada_no": "194",
+    "parsel_no_tapu": "121/14"
+  },
+  {
+    "id": "7d3fd61d-6b4c-4e33-89f5-fb49b724615e",
+    "name": "Abditolu 121/15",
+    "ada_no": "214",
+    "parsel_no_tapu": "121/15"
+  },
+  {
+    "id": "bcf0fe3f-a879-4f19-849a-22aa0c81ebfd",
+    "name": "Abditolu 121/2",
+    "ada_no": "657",
+    "parsel_no_tapu": "121/2"
+  },
+  {
+    "id": "3d4e91dc-8ca1-41cd-918e-8cb4de316265",
+    "name": "Abditolu 121/3",
+    "ada_no": "615",
+    "parsel_no_tapu": "121/3"
+  },
+  {
+    "id": "f27bb8a5-ed59-41a5-aca5-c8941f8f95af",
+    "name": "Abditolu 121/4",
+    "ada_no": "902",
+    "parsel_no_tapu": "121/4"
+  },
+  {
+    "id": "c31ec1c5-2aa1-4334-a4bc-bcbea17d79e2",
+    "name": "Abditolu 121/5",
+    "ada_no": "736",
+    "parsel_no_tapu": "121/5"
+  },
+  {
+    "id": "46d6471f-073f-4f53-b186-185805ba327e",
+    "name": "Abditolu 121/6",
+    "ada_no": "469",
+    "parsel_no_tapu": "121/6"
+  },
+  {
+    "id": "7fb8ab61-87dd-4e13-8f2a-18b7bedf4a40",
+    "name": "Abditolu 121/7",
+    "ada_no": "216",
+    "parsel_no_tapu": "121/7"
+  },
+  {
+    "id": "440a061d-44b1-4f12-9873-705ad6e718a2",
+    "name": "Abditolu 121/8",
+    "ada_no": "902",
+    "parsel_no_tapu": "121/8"
+  },
+  {
+    "id": "756189cf-1d19-44bc-9d7b-b73f438658a5",
+    "name": "Abditolu 121/9",
+    "ada_no": "186",
+    "parsel_no_tapu": "121/9"
+  },
+  {
+    "id": "acda7301-c9d3-4e64-8ea3-97f5a5e7bb28",
+    "name": "Abditolu 122/1",
+    "ada_no": "461",
+    "parsel_no_tapu": "122/1"
+  },
+  {
+    "id": "e507add2-ad47-4f04-8115-6296767b6505",
+    "name": "Abditolu 122/2",
+    "ada_no": "262",
+    "parsel_no_tapu": "122/2"
+  },
+  {
+    "id": "26295678-a2bb-44b7-82d2-7284294265d2",
+    "name": "Abditolu 122/3",
+    "ada_no": "979",
+    "parsel_no_tapu": "122/3"
+  },
+  {
+    "id": "c6fa8cfd-54e5-4d80-acd5-7f4a701127fe",
+    "name": "Abditolu 122/4",
+    "ada_no": "159",
+    "parsel_no_tapu": "122/4"
+  },
+  {
+    "id": "858e4f48-be69-4cfe-9fd3-6df05715986e",
+    "name": "Abditolu 122/5",
+    "ada_no": "925",
+    "parsel_no_tapu": "122/5"
+  },
+  {
+    "id": "b3c81afb-49af-4acc-b8e1-926fa0523c0c",
+    "name": "Abditolu 122/6",
+    "ada_no": "287",
+    "parsel_no_tapu": "122/6"
+  },
+  {
+    "id": "05e75736-2a6e-44aa-b1de-02066a43e637",
+    "name": "Abditolu 122/7",
+    "ada_no": "378",
+    "parsel_no_tapu": "122/7"
+  },
+  {
+    "id": "2636f962-6aa6-4aea-9f3e-8ad565168ede",
+    "name": "Abditolu 123/1",
+    "ada_no": "722",
+    "parsel_no_tapu": "123/1"
+  },
+  {
+    "id": "a548f58f-fbea-4670-ac58-08dbd12df36b",
+    "name": "Abditolu 123/2",
+    "ada_no": "384",
+    "parsel_no_tapu": "123/2"
+  },
+  {
+    "id": "9e49edcd-f149-427f-a9f3-763b5c04fa54",
+    "name": "Abditolu 123/3",
+    "ada_no": "854",
+    "parsel_no_tapu": "123/3"
+  },
+  {
+    "id": "e9f956f5-34e5-4f61-8bfd-4049207e6ddf",
+    "name": "Abditolu 123/4",
+    "ada_no": "596",
+    "parsel_no_tapu": "123/4"
+  },
+  {
+    "id": "e6b99f6d-4321-4b6c-a620-51cf082fbeb8",
+    "name": "Abditolu 124/1",
+    "ada_no": "917",
+    "parsel_no_tapu": "124/1"
+  },
+  {
+    "id": "642d9785-5f66-4b37-b77b-331566b17a28",
+    "name": "Abditolu 124/10",
+    "ada_no": "621",
+    "parsel_no_tapu": "124/10"
+  },
+  {
+    "id": "0756ee62-28fe-4bd7-b7af-b78d1e16ddde",
+    "name": "Abditolu 124/11",
+    "ada_no": "353",
+    "parsel_no_tapu": "124/11"
+  },
+  {
+    "id": "746fa995-63e1-43f9-8cad-7909896adc5c",
+    "name": "Abditolu 124/12",
+    "ada_no": "631",
+    "parsel_no_tapu": "124/12"
+  },
+  {
+    "id": "d421724e-d544-4898-95c1-c025d8172cbb",
+    "name": "Abditolu 124/13",
+    "ada_no": "716",
+    "parsel_no_tapu": "124/13"
+  },
+  {
+    "id": "1cdf900d-604f-4430-aab3-a2f7a8f805a9",
+    "name": "Abditolu 124/2",
+    "ada_no": "610",
+    "parsel_no_tapu": "124/2"
+  },
+  {
+    "id": "10e38c8e-d610-4a71-a0e7-e337cfb4a009",
+    "name": "Abditolu 124/3",
+    "ada_no": "791",
+    "parsel_no_tapu": "124/3"
+  },
+  {
+    "id": "109111b9-7d09-4e94-80df-5468a534ea61",
+    "name": "Abditolu 124/4",
+    "ada_no": "131",
+    "parsel_no_tapu": "124/4"
+  },
+  {
+    "id": "89d82c0e-26c2-4d9f-91a5-3e1293425229",
+    "name": "Abditolu 124/5",
+    "ada_no": "999",
+    "parsel_no_tapu": "124/5"
+  },
+  {
+    "id": "a56444be-26a8-4be6-ac11-3d652145ae3a",
+    "name": "Abditolu 124/6",
+    "ada_no": "838",
+    "parsel_no_tapu": "124/6"
+  },
+  {
+    "id": "830ca7f3-4f36-49b5-99b5-b9cd77bca02d",
+    "name": "Abditolu 124/7",
+    "ada_no": "235",
+    "parsel_no_tapu": "124/7"
+  },
+  {
+    "id": "569571d5-9ed6-4585-b73c-df27f3f71b9d",
+    "name": "Abditolu 124/8",
+    "ada_no": "675",
+    "parsel_no_tapu": "124/8"
+  },
+  {
+    "id": "31068a66-e6f4-4e0f-a308-22bad77d8198",
+    "name": "Abditolu 124/9",
+    "ada_no": "415",
+    "parsel_no_tapu": "124/9"
+  },
+  {
+    "id": "666ce6aa-e968-4094-b07d-2b6076488108",
+    "name": "Abditolu 125/10",
+    "ada_no": "504",
+    "parsel_no_tapu": "125/10"
+  },
+  {
+    "id": "5f1fd99a-ac08-417c-a863-1874f2123d58",
+    "name": "Abditolu 125/11",
+    "ada_no": "115",
+    "parsel_no_tapu": "125/11"
+  },
+  {
+    "id": "bf7f806f-9316-4fd0-b6c3-8be663931058",
+    "name": "Abditolu 125/2",
+    "ada_no": "607",
+    "parsel_no_tapu": "125/2"
+  },
+  {
+    "id": "335f20f7-8e69-4266-a8a4-c763ea7e4867",
+    "name": "Abditolu 125/3",
+    "ada_no": "855",
+    "parsel_no_tapu": "125/3"
+  },
+  {
+    "id": "e412dd11-56fe-46d2-ae6b-dfcf2c63dfc2",
+    "name": "Abditolu 125/4",
+    "ada_no": "142",
+    "parsel_no_tapu": "125/4"
+  },
+  {
+    "id": "1e2b50f1-d198-4317-93d7-7eaaf20af72f",
+    "name": "Abditolu 125/5",
+    "ada_no": "231",
+    "parsel_no_tapu": "125/5"
+  },
+  {
+    "id": "0465c16c-a1f3-47ff-b7dd-acffb3abeb10",
+    "name": "Abditolu 125/6",
+    "ada_no": "364",
+    "parsel_no_tapu": "125/6"
+  },
+  {
+    "id": "1af33f7c-b287-4fad-9fae-671db1c496b0",
+    "name": "Abditolu 125/7",
+    "ada_no": "528",
+    "parsel_no_tapu": "125/7"
+  },
+  {
+    "id": "d4a07dec-3d9d-4b04-9fd5-6fb9828a79e0",
+    "name": "Abditolu 125/8",
+    "ada_no": "327",
+    "parsel_no_tapu": "125/8"
+  },
+  {
+    "id": "99b35ad5-bb3f-4370-80c0-823e3acb2de3",
+    "name": "Abditolu 125/9",
+    "ada_no": "475",
+    "parsel_no_tapu": "125/9"
+  },
+  {
+    "id": "0188655d-aa8a-4d0d-b5c5-c254a7b8592f",
+    "name": "Abditolu 126/1",
+    "ada_no": "291",
+    "parsel_no_tapu": "126/1"
+  },
+  {
+    "id": "626a1237-cec8-4fac-ad20-e3cb3765b65e",
+    "name": "Abditolu 126/10",
+    "ada_no": "975",
+    "parsel_no_tapu": "126/10"
+  },
+  {
+    "id": "9aeb819e-c9e4-420e-8ce0-65582daa3117",
+    "name": "Abditolu 126/11",
+    "ada_no": "666",
+    "parsel_no_tapu": "126/11"
+  },
+  {
+    "id": "9c768499-3d5f-44f0-845d-1c1125c386ba",
+    "name": "Abditolu 126/12",
+    "ada_no": "287",
+    "parsel_no_tapu": "126/12"
+  },
+  {
+    "id": "b9df9911-8379-41f3-a517-17f6a38fd123",
+    "name": "Abditolu 126/13",
+    "ada_no": "578",
+    "parsel_no_tapu": "126/13"
+  },
+  {
+    "id": "1e2335b6-7ff4-4e83-8248-d2f4c4b9d5b4",
+    "name": "Abditolu 126/14",
+    "ada_no": "934",
+    "parsel_no_tapu": "126/14"
+  },
+  {
+    "id": "010dca48-47e7-4f93-96ba-28dc0ea6d2f8",
+    "name": "Abditolu 126/15",
+    "ada_no": "377",
+    "parsel_no_tapu": "126/15"
+  },
+  {
+    "id": "d302e676-7cb6-402b-8e9a-50da56a6718b",
+    "name": "Abditolu 126/16",
+    "ada_no": "659",
+    "parsel_no_tapu": "126/16"
+  },
+  {
+    "id": "3fc33dfa-769a-47df-b7f7-aaccb02eba06",
+    "name": "Abditolu 126/3",
+    "ada_no": "699",
+    "parsel_no_tapu": "126/3"
+  },
+  {
+    "id": "bb4bee41-f2c0-43b9-9e18-7213ff147cca",
+    "name": "Abditolu 126/4",
+    "ada_no": "955",
+    "parsel_no_tapu": "126/4"
+  },
+  {
+    "id": "e856d58a-ebd1-40c9-9d14-947718a79b23",
+    "name": "Abditolu 126/5",
+    "ada_no": "225",
+    "parsel_no_tapu": "126/5"
+  },
+  {
+    "id": "932cd41f-7a88-4215-83a1-b289e2e47398",
+    "name": "Abditolu 126/6",
+    "ada_no": "307",
+    "parsel_no_tapu": "126/6"
+  },
+  {
+    "id": "f94a7b21-bd57-46d0-8514-1bb68228e5d3",
+    "name": "Abditolu 126/7",
+    "ada_no": "669",
+    "parsel_no_tapu": "126/7"
+  },
+  {
+    "id": "b1fa8047-5d84-49ca-94f7-bd10fb8eec98",
+    "name": "Abditolu 126/8",
+    "ada_no": "361",
+    "parsel_no_tapu": "126/8"
+  },
+  {
+    "id": "4b5fb808-fce5-43fb-a24c-a0fdf80cbaf0",
+    "name": "Abditolu 126/9",
+    "ada_no": "887",
+    "parsel_no_tapu": "126/9"
+  },
+  {
+    "id": "c8a7fbeb-63da-4ee4-a400-2bbf77cf4c63",
+    "name": "Abditolu 127/1",
+    "ada_no": "554",
+    "parsel_no_tapu": "127/1"
+  },
+  {
+    "id": "c85cb593-d8e4-4f9f-8e3b-40f1fac89d57",
+    "name": "Abditolu 127/10",
+    "ada_no": "262",
+    "parsel_no_tapu": "127/10"
+  },
+  {
+    "id": "79dc7d33-bae8-4e3c-84d8-42b4909955c8",
+    "name": "Abditolu 127/11",
+    "ada_no": "348",
+    "parsel_no_tapu": "127/11"
+  },
+  {
+    "id": "8dd233a8-80bf-4e9f-8f01-a2dfed146de2",
+    "name": "Abditolu 127/2",
+    "ada_no": "727",
+    "parsel_no_tapu": "127/2"
+  },
+  {
+    "id": "f5103d38-da8a-4eb4-b7c8-a5ea4921c16a",
+    "name": "Abditolu 127/3",
+    "ada_no": "790",
+    "parsel_no_tapu": "127/3"
+  },
+  {
+    "id": "8e78ee73-9174-41b6-941b-9e3b485327e3",
+    "name": "Abditolu 127/4",
+    "ada_no": "571",
+    "parsel_no_tapu": "127/4"
+  },
+  {
+    "id": "dcba8ba8-6344-41cb-89bc-7861c6cfa80e",
+    "name": "Abditolu 127/5",
+    "ada_no": "530",
+    "parsel_no_tapu": "127/5"
+  },
+  {
+    "id": "30f9279f-8a35-4d2b-8b8f-e2bac340f8f5",
+    "name": "Abditolu 127/6",
+    "ada_no": "346",
+    "parsel_no_tapu": "127/6"
+  },
+  {
+    "id": "75f6ef54-4585-48ee-9480-ef5d0a7be726",
+    "name": "Abditolu 127/8",
+    "ada_no": "638",
+    "parsel_no_tapu": "127/8"
+  },
+  {
+    "id": "74f5c653-30fb-4d2f-855c-956f2f9ae4a0",
+    "name": "Abditolu 127/9",
+    "ada_no": "379",
+    "parsel_no_tapu": "127/9"
+  },
+  {
+    "id": "8d9d2e7b-d360-492c-b243-027d3e846155",
+    "name": "Abditolu 128/3",
+    "ada_no": "562",
+    "parsel_no_tapu": "128/3"
+  },
+  {
+    "id": "0599b127-54ba-407f-8a99-44ad64a231e0",
+    "name": "Abditolu 129/1",
+    "ada_no": "275",
+    "parsel_no_tapu": "129/1"
+  },
+  {
+    "id": "40cb9e39-6e19-4d72-9218-eb453d2807d8",
+    "name": "Abditolu 129/11",
+    "ada_no": "776",
+    "parsel_no_tapu": "129/11"
+  },
+  {
+    "id": "a09d1439-7dac-4493-a644-71cbc1ee14e2",
+    "name": "Abditolu 129/12",
+    "ada_no": "222",
+    "parsel_no_tapu": "129/12"
+  },
+  {
+    "id": "354b3d82-df87-4531-b506-015885ad66ef",
+    "name": "Abditolu 129/13",
+    "ada_no": "411",
+    "parsel_no_tapu": "129/13"
+  },
+  {
+    "id": "1a60cf45-a45d-43d0-ab21-6d0e27a7e481",
+    "name": "Abditolu 129/14",
+    "ada_no": "510",
+    "parsel_no_tapu": "129/14"
+  },
+  {
+    "id": "409a2f38-d4d0-4158-b6de-20a016ed3cf5",
+    "name": "Abditolu 129/2",
+    "ada_no": "460",
+    "parsel_no_tapu": "129/2"
+  },
+  {
+    "id": "299e923b-a390-429e-a99a-0b89155b2a16",
+    "name": "Abditolu 129/3",
+    "ada_no": "203",
+    "parsel_no_tapu": "129/3"
+  },
+  {
+    "id": "73a11015-2594-4e61-a1b9-9606b17e9dc5",
+    "name": "Abditolu 129/4",
+    "ada_no": "430",
+    "parsel_no_tapu": "129/4"
+  },
+  {
+    "id": "d08453a2-d817-4169-b1c5-5634b21cb3fe",
+    "name": "Abditolu 129/5",
+    "ada_no": "945",
+    "parsel_no_tapu": "129/5"
+  },
+  {
+    "id": "05427fee-c423-4637-8f2e-15c3ed9e1339",
+    "name": "Abditolu 129/6",
+    "ada_no": "326",
+    "parsel_no_tapu": "129/6"
+  },
+  {
+    "id": "49a07620-3dec-40be-bc74-7185f0d70f60",
+    "name": "Abditolu 129/7",
+    "ada_no": "772",
+    "parsel_no_tapu": "129/7"
+  },
+  {
+    "id": "7421b568-2c09-4ee9-9fee-a67f3e86165a",
+    "name": "Abditolu 129/9",
+    "ada_no": "143",
+    "parsel_no_tapu": "129/9"
+  },
+  {
+    "id": "cec6888f-cdf1-49ac-8c33-7d64b150412e",
+    "name": "Abditolu 130/10",
+    "ada_no": "620",
+    "parsel_no_tapu": "130/10"
+  },
+  {
+    "id": "a903e6ed-546a-4753-b501-bf9197f32a4b",
+    "name": "Abditolu 130/2",
+    "ada_no": "831",
+    "parsel_no_tapu": "130/2"
+  },
+  {
+    "id": "c221732e-d276-466c-84a6-f96a8667f2c7",
+    "name": "Abditolu 130/3",
+    "ada_no": "824",
+    "parsel_no_tapu": "130/3"
+  },
+  {
+    "id": "1fadfdab-7a37-469c-81b6-9b92854cba7e",
+    "name": "Abditolu 130/4",
+    "ada_no": "150",
+    "parsel_no_tapu": "130/4"
+  },
+  {
+    "id": "8af6a9b6-1ff0-44f0-bfd6-1a288cb86b83",
+    "name": "Abditolu 130/5",
+    "ada_no": "662",
+    "parsel_no_tapu": "130/5"
+  },
+  {
+    "id": "cd21f35d-f7c7-4a72-8a4d-e0deb4039b8e",
+    "name": "Abditolu 130/6",
+    "ada_no": "889",
+    "parsel_no_tapu": "130/6"
+  },
+  {
+    "id": "4f5e43b9-cfcc-4ef3-aa51-de2a3fa10602",
+    "name": "Abditolu 130/7",
+    "ada_no": "444",
+    "parsel_no_tapu": "130/7"
+  },
+  {
+    "id": "c17257c3-9048-4957-96e7-4e06ec0e76ad",
+    "name": "Abditolu 130/8",
+    "ada_no": "929",
+    "parsel_no_tapu": "130/8"
+  },
+  {
+    "id": "839022ce-3f70-4b9d-a763-482ad6f49715",
+    "name": "Abditolu 130/9",
+    "ada_no": "966",
+    "parsel_no_tapu": "130/9"
+  },
+  {
+    "id": "07d2dabf-638f-4025-b373-571233d68b0a",
+    "name": "Abditolu 131/3",
+    "ada_no": "564",
+    "parsel_no_tapu": "131/3"
+  },
+  {
+    "id": "c135bd0c-de9d-406c-a4dd-cdbf82cfa2e3",
+    "name": "Abditolu 131/4",
+    "ada_no": "605",
+    "parsel_no_tapu": "131/4"
+  },
+  {
+    "id": "76edc13a-2055-40cc-a60d-9438c82e2135",
+    "name": "Abditolu 131/5",
+    "ada_no": "733",
+    "parsel_no_tapu": "131/5"
+  },
+  {
+    "id": "0d38155c-6206-4023-b9ca-f34e6ff98c59",
+    "name": "Abditolu 131/6",
+    "ada_no": "534",
+    "parsel_no_tapu": "131/6"
+  },
+  {
+    "id": "8100b153-93a3-4d72-836d-bc8b3b9dba1b",
+    "name": "Abditolu 132/1",
+    "ada_no": "109",
+    "parsel_no_tapu": "132/1"
+  },
+  {
+    "id": "fb0f213a-c891-4678-a42d-8511a0e2c697",
+    "name": "Abditolu 132/2",
+    "ada_no": "637",
+    "parsel_no_tapu": "132/2"
+  },
+  {
+    "id": "1c2f8723-a380-4a1c-98ba-9623503c9a39",
+    "name": "Abditolu 132/3",
+    "ada_no": "210",
+    "parsel_no_tapu": "132/3"
+  },
+  {
+    "id": "b5e9b40b-d45a-47ea-baad-3bcbfa779667",
+    "name": "Abditolu 132/4",
+    "ada_no": "119",
+    "parsel_no_tapu": "132/4"
+  },
+  {
+    "id": "66bf9ccb-65c9-4bb2-9feb-1b090d586ccf",
+    "name": "Abditolu 132/5",
+    "ada_no": "290",
+    "parsel_no_tapu": "132/5"
+  },
+  {
+    "id": "f9a6690b-4b92-4bd0-88a6-ea41fc465f50",
+    "name": "Abditolu 133/1",
+    "ada_no": "994",
+    "parsel_no_tapu": "133/1"
+  },
+  {
+    "id": "69aab6aa-041c-4f99-9dac-4fa6f710a454",
+    "name": "Abditolu 133/2",
+    "ada_no": "773",
+    "parsel_no_tapu": "133/2"
+  },
+  {
+    "id": "627eb388-c1e4-4a6f-9dda-6f63415bab5b",
+    "name": "Abditolu 133/3",
+    "ada_no": "703",
+    "parsel_no_tapu": "133/3"
+  },
+  {
+    "id": "e92e5b2c-51b0-4f7d-b95f-efb8332e99d6",
+    "name": "Abditolu 133/4",
+    "ada_no": "544",
+    "parsel_no_tapu": "133/4"
+  },
+  {
+    "id": "1ab8fa02-7138-4b32-8752-f19e80a02b0f",
+    "name": "Abditolu 133/5",
+    "ada_no": "859",
+    "parsel_no_tapu": "133/5"
+  },
+  {
+    "id": "d94cf4f5-77e5-4a4e-9e46-fa288b21c5e2",
+    "name": "Abditolu 133/6",
+    "ada_no": "100",
+    "parsel_no_tapu": "133/6"
+  },
+  {
+    "id": "0ce816b8-2635-4f3d-8597-db0aeb072d06",
+    "name": "Abditolu 133/7",
+    "ada_no": "293",
+    "parsel_no_tapu": "133/7"
+  },
+  {
+    "id": "428f19f1-e5df-47a4-8837-3463e8da21ab",
+    "name": "Abditolu 133/8",
+    "ada_no": "535",
+    "parsel_no_tapu": "133/8"
+  },
+  {
+    "id": "0ed11b9d-43e0-474a-8ae9-6bbf27b4f693",
+    "name": "Abditolu 134/1",
+    "ada_no": "409",
+    "parsel_no_tapu": "134/1"
+  },
+  {
+    "id": "6d674eb9-9107-45a7-8733-cfa2c4481e15",
+    "name": "Abditolu 134/2",
+    "ada_no": "892",
+    "parsel_no_tapu": "134/2"
+  },
+  {
+    "id": "deae0f8d-394a-4ce7-a3b1-5e5c987a80ae",
+    "name": "Abditolu 134/3",
+    "ada_no": "909",
+    "parsel_no_tapu": "134/3"
+  },
+  {
+    "id": "5b2824cc-9d33-428e-8eab-2a94a34d20ee",
+    "name": "Abditolu 135/1",
+    "ada_no": "654",
+    "parsel_no_tapu": "135/1"
+  },
+  {
+    "id": "012a67f6-8776-4cd9-a6c9-9e4587361538",
+    "name": "Abditolu 135/2",
+    "ada_no": "260",
+    "parsel_no_tapu": "135/2"
+  },
+  {
+    "id": "ab371de7-ee94-4d6a-9f3b-e77ef5301981",
+    "name": "Abditolu 136/1",
+    "ada_no": "148",
+    "parsel_no_tapu": "136/1"
+  },
+  {
+    "id": "7badd9d8-af7c-47c6-996a-e325ca4357e3",
+    "name": "Abditolu 136/2",
+    "ada_no": "976",
+    "parsel_no_tapu": "136/2"
+  },
+  {
+    "id": "8a5872b6-3108-4a8a-87c8-fba629ff0a3a",
+    "name": "Abditolu 137/1",
+    "ada_no": "994",
+    "parsel_no_tapu": "137/1"
+  },
+  {
+    "id": "b0a1ce6e-d711-42b4-bc66-91b86f6069df",
+    "name": "Abditolu 137/2",
+    "ada_no": "448",
+    "parsel_no_tapu": "137/2"
+  },
+  {
+    "id": "91846498-20ff-4e1c-9dd0-443938e2f0d9",
+    "name": "Abditolu 138/1",
+    "ada_no": "195",
+    "parsel_no_tapu": "138/1"
+  },
+  {
+    "id": "c88b9dd5-1e8c-40c1-8591-25dbc30e5345",
+    "name": "Abditolu 138/2",
+    "ada_no": "956",
+    "parsel_no_tapu": "138/2"
+  },
+  {
+    "id": "b47277e5-94ce-4493-a14a-f0a4c8fcc3f0",
+    "name": "Abditolu 139/10",
+    "ada_no": "178",
+    "parsel_no_tapu": "139/10"
+  },
+  {
+    "id": "64882e4b-400e-4b69-903d-722a79bcdd8d",
+    "name": "Abditolu 139/11",
+    "ada_no": "595",
+    "parsel_no_tapu": "139/11"
+  },
+  {
+    "id": "5b2ee5af-d331-4b07-a9f9-688f7e03ac0f",
+    "name": "Abditolu 139/12",
+    "ada_no": "871",
+    "parsel_no_tapu": "139/12"
+  },
+  {
+    "id": "41c01f9f-8f44-414a-90b8-9b7b41dcd1fd",
+    "name": "Abditolu 139/13",
+    "ada_no": "507",
+    "parsel_no_tapu": "139/13"
+  },
+  {
+    "id": "8e578efd-36c3-4e5e-a5f6-605b4fea0b74",
+    "name": "Abditolu 139/14",
+    "ada_no": "655",
+    "parsel_no_tapu": "139/14"
+  },
+  {
+    "id": "2262817f-977f-4937-b179-5c61f57c3832",
+    "name": "Abditolu 139/15",
+    "ada_no": "481",
+    "parsel_no_tapu": "139/15"
+  },
+  {
+    "id": "6d2a1af2-3ec7-4084-994d-5d4a40fda857",
+    "name": "Abditolu 139/16",
+    "ada_no": "909",
+    "parsel_no_tapu": "139/16"
+  },
+  {
+    "id": "4cd3227f-86df-449c-a42e-ca084345c570",
+    "name": "Abditolu 139/17",
+    "ada_no": "788",
+    "parsel_no_tapu": "139/17"
+  },
+  {
+    "id": "5dff2c40-d1d9-4de6-af9f-bd462b1c9acc",
+    "name": "Abditolu 139/18",
+    "ada_no": "613",
+    "parsel_no_tapu": "139/18"
+  },
+  {
+    "id": "37ad0042-2e96-466c-ab50-89786b92b6e7",
+    "name": "Abditolu 139/19",
+    "ada_no": "308",
+    "parsel_no_tapu": "139/19"
+  },
+  {
+    "id": "9581d379-27d7-4147-a906-4c55e7b44f39",
+    "name": "Abditolu 139/2",
+    "ada_no": "574",
+    "parsel_no_tapu": "139/2"
+  },
+  {
+    "id": "92f36795-7f46-4e10-8ea0-1f21244c4cd1",
+    "name": "Abditolu 139/20",
+    "ada_no": "627",
+    "parsel_no_tapu": "139/20"
+  },
+  {
+    "id": "d1623493-8537-4a32-90ff-0af273c9ec88",
+    "name": "Abditolu 139/21",
+    "ada_no": "246",
+    "parsel_no_tapu": "139/21"
+  },
+  {
+    "id": "84b60b79-2f1d-4944-acc5-1d93fa7a476c",
+    "name": "Abditolu 139/22",
+    "ada_no": "640",
+    "parsel_no_tapu": "139/22"
+  },
+  {
+    "id": "4e36d05c-712a-4ee5-8b39-5984f69835a7",
+    "name": "Abditolu 139/23",
+    "ada_no": "246",
+    "parsel_no_tapu": "139/23"
+  },
+  {
+    "id": "06648495-dd05-434f-b794-acab90fe7673",
+    "name": "Abditolu 139/24",
+    "ada_no": "528",
+    "parsel_no_tapu": "139/24"
+  },
+  {
+    "id": "cd90805b-67f7-4292-b6fc-d9fe8073a356",
+    "name": "Abditolu 139/25",
+    "ada_no": "237",
+    "parsel_no_tapu": "139/25"
+  },
+  {
+    "id": "f512de6b-5657-4391-a53e-4fbaffee3fcb",
+    "name": "Abditolu 139/26",
+    "ada_no": "296",
+    "parsel_no_tapu": "139/26"
+  },
+  {
+    "id": "ac3444d9-d76e-4f50-b23a-3493f9f495c1",
+    "name": "Abditolu 139/27",
+    "ada_no": "345",
+    "parsel_no_tapu": "139/27"
+  },
+  {
+    "id": "04612b6e-724a-4a04-b0e1-c8c13f1b1ca4",
+    "name": "Abditolu 139/28",
+    "ada_no": "810",
+    "parsel_no_tapu": "139/28"
+  },
+  {
+    "id": "f26570f5-b8c8-4675-b489-d81884062444",
+    "name": "Abditolu 139/29",
+    "ada_no": "497",
+    "parsel_no_tapu": "139/29"
+  },
+  {
+    "id": "f18ed32a-4802-4408-8215-80a0d235ae77",
+    "name": "Abditolu 139/3",
+    "ada_no": "778",
+    "parsel_no_tapu": "139/3"
+  },
+  {
+    "id": "d845706b-42e8-4753-adf1-b4c6d26157cc",
+    "name": "Abditolu 139/30",
+    "ada_no": "739",
+    "parsel_no_tapu": "139/30"
+  },
+  {
+    "id": "9c4da296-0c8b-4c56-a87d-d5e78aad4dee",
+    "name": "Abditolu 139/31",
+    "ada_no": "948",
+    "parsel_no_tapu": "139/31"
+  },
+  {
+    "id": "2e82fb10-f31c-472c-b993-e5304f0d684e",
+    "name": "Abditolu 139/32",
+    "ada_no": "847",
+    "parsel_no_tapu": "139/32"
+  },
+  {
+    "id": "347aa798-c861-46cf-b794-4cebdd862436",
+    "name": "Abditolu 139/33",
+    "ada_no": "192",
+    "parsel_no_tapu": "139/33"
+  },
+  {
+    "id": "f300b87f-597e-4866-993d-7037e3cd28db",
+    "name": "Abditolu 139/34",
+    "ada_no": "227",
+    "parsel_no_tapu": "139/34"
+  },
+  {
+    "id": "5a484a91-494e-40f9-9a21-2aac6c661784",
+    "name": "Abditolu 139/35",
+    "ada_no": "310",
+    "parsel_no_tapu": "139/35"
+  },
+  {
+    "id": "122105d7-f1c9-40ff-93b4-3696999fec53",
+    "name": "Abditolu 139/36",
+    "ada_no": "983",
+    "parsel_no_tapu": "139/36"
+  },
+  {
+    "id": "12f536d5-0d3a-4060-b851-f18e5116b7a8",
+    "name": "Abditolu 139/37",
+    "ada_no": "747",
+    "parsel_no_tapu": "139/37"
+  },
+  {
+    "id": "d25f2436-329f-4859-a496-dab553c2e6a2",
+    "name": "Abditolu 139/4",
+    "ada_no": "757",
+    "parsel_no_tapu": "139/4"
+  },
+  {
+    "id": "4fd1a1ca-401e-4e3f-9742-34b65eee7251",
+    "name": "Abditolu 139/5",
+    "ada_no": "776",
+    "parsel_no_tapu": "139/5"
+  },
+  {
+    "id": "ba70f2cb-7063-4c8f-9961-919531160ae6",
+    "name": "Abditolu 139/6",
+    "ada_no": "826",
+    "parsel_no_tapu": "139/6"
+  },
+  {
+    "id": "f408dec5-6954-48e2-b8af-71105cdbe620",
+    "name": "Abditolu 139/7",
+    "ada_no": "148",
+    "parsel_no_tapu": "139/7"
+  },
+  {
+    "id": "e8098caa-065b-4fa7-acd4-287f59888443",
+    "name": "Abditolu 139/8",
+    "ada_no": "789",
+    "parsel_no_tapu": "139/8"
+  },
+  {
+    "id": "6ef37106-b051-447e-880b-b29b29efecb1",
+    "name": "Abditolu 139/9",
+    "ada_no": "170",
+    "parsel_no_tapu": "139/9"
+  },
+  {
+    "id": "a3f6e7c7-de1c-47dc-bb7b-6c8cab7cffb0",
+    "name": "Abditolu 140/1",
+    "ada_no": "759",
+    "parsel_no_tapu": "140/1"
+  },
+  {
+    "id": "d0c4be15-b88b-413c-9fa1-23b96e9b4ed6",
+    "name": "Abditolu 140/2",
+    "ada_no": "419",
+    "parsel_no_tapu": "140/2"
+  },
+  {
+    "id": "f1f24997-560c-4fd7-8d8f-af370944b895",
+    "name": "Abditolu 140/3",
+    "ada_no": "498",
+    "parsel_no_tapu": "140/3"
+  },
+  {
+    "id": "4adbe2a6-11ab-48f7-ae15-c2cd1cfe5733",
+    "name": "Abditolu 140/4",
+    "ada_no": "974",
+    "parsel_no_tapu": "140/4"
+  },
+  {
+    "id": "4a19b848-7db8-46a1-bf42-51b9ade7a8e1",
+    "name": "Abditolu 141/1",
+    "ada_no": "397",
+    "parsel_no_tapu": "141/1"
+  },
+  {
+    "id": "cc1eb8e7-6fbd-4831-8184-ed85490f93cb",
+    "name": "Abditolu 141/10",
+    "ada_no": "477",
+    "parsel_no_tapu": "141/10"
+  },
+  {
+    "id": "7ee8b3e0-df26-4a9c-bc78-fa39cf094899",
+    "name": "Abditolu 141/2",
+    "ada_no": "925",
+    "parsel_no_tapu": "141/2"
+  },
+  {
+    "id": "408b614f-48aa-4918-8e0e-4afecc649ed8",
+    "name": "Abditolu 141/3",
+    "ada_no": "779",
+    "parsel_no_tapu": "141/3"
+  },
+  {
+    "id": "01964c26-634a-4491-bad7-56d796f911ba",
+    "name": "Abditolu 141/4",
+    "ada_no": "661",
+    "parsel_no_tapu": "141/4"
+  },
+  {
+    "id": "d05005fb-defd-45ca-8627-f7531ed9aa7d",
+    "name": "Abditolu 141/5",
+    "ada_no": "521",
+    "parsel_no_tapu": "141/5"
+  },
+  {
+    "id": "e4a773fa-aef6-4875-b02e-141ee6fb5c1d",
+    "name": "Abditolu 141/6",
+    "ada_no": "921",
+    "parsel_no_tapu": "141/6"
+  },
+  {
+    "id": "7602230f-16af-4a09-b110-51ea2bf06f22",
+    "name": "Abditolu 141/7",
+    "ada_no": "629",
+    "parsel_no_tapu": "141/7"
+  },
+  {
+    "id": "e54623b0-a2fc-4663-925a-247e8a4c3c0b",
+    "name": "Abditolu 141/8",
+    "ada_no": "692",
+    "parsel_no_tapu": "141/8"
+  },
+  {
+    "id": "2932eaf1-3562-49ac-842c-1d4bf22923e0",
+    "name": "Abditolu 141/9",
+    "ada_no": "461",
+    "parsel_no_tapu": "141/9"
+  },
+  {
+    "id": "d4487627-0f0a-45ae-82e8-27c934b368da",
+    "name": "Abditolu 142/1",
+    "ada_no": "934",
+    "parsel_no_tapu": "142/1"
+  },
+  {
+    "id": "4e5eddc9-3b2f-4830-9348-25d6dd4a9f80",
+    "name": "Abditolu 142/10",
+    "ada_no": "838",
+    "parsel_no_tapu": "142/10"
+  },
+  {
+    "id": "c03d1bd1-41b0-4263-9e4b-b97fcf1b45c5",
+    "name": "Abditolu 142/11",
+    "ada_no": "268",
+    "parsel_no_tapu": "142/11"
+  },
+  {
+    "id": "e762ea77-3792-42df-8036-c90cb1c6f8fa",
+    "name": "Abditolu 142/12",
+    "ada_no": "957",
+    "parsel_no_tapu": "142/12"
+  },
+  {
+    "id": "dae3b878-2850-4471-aea3-b1762894508b",
+    "name": "Abditolu 142/13",
+    "ada_no": "860",
+    "parsel_no_tapu": "142/13"
+  },
+  {
+    "id": "57f7fd0d-bb24-460d-9a9a-8947ad3417b3",
+    "name": "Abditolu 142/14",
+    "ada_no": "798",
+    "parsel_no_tapu": "142/14"
+  },
+  {
+    "id": "e9ec579e-44ce-42ec-8adf-40a5ab3af8d2",
+    "name": "Abditolu 142/15",
+    "ada_no": "143",
+    "parsel_no_tapu": "142/15"
+  },
+  {
+    "id": "c6c911c9-4303-437b-9b64-23bdde2138c6",
+    "name": "Abditolu 142/16",
+    "ada_no": "721",
+    "parsel_no_tapu": "142/16"
+  },
+  {
+    "id": "6cca904d-54ff-47fb-af5e-16333258e501",
+    "name": "Abditolu 142/17",
+    "ada_no": "516",
+    "parsel_no_tapu": "142/17"
+  },
+  {
+    "id": "2297988c-9574-4676-810c-b26ef0578974",
+    "name": "Abditolu 142/18",
+    "ada_no": "902",
+    "parsel_no_tapu": "142/18"
+  },
+  {
+    "id": "01eb6564-fd32-4a87-8eb6-1506d3c3f7f8",
+    "name": "Abditolu 142/19",
+    "ada_no": "299",
+    "parsel_no_tapu": "142/19"
+  },
+  {
+    "id": "fdca26fd-cd44-411b-b58d-d48b58479a6e",
+    "name": "Abditolu 142/2",
+    "ada_no": "784",
+    "parsel_no_tapu": "142/2"
+  },
+  {
+    "id": "17dbde0f-9e34-4b87-a362-a78149028b75",
+    "name": "Abditolu 142/20",
+    "ada_no": "443",
+    "parsel_no_tapu": "142/20"
+  },
+  {
+    "id": "908ff6d7-7c14-4ebc-96a4-7198ff0079bc",
+    "name": "Abditolu 142/3",
+    "ada_no": "685",
+    "parsel_no_tapu": "142/3"
+  },
+  {
+    "id": "e80e6a78-d829-4366-8b93-5c0cfd511e58",
+    "name": "Abditolu 142/4",
+    "ada_no": "872",
+    "parsel_no_tapu": "142/4"
+  },
+  {
+    "id": "a519d3d1-24a3-4a5e-9af6-309392a9bb9a",
+    "name": "Abditolu 142/5",
+    "ada_no": "779",
+    "parsel_no_tapu": "142/5"
+  },
+  {
+    "id": "fc52cc30-37bf-47ee-84b7-7e0c4e80667a",
+    "name": "Abditolu 142/6",
+    "ada_no": "382",
+    "parsel_no_tapu": "142/6"
+  },
+  {
+    "id": "a1ddc839-efca-472f-a02e-4560ed36545b",
+    "name": "Abditolu 142/7",
+    "ada_no": "566",
+    "parsel_no_tapu": "142/7"
+  },
+  {
+    "id": "35aaa10c-dc3e-4918-ad1b-5e56e98ab148",
+    "name": "Abditolu 142/8",
+    "ada_no": "305",
+    "parsel_no_tapu": "142/8"
+  },
+  {
+    "id": "95f5b96e-8d3a-46df-8fc7-2e254d098c3c",
+    "name": "Abditolu 142/9",
+    "ada_no": "551",
+    "parsel_no_tapu": "142/9"
+  },
+  {
+    "id": "ed2a72e7-b3ea-4ae5-a4fa-ac4e3e2e7049",
+    "name": "Abditolu 143/1",
+    "ada_no": "146",
+    "parsel_no_tapu": "143/1"
+  },
+  {
+    "id": "5d47ff61-689e-466d-8445-226348d976f7",
+    "name": "Abditolu 143/2",
+    "ada_no": "707",
+    "parsel_no_tapu": "143/2"
+  },
+  {
+    "id": "61757c00-ac62-4f31-a138-78819d8c6e7f",
+    "name": "Abditolu 143/3",
+    "ada_no": "883",
+    "parsel_no_tapu": "143/3"
+  },
+  {
+    "id": "986cacf7-d28e-4551-abb6-c7148ad1ec09",
+    "name": "Abditolu 143/4",
+    "ada_no": "193",
+    "parsel_no_tapu": "143/4"
+  },
+  {
+    "id": "5069eced-1ddd-43ad-9115-3f6df5fa8e34",
+    "name": "Abditolu 143/5",
+    "ada_no": "319",
+    "parsel_no_tapu": "143/5"
+  },
+  {
+    "id": "0ee9e577-f0f5-473d-9f63-ddf8e82be489",
+    "name": "Abditolu 143/6",
+    "ada_no": "915",
+    "parsel_no_tapu": "143/6"
+  },
+  {
+    "id": "ba2db133-7e08-484c-80bc-0ad68d38438f",
+    "name": "Abditolu 143/7",
+    "ada_no": "307",
+    "parsel_no_tapu": "143/7"
+  },
+  {
+    "id": "f3ccb6ed-f19d-43b7-a24b-b522818b8e27",
+    "name": "Abditolu 143/8",
+    "ada_no": "910",
+    "parsel_no_tapu": "143/8"
+  },
+  {
+    "id": "8f87c150-d76e-4665-8c4a-07ca29961707",
+    "name": "Abditolu 143/9",
+    "ada_no": "926",
+    "parsel_no_tapu": "143/9"
+  },
+  {
+    "id": "a0cabcb0-e641-4249-8fc7-afcdadb0181e",
+    "name": "Abditolu 144/1",
+    "ada_no": "160",
+    "parsel_no_tapu": "144/1"
+  },
+  {
+    "id": "64a42bb1-d112-407b-bd97-69b7e9e89902",
+    "name": "Abditolu 144/2",
+    "ada_no": "250",
+    "parsel_no_tapu": "144/2"
+  },
+  {
+    "id": "cee03e85-5bc2-4b3d-918f-001957e70790",
+    "name": "Abditolu 144/3",
+    "ada_no": "610",
+    "parsel_no_tapu": "144/3"
+  },
+  {
+    "id": "00e691c0-7827-4873-aedb-4ed054f3a70b",
+    "name": "Abditolu 144/4",
+    "ada_no": "937",
+    "parsel_no_tapu": "144/4"
+  },
+  {
+    "id": "ea0e565a-ebfd-4e71-a37a-3dd3fcbb6b41",
+    "name": "Abditolu 144/5",
+    "ada_no": "817",
+    "parsel_no_tapu": "144/5"
+  },
+  {
+    "id": "776fe619-b66b-4413-b50f-6d3fcafbb9ae",
+    "name": "Abditolu 144/6",
+    "ada_no": "954",
+    "parsel_no_tapu": "144/6"
+  },
+  {
+    "id": "11c48e9c-4696-41db-af64-be2e1b79ee65",
+    "name": "Abditolu 144/7",
+    "ada_no": "844",
+    "parsel_no_tapu": "144/7"
+  },
+  {
+    "id": "d9daaf48-3f4d-4256-87ab-9af4bb58a731",
+    "name": "Abditolu 144/8",
+    "ada_no": "386",
+    "parsel_no_tapu": "144/8"
+  },
+  {
+    "id": "ca7dc77c-7890-42e8-9d40-3ee8a451a4eb",
+    "name": "Abditolu 144/9",
+    "ada_no": "668",
+    "parsel_no_tapu": "144/9"
+  },
+  {
+    "id": "f3c7ba5d-8b4e-42a1-ae57-9d2258de78be",
+    "name": "Abditolu 145/10",
+    "ada_no": "126",
+    "parsel_no_tapu": "145/10"
+  },
+  {
+    "id": "1e35f29d-e964-4195-a5e3-a31535bc863c",
+    "name": "Abditolu 145/11",
+    "ada_no": "682",
+    "parsel_no_tapu": "145/11"
+  },
+  {
+    "id": "3dc039eb-85ab-480b-944b-935289fbcccf",
+    "name": "Abditolu 145/12",
+    "ada_no": "560",
+    "parsel_no_tapu": "145/12"
+  },
+  {
+    "id": "f4237406-c692-4ad0-bee0-9e811d70b1d3",
+    "name": "Abditolu 145/13",
+    "ada_no": "169",
+    "parsel_no_tapu": "145/13"
+  },
+  {
+    "id": "9b38eb59-56c2-4528-859d-a49c1ce914ef",
+    "name": "Abditolu 145/14",
+    "ada_no": "513",
+    "parsel_no_tapu": "145/14"
+  },
+  {
+    "id": "8f13b44c-da18-4d7b-9c65-a797f82592cd",
+    "name": "Abditolu 145/15",
+    "ada_no": "457",
+    "parsel_no_tapu": "145/15"
+  },
+  {
+    "id": "89d32ab0-b2e8-46c5-a050-82aeb582cd26",
+    "name": "Abditolu 145/16",
+    "ada_no": "411",
+    "parsel_no_tapu": "145/16"
+  },
+  {
+    "id": "84c966e8-0468-4860-b391-23d2411f722e",
+    "name": "Abditolu 145/17",
+    "ada_no": "310",
+    "parsel_no_tapu": "145/17"
+  },
+  {
+    "id": "29816911-f0cc-4ac1-8b36-f8f70efea23a",
+    "name": "Abditolu 145/18",
+    "ada_no": "153",
+    "parsel_no_tapu": "145/18"
+  },
+  {
+    "id": "81e5169c-b63a-4c7e-bb54-ee34044b616f",
+    "name": "Abditolu 145/19",
+    "ada_no": "542",
+    "parsel_no_tapu": "145/19"
+  },
+  {
+    "id": "9703cba8-0cc2-4756-aa22-37a2224a5233",
+    "name": "Abditolu 145/2",
+    "ada_no": "992",
+    "parsel_no_tapu": "145/2"
+  },
+  {
+    "id": "e622d932-aa62-4928-a7e5-8834036f540f",
+    "name": "Abditolu 145/20",
+    "ada_no": "391",
+    "parsel_no_tapu": "145/20"
+  },
+  {
+    "id": "074f6693-8f50-4ad0-aef1-5dcb755f88e8",
+    "name": "Abditolu 145/21",
+    "ada_no": "985",
+    "parsel_no_tapu": "145/21"
+  },
+  {
+    "id": "75b501ff-2ac2-4f9d-97c3-761b84eab3ec",
+    "name": "Abditolu 145/22",
+    "ada_no": "158",
+    "parsel_no_tapu": "145/22"
+  },
+  {
+    "id": "6b138cc1-d7ca-4c9b-8422-5e246750ff29",
+    "name": "Abditolu 145/23",
+    "ada_no": "223",
+    "parsel_no_tapu": "145/23"
+  },
+  {
+    "id": "7ca6ff94-ea2d-4cf6-b7a1-4c0ba980e1cf",
+    "name": "Abditolu 145/24",
+    "ada_no": "261",
+    "parsel_no_tapu": "145/24"
+  },
+  {
+    "id": "180740a5-cc3d-4449-912b-ad6aed8d7a1b",
+    "name": "Abditolu 145/25",
+    "ada_no": "868",
+    "parsel_no_tapu": "145/25"
+  },
+  {
+    "id": "691b9944-d611-47c4-9daf-3e0830182260",
+    "name": "Abditolu 145/3",
+    "ada_no": "266",
+    "parsel_no_tapu": "145/3"
+  },
+  {
+    "id": "11389f99-968b-4897-b387-0f9274261571",
+    "name": "Abditolu 145/4",
+    "ada_no": "932",
+    "parsel_no_tapu": "145/4"
+  },
+  {
+    "id": "4d86951a-0a4e-4110-8488-279c5459d524",
+    "name": "Abditolu 145/6",
+    "ada_no": "825",
+    "parsel_no_tapu": "145/6"
+  },
+  {
+    "id": "be18c171-b155-42b4-85f5-55b1d17e0424",
+    "name": "Abditolu 145/7",
+    "ada_no": "854",
+    "parsel_no_tapu": "145/7"
+  },
+  {
+    "id": "d29ee3e9-9442-499e-8827-bc45f4a7d244",
+    "name": "Abditolu 145/8",
+    "ada_no": "423",
+    "parsel_no_tapu": "145/8"
+  },
+  {
+    "id": "0d797fc0-e337-459f-a70f-37df065f1da3",
+    "name": "Abditolu 145/9",
+    "ada_no": "303",
+    "parsel_no_tapu": "145/9"
+  },
+  {
+    "id": "f1efa3d5-1c4a-4c1d-8e59-32cf44047881",
+    "name": "Abditolu 146/10",
+    "ada_no": "336",
+    "parsel_no_tapu": "146/10"
+  },
+  {
+    "id": "351df6e9-31a7-4124-9aa6-98d9d22b4636",
+    "name": "Abditolu 146/11",
+    "ada_no": "241",
+    "parsel_no_tapu": "146/11"
+  },
+  {
+    "id": "44a1994a-d29d-47dd-b8c3-230f11c3672d",
+    "name": "Abditolu 146/12",
+    "ada_no": "878",
+    "parsel_no_tapu": "146/12"
+  },
+  {
+    "id": "f5744d91-4c20-4185-bc2c-5655965b8a0e",
+    "name": "Abditolu 146/13",
+    "ada_no": "545",
+    "parsel_no_tapu": "146/13"
+  },
+  {
+    "id": "66c37267-98b4-4477-9a6b-640b42e44fcc",
+    "name": "Abditolu 146/14",
+    "ada_no": "358",
+    "parsel_no_tapu": "146/14"
+  },
+  {
+    "id": "4ea666ab-d5e2-405e-85d3-e5a8aa60f1fb",
+    "name": "Abditolu 146/15",
+    "ada_no": "720",
+    "parsel_no_tapu": "146/15"
+  },
+  {
+    "id": "8e46a454-bac1-4194-8d74-eb1a8c57b090",
+    "name": "Abditolu 146/16",
+    "ada_no": "142",
+    "parsel_no_tapu": "146/16"
+  },
+  {
+    "id": "bae6e9a9-e338-4d77-9a44-ca49136e82c8",
+    "name": "Abditolu 146/17",
+    "ada_no": "986",
+    "parsel_no_tapu": "146/17"
+  },
+  {
+    "id": "2901d494-a373-4236-9efe-0adc8ff7854b",
+    "name": "Abditolu 146/18",
+    "ada_no": "988",
+    "parsel_no_tapu": "146/18"
+  },
+  {
+    "id": "e5646c5e-9645-4684-bed8-5db64f5d02c8",
+    "name": "Abditolu 146/19",
+    "ada_no": "920",
+    "parsel_no_tapu": "146/19"
+  },
+  {
+    "id": "4f276bf8-e601-493b-8600-512b003b883e",
+    "name": "Abditolu 146/2",
+    "ada_no": "429",
+    "parsel_no_tapu": "146/2"
+  },
+  {
+    "id": "0971ad5f-73ed-4459-b5e8-b3ad240bf318",
+    "name": "Abditolu 146/20",
+    "ada_no": "637",
+    "parsel_no_tapu": "146/20"
+  },
+  {
+    "id": "faa8779a-5349-46a6-84a8-565347656f48",
+    "name": "Abditolu 146/21",
+    "ada_no": "362",
+    "parsel_no_tapu": "146/21"
+  },
+  {
+    "id": "fb675524-96a2-4178-9745-128cc299955e",
+    "name": "Abditolu 146/22",
+    "ada_no": "544",
+    "parsel_no_tapu": "146/22"
+  },
+  {
+    "id": "7c23d893-71e3-4951-baf1-f97a40c9aabd",
+    "name": "Abditolu 146/23",
+    "ada_no": "856",
+    "parsel_no_tapu": "146/23"
+  },
+  {
+    "id": "daaab616-b082-48e0-93b2-766f6435f140",
+    "name": "Abditolu 146/24",
+    "ada_no": "446",
+    "parsel_no_tapu": "146/24"
+  },
+  {
+    "id": "e3c1d7a7-d8b8-4172-8f08-40ad1bffb572",
+    "name": "Abditolu 146/25",
+    "ada_no": "317",
+    "parsel_no_tapu": "146/25"
+  },
+  {
+    "id": "f9603a0c-c8fd-4596-b2dd-aa6d53ab32d3",
+    "name": "Abditolu 146/26",
+    "ada_no": "979",
+    "parsel_no_tapu": "146/26"
+  },
+  {
+    "id": "c45e7ff5-b0b6-40a8-8048-9958b615fcc0",
+    "name": "Abditolu 146/27",
+    "ada_no": "556",
+    "parsel_no_tapu": "146/27"
+  },
+  {
+    "id": "7851f1e8-3614-467f-92d6-3053198ee6bd",
+    "name": "Abditolu 146/3",
+    "ada_no": "593",
+    "parsel_no_tapu": "146/3"
+  },
+  {
+    "id": "f8594038-58c2-4b3d-87b8-e24fafca53b8",
+    "name": "Abditolu 146/4",
+    "ada_no": "950",
+    "parsel_no_tapu": "146/4"
+  },
+  {
+    "id": "5959543f-7b49-4126-922c-5278b361d6c1",
+    "name": "Abditolu 146/5",
+    "ada_no": "789",
+    "parsel_no_tapu": "146/5"
+  },
+  {
+    "id": "66c68c25-4d4a-4ae5-830c-a49c7d35db3d",
+    "name": "Abditolu 146/6",
+    "ada_no": "915",
+    "parsel_no_tapu": "146/6"
+  },
+  {
+    "id": "5d2962ce-8a27-415f-927e-8ce198e0ace4",
+    "name": "Abditolu 146/7",
+    "ada_no": "184",
+    "parsel_no_tapu": "146/7"
+  },
+  {
+    "id": "84305d70-e540-48ac-a118-d9115f68e062",
+    "name": "Abditolu 146/8",
+    "ada_no": "729",
+    "parsel_no_tapu": "146/8"
+  },
+  {
+    "id": "4380323f-fbef-46df-8ccc-5c2d0d990e44",
+    "name": "Abditolu 146/9",
+    "ada_no": "678",
+    "parsel_no_tapu": "146/9"
+  },
+  {
+    "id": "c3ba1e7e-b03d-4643-84d9-b15c8279f732",
+    "name": "Abditolu 147/1",
+    "ada_no": "804",
+    "parsel_no_tapu": "147/1"
+  },
+  {
+    "id": "4b215713-44dc-4a43-ba6b-090aa7380e5e",
+    "name": "Abditolu 147/10",
+    "ada_no": "433",
+    "parsel_no_tapu": "147/10"
+  },
+  {
+    "id": "f91dedd0-5fe1-4647-b9ac-b7f3c2affa00",
+    "name": "Abditolu 147/11",
+    "ada_no": "356",
+    "parsel_no_tapu": "147/11"
+  },
+  {
+    "id": "ad4705bc-9e99-4933-a3e1-109157be6a29",
+    "name": "Abditolu 147/12",
+    "ada_no": "170",
+    "parsel_no_tapu": "147/12"
+  },
+  {
+    "id": "7e1908d8-1917-4b84-a518-30d6685c1c03",
+    "name": "Abditolu 147/13",
+    "ada_no": "476",
+    "parsel_no_tapu": "147/13"
+  },
+  {
+    "id": "40c7809f-baf9-42c6-b819-af6dbf62f3a9",
+    "name": "Abditolu 147/15",
+    "ada_no": "817",
+    "parsel_no_tapu": "147/15"
+  },
+  {
+    "id": "fdc1a890-58ff-4f1f-8007-8c778de71074",
+    "name": "Abditolu 147/16",
+    "ada_no": "764",
+    "parsel_no_tapu": "147/16"
+  },
+  {
+    "id": "dc85a1e6-1701-4758-bdd2-bc18876c0c54",
+    "name": "Abditolu 147/17",
+    "ada_no": "451",
+    "parsel_no_tapu": "147/17"
+  },
+  {
+    "id": "6e2058ce-9ec1-4293-97da-27f3a06cd8cb",
+    "name": "Abditolu 147/18",
+    "ada_no": "103",
+    "parsel_no_tapu": "147/18"
+  },
+  {
+    "id": "a39011f3-5ffc-49cc-be83-b6047873bee3",
+    "name": "Abditolu 147/19",
+    "ada_no": "418",
+    "parsel_no_tapu": "147/19"
+  },
+  {
+    "id": "a7d2c67a-fc3a-48aa-9014-c2896d08f873",
+    "name": "Abditolu 147/2",
+    "ada_no": "283",
+    "parsel_no_tapu": "147/2"
+  },
+  {
+    "id": "c087e5fe-de43-4284-b671-15b7b51adb88",
+    "name": "Abditolu 147/20",
+    "ada_no": "187",
+    "parsel_no_tapu": "147/20"
+  },
+  {
+    "id": "e6a44d2b-009b-4573-b603-b24f5a4e7fde",
+    "name": "Abditolu 147/21",
+    "ada_no": "147",
+    "parsel_no_tapu": "147/21"
+  },
+  {
+    "id": "ad546b1d-5ac6-469c-bb25-bab478341083",
+    "name": "Abditolu 147/22",
+    "ada_no": "264",
+    "parsel_no_tapu": "147/22"
+  },
+  {
+    "id": "9b7d757c-cb8b-4250-a06d-7f0ab556196b",
+    "name": "Abditolu 147/23",
+    "ada_no": "724",
+    "parsel_no_tapu": "147/23"
+  },
+  {
+    "id": "93496026-82ab-4794-aea4-5a32b186f40e",
+    "name": "Abditolu 147/24",
+    "ada_no": "337",
+    "parsel_no_tapu": "147/24"
+  },
+  {
+    "id": "6c9af138-3ba0-465e-a2d7-b02fef89a561",
+    "name": "Abditolu 147/25",
+    "ada_no": "403",
+    "parsel_no_tapu": "147/25"
+  },
+  {
+    "id": "aedb9bbc-0b62-4619-abbb-340de45f7671",
+    "name": "Abditolu 147/26",
+    "ada_no": "828",
+    "parsel_no_tapu": "147/26"
+  },
+  {
+    "id": "082e84a7-f3d5-421c-b30e-4f68fc3eb47a",
+    "name": "Abditolu 147/27",
+    "ada_no": "824",
+    "parsel_no_tapu": "147/27"
+  },
+  {
+    "id": "66f30b03-786f-4c97-9bbb-42890dc0bfbb",
+    "name": "Abditolu 147/28",
+    "ada_no": "132",
+    "parsel_no_tapu": "147/28"
+  },
+  {
+    "id": "fef84325-d88b-40e7-a8e5-c5a45d12c547",
+    "name": "Abditolu 147/29",
+    "ada_no": "686",
+    "parsel_no_tapu": "147/29"
+  },
+  {
+    "id": "00339b7e-4d4b-44e1-ba5a-5b3a3cd8e294",
+    "name": "Abditolu 147/30",
+    "ada_no": "274",
+    "parsel_no_tapu": "147/30"
+  },
+  {
+    "id": "07315280-0d92-4364-a995-1b5c2fe831b8",
+    "name": "Abditolu 147/31",
+    "ada_no": "853",
+    "parsel_no_tapu": "147/31"
+  },
+  {
+    "id": "48572230-53f4-47ab-874c-1e249ce614af",
+    "name": "Abditolu 147/32",
+    "ada_no": "307",
+    "parsel_no_tapu": "147/32"
+  },
+  {
+    "id": "133a9053-d522-4283-b8cd-f2e5f52d9109",
+    "name": "Abditolu 147/33",
+    "ada_no": "333",
+    "parsel_no_tapu": "147/33"
+  },
+  {
+    "id": "27871ff1-3004-4e73-93c2-8b3a7821d16d",
+    "name": "Abditolu 147/34",
+    "ada_no": "771",
+    "parsel_no_tapu": "147/34"
+  },
+  {
+    "id": "eb0bef28-a55b-48be-b45a-e59d9e126a6c",
+    "name": "Abditolu 147/35",
+    "ada_no": "215",
+    "parsel_no_tapu": "147/35"
+  },
+  {
+    "id": "783f8a95-f7b8-42e0-81b1-3f7b43baeb8b",
+    "name": "Abditolu 147/36",
+    "ada_no": "624",
+    "parsel_no_tapu": "147/36"
+  },
+  {
+    "id": "80538a14-f98e-47b1-b791-290d875dbd2b",
+    "name": "Abditolu 147/37",
+    "ada_no": "963",
+    "parsel_no_tapu": "147/37"
+  },
+  {
+    "id": "7426c524-9977-44c1-8436-dc9dd7a0daea",
+    "name": "Abditolu 147/5",
+    "ada_no": "626",
+    "parsel_no_tapu": "147/5"
+  },
+  {
+    "id": "b378ebe9-f9a5-4471-ba83-cbb0e5b89b19",
+    "name": "Abditolu 147/6",
+    "ada_no": "583",
+    "parsel_no_tapu": "147/6"
+  },
+  {
+    "id": "cf2a12a8-a678-4c47-9986-949a90e7f927",
+    "name": "Abditolu 147/7",
+    "ada_no": "604",
+    "parsel_no_tapu": "147/7"
+  },
+  {
+    "id": "ca3220f5-0b0e-4ade-b3ed-d7177d98fd53",
+    "name": "Abditolu 147/8",
+    "ada_no": "379",
+    "parsel_no_tapu": "147/8"
+  },
+  {
+    "id": "b4adeecc-4a69-4448-9ebb-8f28e7fdabdf",
+    "name": "Abditolu 147/9",
+    "ada_no": "640",
+    "parsel_no_tapu": "147/9"
+  },
+  {
+    "id": "41733bb6-e37e-450a-bc9e-e7fd41e42594",
+    "name": "Abditolu 148/1",
+    "ada_no": "510",
+    "parsel_no_tapu": "148/1"
+  },
+  {
+    "id": "e306706b-0768-405a-b577-03d200844155",
+    "name": "Abditolu 148/10",
+    "ada_no": "452",
+    "parsel_no_tapu": "148/10"
+  },
+  {
+    "id": "95819ced-cd6a-4faa-8919-769cb189ddba",
+    "name": "Abditolu 148/11",
+    "ada_no": "160",
+    "parsel_no_tapu": "148/11"
+  },
+  {
+    "id": "98c0ac80-db26-4672-82bd-86324e8a8c9d",
+    "name": "Abditolu 148/12",
+    "ada_no": "161",
+    "parsel_no_tapu": "148/12"
+  },
+  {
+    "id": "d6c86ab2-4fe1-4caf-9306-decf6001499b",
+    "name": "Abditolu 148/13",
+    "ada_no": "708",
+    "parsel_no_tapu": "148/13"
+  },
+  {
+    "id": "b301a9d9-4e21-46b5-bc7e-ec4dcc69a2fa",
+    "name": "Abditolu 148/14",
+    "ada_no": "967",
+    "parsel_no_tapu": "148/14"
+  },
+  {
+    "id": "2397cb2e-6ca8-41e2-9b63-8d057e8a77a9",
+    "name": "Abditolu 148/15",
+    "ada_no": "653",
+    "parsel_no_tapu": "148/15"
+  },
+  {
+    "id": "e6a05649-9315-4c3d-974e-df4959ea0468",
+    "name": "Abditolu 148/16",
+    "ada_no": "144",
+    "parsel_no_tapu": "148/16"
+  },
+  {
+    "id": "1fcafd92-eced-4b2a-80f0-6c5239554d0d",
+    "name": "Abditolu 148/2",
+    "ada_no": "690",
+    "parsel_no_tapu": "148/2"
+  },
+  {
+    "id": "6b5291d0-36a4-4e2b-bbe5-eaa6e1732e50",
+    "name": "Abditolu 148/3",
+    "ada_no": "910",
+    "parsel_no_tapu": "148/3"
+  },
+  {
+    "id": "1c65015f-b434-4d48-9ce4-b3ded492953e",
+    "name": "Abditolu 148/4",
+    "ada_no": "778",
+    "parsel_no_tapu": "148/4"
+  },
+  {
+    "id": "f0f7a2bf-f02c-4bf2-8341-b5bbce50fc4d",
+    "name": "Abditolu 148/5",
+    "ada_no": "581",
+    "parsel_no_tapu": "148/5"
+  },
+  {
+    "id": "f48b0928-a1dc-4802-a01c-8d16cd02f633",
+    "name": "Abditolu 148/6",
+    "ada_no": "185",
+    "parsel_no_tapu": "148/6"
+  },
+  {
+    "id": "46643f29-62f6-4bb9-819b-e41466eef933",
+    "name": "Abditolu 148/7",
+    "ada_no": "243",
+    "parsel_no_tapu": "148/7"
+  },
+  {
+    "id": "68af7eaf-e172-427c-8529-b44e424c143b",
+    "name": "Abditolu 148/8",
+    "ada_no": "171",
+    "parsel_no_tapu": "148/8"
+  },
+  {
+    "id": "889b4110-6386-4b10-ab6c-398054920280",
+    "name": "Abditolu 148/9",
+    "ada_no": "759",
+    "parsel_no_tapu": "148/9"
+  },
+  {
+    "id": "786fba68-e80c-4cf6-a4f5-f7fadbc797d2",
+    "name": "Abditolu 149/1",
+    "ada_no": "899",
+    "parsel_no_tapu": "149/1"
+  },
+  {
+    "id": "41bc2992-189f-4147-aebc-51dfdbe8c1ba",
+    "name": "Abditolu 149/2",
+    "ada_no": "889",
+    "parsel_no_tapu": "149/2"
+  },
+  {
+    "id": "732456ab-3f1e-499e-8933-60b4cbc7d013",
+    "name": "Abditolu 150/1",
+    "ada_no": "247",
+    "parsel_no_tapu": "150/1"
+  },
+  {
+    "id": "62dd44db-6c50-42b2-9647-2293a30d8cd7",
+    "name": "Abditolu 150/2",
+    "ada_no": "897",
+    "parsel_no_tapu": "150/2"
+  },
+  {
+    "id": "631f3f01-130c-4751-ae0c-17a3b3909695",
+    "name": "Abditolu 151/1",
+    "ada_no": "765",
+    "parsel_no_tapu": "151/1"
+  },
+  {
+    "id": "b35e4c41-31fe-4cf2-93b8-21f5e4a90ef0",
+    "name": "Abditolu 151/10",
+    "ada_no": "555",
+    "parsel_no_tapu": "151/10"
+  },
+  {
+    "id": "174bc68f-2749-405c-8616-acc3c44e9811",
+    "name": "Abditolu 151/11",
+    "ada_no": "443",
+    "parsel_no_tapu": "151/11"
+  },
+  {
+    "id": "ff5a8154-8718-440b-8d18-90a8772b4ddb",
+    "name": "Abditolu 151/12",
+    "ada_no": "737",
+    "parsel_no_tapu": "151/12"
+  },
+  {
+    "id": "336696ae-ee81-44c7-961b-ce918cae99bb",
+    "name": "Abditolu 151/2",
+    "ada_no": "460",
+    "parsel_no_tapu": "151/2"
+  },
+  {
+    "id": "fdabd11c-31b5-42d7-a24b-d5b728d8668d",
+    "name": "Abditolu 151/3",
+    "ada_no": "233",
+    "parsel_no_tapu": "151/3"
+  },
+  {
+    "id": "78dc50e0-37bb-4850-8de7-a33b0e33d56d",
+    "name": "Abditolu 151/4",
+    "ada_no": "324",
+    "parsel_no_tapu": "151/4"
+  },
+  {
+    "id": "48a8c553-335e-4d55-b589-42cc970cbe6e",
+    "name": "Abditolu 151/5",
+    "ada_no": "735",
+    "parsel_no_tapu": "151/5"
+  },
+  {
+    "id": "69cd03d6-b9a9-4531-a7a5-e685193b1926",
+    "name": "Abditolu 151/6",
+    "ada_no": "999",
+    "parsel_no_tapu": "151/6"
+  },
+  {
+    "id": "bd5ef83c-115d-4d9c-a5dd-4c952a86cb5d",
+    "name": "Abditolu 151/7",
+    "ada_no": "802",
+    "parsel_no_tapu": "151/7"
+  },
+  {
+    "id": "9d903a2b-eb62-4aa5-a559-eeea3261c906",
+    "name": "Abditolu 151/8",
+    "ada_no": "879",
+    "parsel_no_tapu": "151/8"
+  },
+  {
+    "id": "4ee34c01-786c-4863-a875-de225d5c54c7",
+    "name": "Abditolu 151/9",
+    "ada_no": "757",
+    "parsel_no_tapu": "151/9"
+  },
+  {
+    "id": "89021a48-2319-40c8-9237-d42324e35295",
+    "name": "Abditolu 152/1",
+    "ada_no": "416",
+    "parsel_no_tapu": "152/1"
+  },
+  {
+    "id": "3b363285-896b-44e4-9bb8-78f13bc17ff3",
+    "name": "Abditolu 152/10",
+    "ada_no": "370",
+    "parsel_no_tapu": "152/10"
+  },
+  {
+    "id": "32423f4f-0bb7-41bc-a5f7-25605d7a84c4",
+    "name": "Abditolu 152/11",
+    "ada_no": "111",
+    "parsel_no_tapu": "152/11"
+  },
+  {
+    "id": "0d0352fe-fbc8-4f3b-b7d3-e101ccbac261",
+    "name": "Abditolu 152/12",
+    "ada_no": "286",
+    "parsel_no_tapu": "152/12"
+  },
+  {
+    "id": "11307a15-0686-41dd-83e9-134b160cbb7a",
+    "name": "Abditolu 152/13",
+    "ada_no": "499",
+    "parsel_no_tapu": "152/13"
+  },
+  {
+    "id": "a6916b4d-19b5-4f9a-9024-5fadbb639630",
+    "name": "Abditolu 152/14",
+    "ada_no": "433",
+    "parsel_no_tapu": "152/14"
+  },
+  {
+    "id": "20e77881-5f66-4632-8960-1b982c93eae9",
+    "name": "Abditolu 152/2",
+    "ada_no": "927",
+    "parsel_no_tapu": "152/2"
+  },
+  {
+    "id": "cf4f7c9d-3256-4c7e-8f8b-2caddaafd4e4",
+    "name": "Abditolu 152/3",
+    "ada_no": "508",
+    "parsel_no_tapu": "152/3"
+  },
+  {
+    "id": "1775b2fd-2bbc-49af-bef0-8e4b315158a0",
+    "name": "Abditolu 152/4",
+    "ada_no": "677",
+    "parsel_no_tapu": "152/4"
+  },
+  {
+    "id": "16db72a5-9128-4077-ae1c-1320caf07054",
+    "name": "Abditolu 152/5",
+    "ada_no": "977",
+    "parsel_no_tapu": "152/5"
+  },
+  {
+    "id": "ac0cd699-f32b-4787-b9e2-aa21f7053d06",
+    "name": "Abditolu 152/6",
+    "ada_no": "651",
+    "parsel_no_tapu": "152/6"
+  },
+  {
+    "id": "2080523a-6afa-4e8b-a52e-9c5233005df1",
+    "name": "Abditolu 152/7",
+    "ada_no": "200",
+    "parsel_no_tapu": "152/7"
+  },
+  {
+    "id": "0a084e88-dd47-479c-83ad-c22b74d599b4",
+    "name": "Abditolu 152/8",
+    "ada_no": "531",
+    "parsel_no_tapu": "152/8"
+  },
+  {
+    "id": "8708afdc-d33d-4f5d-8bf1-ac796fc96ef2",
+    "name": "Abditolu 152/9",
+    "ada_no": "191",
+    "parsel_no_tapu": "152/9"
+  },
+  {
+    "id": "a9061535-ba4b-463a-92dd-efef8c5772a2",
+    "name": "Abditolu 153/1",
+    "ada_no": "807",
+    "parsel_no_tapu": "153/1"
+  },
+  {
+    "id": "195c89a5-47f5-4490-86e9-55175dc55081",
+    "name": "Abditolu 153/2",
+    "ada_no": "600",
+    "parsel_no_tapu": "153/2"
+  },
+  {
+    "id": "808c9fbc-2b15-4b9b-a379-8ffc851b2f4c",
+    "name": "Abditolu 153/3",
+    "ada_no": "173",
+    "parsel_no_tapu": "153/3"
+  },
+  {
+    "id": "9c6b3fef-869f-476c-9988-4d75d1612682",
+    "name": "Abditolu 153/4",
+    "ada_no": "652",
+    "parsel_no_tapu": "153/4"
+  },
+  {
+    "id": "2b02009d-a213-4b22-a590-2d9b09d5b7fc",
+    "name": "Abditolu 153/5",
+    "ada_no": "656",
+    "parsel_no_tapu": "153/5"
+  },
+  {
+    "id": "4f285e7e-f0f6-4d52-bedf-daddf0fcb51d",
+    "name": "Abditolu 153/6",
+    "ada_no": "149",
+    "parsel_no_tapu": "153/6"
+  },
+  {
+    "id": "a3b038f8-e80a-4193-8c77-4e1f3ae3a50b",
+    "name": "Abditolu 154/10",
+    "ada_no": "504",
+    "parsel_no_tapu": "154/10"
+  },
+  {
+    "id": "1737b4bd-5a0a-4854-945b-eedbc67b8d05",
+    "name": "Abditolu 154/11",
+    "ada_no": "791",
+    "parsel_no_tapu": "154/11"
+  },
+  {
+    "id": "60b79756-b0a3-475e-ac4b-7fb92c74e7ab",
+    "name": "Abditolu 154/12",
+    "ada_no": "200",
+    "parsel_no_tapu": "154/12"
+  },
+  {
+    "id": "93937e0b-ae65-49b8-8c42-52fdb7d89d5c",
+    "name": "Abditolu 154/13",
+    "ada_no": "687",
+    "parsel_no_tapu": "154/13"
+  },
+  {
+    "id": "e5275b1f-ac06-40db-a54a-5a3c1235b0e0",
+    "name": "Abditolu 154/14",
+    "ada_no": "294",
+    "parsel_no_tapu": "154/14"
+  },
+  {
+    "id": "7720f084-70b7-4b5a-970a-6f918343f85a",
+    "name": "Abditolu 154/15",
+    "ada_no": "453",
+    "parsel_no_tapu": "154/15"
+  },
+  {
+    "id": "dc49dc16-5991-4828-bf36-80b02148f936",
+    "name": "Abditolu 154/16",
+    "ada_no": "137",
+    "parsel_no_tapu": "154/16"
+  },
+  {
+    "id": "d457d93c-8dd9-48bf-a6f3-d4aa36323781",
+    "name": "Abditolu 154/2",
+    "ada_no": "132",
+    "parsel_no_tapu": "154/2"
+  },
+  {
+    "id": "002d611a-3e82-4eac-a5a0-1e1384754425",
+    "name": "Abditolu 154/3",
+    "ada_no": "843",
+    "parsel_no_tapu": "154/3"
+  },
+  {
+    "id": "fa58ef92-8a19-4881-85b6-32fe198e3a39",
+    "name": "Abditolu 154/4",
+    "ada_no": "748",
+    "parsel_no_tapu": "154/4"
+  },
+  {
+    "id": "6b1521a1-892c-4cec-a092-631ea6d9642b",
+    "name": "Abditolu 154/5",
+    "ada_no": "709",
+    "parsel_no_tapu": "154/5"
+  },
+  {
+    "id": "df163310-9d60-4b6a-a56d-09a7d6a817db",
+    "name": "Abditolu 154/6",
+    "ada_no": "102",
+    "parsel_no_tapu": "154/6"
+  },
+  {
+    "id": "571d3259-620c-4a3a-b3ee-028407dec488",
+    "name": "Abditolu 154/7",
+    "ada_no": "726",
+    "parsel_no_tapu": "154/7"
+  },
+  {
+    "id": "3435c51e-5970-45f1-886d-da45991a9ade",
+    "name": "Abditolu 154/8",
+    "ada_no": "378",
+    "parsel_no_tapu": "154/8"
+  },
+  {
+    "id": "332f9a32-5da1-4a70-b049-1f39ddf27be1",
+    "name": "Abditolu 154/9",
+    "ada_no": "258",
+    "parsel_no_tapu": "154/9"
+  },
+  {
+    "id": "e36f1e36-47ce-4eab-94c9-b7545c590e67",
+    "name": "Abditolu 155/1",
+    "ada_no": "296",
+    "parsel_no_tapu": "155/1"
+  },
+  {
+    "id": "0827892b-58d0-4132-b311-f5a19dedc495",
+    "name": "Abditolu 155/2",
+    "ada_no": "760",
+    "parsel_no_tapu": "155/2"
+  },
+  {
+    "id": "bc69c6ab-bf3a-457e-a1cf-11d0c806daa2",
+    "name": "Abditolu 155/3",
+    "ada_no": "539",
+    "parsel_no_tapu": "155/3"
+  },
+  {
+    "id": "22600595-5ff2-4002-8676-ccd33eca949e",
+    "name": "Abditolu 155/4",
+    "ada_no": "543",
+    "parsel_no_tapu": "155/4"
+  },
+  {
+    "id": "6c0b9968-583b-4b75-89d5-846a2bde292e",
+    "name": "Abditolu 155/5",
+    "ada_no": "282",
+    "parsel_no_tapu": "155/5"
+  },
+  {
+    "id": "a049f25c-efc1-4733-bf26-5f4028852c2f",
+    "name": "Abditolu 160/1",
+    "ada_no": "372",
+    "parsel_no_tapu": "160/1"
+  },
+  {
+    "id": "ab41bed3-0ac3-4246-963b-3a5cb070e01e",
+    "name": "Abditolu 160/2",
+    "ada_no": "542",
+    "parsel_no_tapu": "160/2"
+  },
+  {
+    "id": "3ed8d85e-8eb4-4a58-a9e7-c9df389a8e2d",
+    "name": "Abditolu 160/3",
+    "ada_no": "918",
+    "parsel_no_tapu": "160/3"
+  },
+  {
+    "id": "cbbf2d61-f89f-4f77-8d65-3072cbe7d9c5",
+    "name": "Abditolu 160/4",
+    "ada_no": "407",
+    "parsel_no_tapu": "160/4"
+  },
+  {
+    "id": "5431b9e8-84c4-4e09-bb18-3ad5a5b64267",
+    "name": "Abditolu 160/5",
+    "ada_no": "679",
+    "parsel_no_tapu": "160/5"
+  },
+  {
+    "id": "052c3091-1a01-4b14-ac37-c25c0d76af21",
+    "name": "Abditolu 161/1",
+    "ada_no": "455",
+    "parsel_no_tapu": "161/1"
+  },
+  {
+    "id": "17cc71ba-8ec0-472d-baaf-d36b236684cd",
+    "name": "Abditolu 161/2",
+    "ada_no": "493",
+    "parsel_no_tapu": "161/2"
+  },
+  {
+    "id": "a19f2db9-879d-46a1-8048-0452b68424d6",
+    "name": "Abditolu 161/3",
+    "ada_no": "325",
+    "parsel_no_tapu": "161/3"
+  },
+  {
+    "id": "9c249ef0-c586-4177-98e4-93950bccf14c",
+    "name": "Abditolu 163/1",
+    "ada_no": "969",
+    "parsel_no_tapu": "163/1"
+  },
+  {
+    "id": "e8db08c5-4dc3-4830-bc78-b9069ac85a3e",
+    "name": "Abditolu 163/10",
+    "ada_no": "749",
+    "parsel_no_tapu": "163/10"
+  },
+  {
+    "id": "baf4f2b8-61b9-46a4-82aa-43bdd2e2e166",
+    "name": "Abditolu 163/11",
+    "ada_no": "353",
+    "parsel_no_tapu": "163/11"
+  },
+  {
+    "id": "49ec0196-5ab7-4ebb-b82a-e2baab8438ac",
+    "name": "Abditolu 163/12",
+    "ada_no": "416",
+    "parsel_no_tapu": "163/12"
+  },
+  {
+    "id": "782a1e91-3ccb-4e0d-a2be-57667f11374c",
+    "name": "Abditolu 163/13",
+    "ada_no": "327",
+    "parsel_no_tapu": "163/13"
+  },
+  {
+    "id": "f580ce76-a190-42c1-ad43-41b450412496",
+    "name": "Abditolu 163/14",
+    "ada_no": "341",
+    "parsel_no_tapu": "163/14"
+  },
+  {
+    "id": "e599a4f8-bc3a-4d08-b617-27da949deedd",
+    "name": "Abditolu 163/15",
+    "ada_no": "525",
+    "parsel_no_tapu": "163/15"
+  },
+  {
+    "id": "88d47e0d-c8b7-40f4-9a3b-f7c45982074d",
+    "name": "Abditolu 163/16",
+    "ada_no": "319",
+    "parsel_no_tapu": "163/16"
+  },
+  {
+    "id": "205c0319-67d5-4866-80fd-55dcb3ca23ae",
+    "name": "Abditolu 163/17",
+    "ada_no": "890",
+    "parsel_no_tapu": "163/17"
+  },
+  {
+    "id": "e0dfb26a-777f-4bd7-8032-757f799baa07",
+    "name": "Abditolu 163/18",
+    "ada_no": "141",
+    "parsel_no_tapu": "163/18"
+  },
+  {
+    "id": "685986f7-ad06-4ea6-8514-8179c18b1c84",
+    "name": "Abditolu 163/19",
+    "ada_no": "199",
+    "parsel_no_tapu": "163/19"
+  },
+  {
+    "id": "f4fddc81-07bb-4fe2-b539-b4ee58f972f0",
+    "name": "Abditolu 163/2",
+    "ada_no": "445",
+    "parsel_no_tapu": "163/2"
+  },
+  {
+    "id": "e20324ae-9e62-4ea6-a972-1a02f0e6e679",
+    "name": "Abditolu 163/20",
+    "ada_no": "538",
+    "parsel_no_tapu": "163/20"
+  },
+  {
+    "id": "01435810-0976-469f-9245-d33eb4a1ba68",
+    "name": "Abditolu 163/21",
+    "ada_no": "285",
+    "parsel_no_tapu": "163/21"
+  },
+  {
+    "id": "30ac3be7-c449-4ce1-9769-acd2ea0308db",
+    "name": "Abditolu 163/22",
+    "ada_no": "924",
+    "parsel_no_tapu": "163/22"
+  },
+  {
+    "id": "d277df90-81e0-4e51-818f-23b4c9efcc29",
+    "name": "Abditolu 163/23",
+    "ada_no": "935",
+    "parsel_no_tapu": "163/23"
+  },
+  {
+    "id": "f29654af-a43d-4d90-bb5a-eec262e6ee3f",
+    "name": "Abditolu 163/24",
+    "ada_no": "508",
+    "parsel_no_tapu": "163/24"
+  },
+  {
+    "id": "022f624c-f78d-45ce-8470-260ac35020f5",
+    "name": "Abditolu 163/3",
+    "ada_no": "980",
+    "parsel_no_tapu": "163/3"
+  },
+  {
+    "id": "8fc41bfe-a2bf-4231-8991-9dfc7e4fd260",
+    "name": "Abditolu 163/4",
+    "ada_no": "138",
+    "parsel_no_tapu": "163/4"
+  },
+  {
+    "id": "a2ec62a2-c025-4749-9f55-f68518835f65",
+    "name": "Abditolu 163/5",
+    "ada_no": "146",
+    "parsel_no_tapu": "163/5"
+  },
+  {
+    "id": "ee94c607-50fb-4908-97ef-f75242317361",
+    "name": "Abditolu 163/6",
+    "ada_no": "716",
+    "parsel_no_tapu": "163/6"
+  },
+  {
+    "id": "58b1b64d-98ae-437a-a628-13dc8ffea5a3",
+    "name": "Abditolu 163/7",
+    "ada_no": "234",
+    "parsel_no_tapu": "163/7"
+  },
+  {
+    "id": "90121830-2ffc-4450-a50f-cb7bb772fd1a",
+    "name": "Abditolu 163/8",
+    "ada_no": "380",
+    "parsel_no_tapu": "163/8"
+  },
+  {
+    "id": "c72872a1-00bb-4d87-90ce-53ba76249aae",
+    "name": "Abditolu 163/9",
+    "ada_no": "550",
+    "parsel_no_tapu": "163/9"
+  },
+  {
+    "id": "d0cdb7ba-6c69-47bc-afd0-09a066426cb7",
+    "name": "Abditolu 164/1",
+    "ada_no": "152",
+    "parsel_no_tapu": "164/1"
+  },
+  {
+    "id": "d61c27d2-168c-4703-909b-d59df86463a7",
+    "name": "Abditolu 164/2",
+    "ada_no": "857",
+    "parsel_no_tapu": "164/2"
+  },
+  {
+    "id": "93730d02-e0c3-4b11-8e5c-744362b65134",
+    "name": "Abditolu 164/3",
+    "ada_no": "514",
+    "parsel_no_tapu": "164/3"
+  },
+  {
+    "id": "439a7f8f-9cf6-41e7-8f94-ac4954a128ea",
+    "name": "Abditolu 165/1",
+    "ada_no": "886",
+    "parsel_no_tapu": "165/1"
+  },
+  {
+    "id": "5c59e972-708d-490f-a80f-cca9bf7085ed",
+    "name": "Abditolu 165/10",
+    "ada_no": "957",
+    "parsel_no_tapu": "165/10"
+  },
+  {
+    "id": "af44011a-dbc1-463f-9048-0ca16d10d443",
+    "name": "Abditolu 165/11",
+    "ada_no": "151",
+    "parsel_no_tapu": "165/11"
+  },
+  {
+    "id": "c76489d9-96d4-4718-9b0a-46d446d32871",
+    "name": "Abditolu 165/12",
+    "ada_no": "411",
+    "parsel_no_tapu": "165/12"
+  },
+  {
+    "id": "95ed5adc-e628-4cbc-97bc-dbc0f3acfd63",
+    "name": "Abditolu 165/13",
+    "ada_no": "113",
+    "parsel_no_tapu": "165/13"
+  },
+  {
+    "id": "e34919c9-0aba-4527-95dc-891affc7919e",
+    "name": "Abditolu 165/14",
+    "ada_no": "331",
+    "parsel_no_tapu": "165/14"
+  },
+  {
+    "id": "28074064-bfec-4521-8ad9-f3d7a5029a05",
+    "name": "Abditolu 165/15",
+    "ada_no": "597",
+    "parsel_no_tapu": "165/15"
+  },
+  {
+    "id": "af9937a6-6428-40e1-a424-7d3ea0ac0e94",
+    "name": "Abditolu 165/16",
+    "ada_no": "330",
+    "parsel_no_tapu": "165/16"
+  },
+  {
+    "id": "9b92ac7c-1e3e-4172-ab46-65805dc63ed9",
+    "name": "Abditolu 165/17",
+    "ada_no": "758",
+    "parsel_no_tapu": "165/17"
+  },
+  {
+    "id": "75f1bf91-4486-4cfa-bf9a-36f882bfe5b4",
+    "name": "Abditolu 165/2",
+    "ada_no": "265",
+    "parsel_no_tapu": "165/2"
+  },
+  {
+    "id": "91b7a68b-21ca-444d-95c0-8fda7fb92878",
+    "name": "Abditolu 165/3",
+    "ada_no": "322",
+    "parsel_no_tapu": "165/3"
+  },
+  {
+    "id": "fd513793-b293-4d53-97bb-89e21eb15959",
+    "name": "Abditolu 165/4",
+    "ada_no": "796",
+    "parsel_no_tapu": "165/4"
+  },
+  {
+    "id": "8d12ffaa-62e7-4514-95c1-9727eaa335ea",
+    "name": "Abditolu 165/5",
+    "ada_no": "896",
+    "parsel_no_tapu": "165/5"
+  },
+  {
+    "id": "3ccf0ebd-9fa7-485a-854c-4909ed7665a1",
+    "name": "Abditolu 165/6",
+    "ada_no": "750",
+    "parsel_no_tapu": "165/6"
+  },
+  {
+    "id": "24a6ae90-783a-4b74-a401-11791de49f37",
+    "name": "Abditolu 165/7",
+    "ada_no": "993",
+    "parsel_no_tapu": "165/7"
+  },
+  {
+    "id": "9b58cef8-5238-4907-8e55-e7c0de94bd81",
+    "name": "Abditolu 165/8",
+    "ada_no": "999",
+    "parsel_no_tapu": "165/8"
+  },
+  {
+    "id": "ef473e3b-5caa-4223-a0f8-3da5cd671f6e",
+    "name": "Abditolu 165/9",
+    "ada_no": "143",
+    "parsel_no_tapu": "165/9"
+  },
+  {
+    "id": "17c3a1e3-127a-4cf7-b1dd-e93800f3b458",
+    "name": "Abditolu 166/1",
+    "ada_no": "862",
+    "parsel_no_tapu": "166/1"
+  },
+  {
+    "id": "c632b1e3-1e31-48f4-a51e-45c30cb3956b",
+    "name": "Abditolu 167/1",
+    "ada_no": "723",
+    "parsel_no_tapu": "167/1"
+  },
+  {
+    "id": "5ed2b43f-2c4c-47d8-ba90-58b176579f49",
+    "name": "Abditolu 167/2",
+    "ada_no": "298",
+    "parsel_no_tapu": "167/2"
+  },
+  {
+    "id": "cf9bd391-78ef-4516-8817-4035378123ed",
+    "name": "Abditolu 167/3",
+    "ada_no": "863",
+    "parsel_no_tapu": "167/3"
+  },
+  {
+    "id": "db41a5a6-75a2-46a7-9d9e-5409313ac381",
+    "name": "Abditolu 167/4",
+    "ada_no": "435",
+    "parsel_no_tapu": "167/4"
+  },
+  {
+    "id": "e4312b71-ccd4-4fb9-9f39-ed396bfb1af0",
+    "name": "Abditolu 167/5",
+    "ada_no": "867",
+    "parsel_no_tapu": "167/5"
+  },
+  {
+    "id": "14eea583-b886-4bd2-99de-26b1cf85952b",
+    "name": "Abditolu 167/6",
+    "ada_no": "179",
+    "parsel_no_tapu": "167/6"
+  },
+  {
+    "id": "bf68be49-42c4-4467-b76e-faef9f461025",
+    "name": "Abditolu 167/7",
+    "ada_no": "539",
+    "parsel_no_tapu": "167/7"
+  },
+  {
+    "id": "e490d70e-8111-4fe4-b733-f239ed93cf31",
+    "name": "Abditolu 167/8",
+    "ada_no": "537",
+    "parsel_no_tapu": "167/8"
+  },
+  {
+    "id": "92c34fcc-bee4-4729-9562-fa2320f33375",
+    "name": "Abditolu 167/9",
+    "ada_no": "676",
+    "parsel_no_tapu": "167/9"
+  }
+]
