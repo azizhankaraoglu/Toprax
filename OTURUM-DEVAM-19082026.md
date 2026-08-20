@@ -38,11 +38,12 @@ komutlarıyla birlikte gerçek durumu gösteriyor.
 
 | 9 | **VRA (Değişken Oranlı Uygulama) TAMAMLANDI.** Yeni `backend/vra.py` — parsel bazlı zon haritası (NDVI/N/P/K sinyali, eşit-aralık ile düşük/orta/yüksek sınıflandırma, veri eksikliğinde uydurma oran YOK). Shapefile (.shp/.shx/.dbf zip) ve ISOXML (TASKDATA.XML) dışa aktarım — ikisi de gerçek parsel geometrisiyle uçtan uca test edildi (shapefile readback + ISOXML reparse doğrulandı, 10 gerçek parselle N sinyali sınıflandırması doğru sonuç verdi). Yeni `pages/Vra.jsx` (`/vra`, "KARAR DESTEK" grubu). **Bilinçli sınır:** zon = parsel granülerliği (sub-field raster veri sistemde yok — `crop_classification.py`'nin dürüstlük ilkesiyle aynı). Build v1.6/20082026-1257, GitHub'a push edildi (commit eec9036). | ✅ |
 
-## ❌ HİÇ YAPILMADI / ERTELENDİ — sıradaki iş
+| 10 | **Demo Senaryo Oynatıcı TAMAMLANDI.** Yeni `backend/demo_scenario.py` — `GET /demo-scenario/steps` gerçek ekranlara giden 10 adımlık sunum turu, sistemdeki en dolu çiftçi/parsel/sezon zincirini bulup adımlara yerleştirir (sahte veri YOK, örnek yoksa adım dürüstçe atlanır) — gerçek üretim verisiyle uçtan uca test edildi (10/10 adım doğru çözüldü). Yeni `pages/DemoScenario.jsx` (`/senaryo-oynatici`, Sistem grubu, admin-tier). Yeni `scripts/demo_scenario.py` (repo kökü) — opsiyonel, elle çalıştırılan, idempotent "DEMO —" önekli örnek veri zinciri kurar (canlıya OTOMATİK yazmaz). Build v1.7/20082026-1322, GitHub'a push edildi (commit 40e520b). **OTURUM-DEVAM'ın 12 maddesinin TAMAMI bitti** (12 ve 14 kullanıcı kararıyla bilinçli ertelendi). | ✅ |
+
+## ⏸️ Kullanıcı kararıyla ertelenen (bu tur kapsamında değil)
 
 | # | Konu | Durum |
 |---|---|---|
-| 10 | **Demo senaryo oynatıcı** — `scripts/demo_scenario.py` + "Senaryoyu Oynat" ekranı | Kod yazılmadı |
 | 12 | **Harita Stüdyosu elden geçirme** | Kullanıcı bilinçli erteledi ("en son onu beraber elden geçirelim") |
 | 14 | **Çiftçi self-servis 3 akışı** — sözleşme onaylama, ekim planlama, randevu alma | Ertelendi; üçü de veri modeli kararı gerektiriyor (Karar Protokolü) |
 | 16 | **Devir dokümanı** | Yazılmadı. **Not:** BU dosya fiilen devir dokümanı işlevi görüyor (ortam, kök nedenler, kalan işler); ayrı/resmî bir belge isteniyorsa kapsamı netleştirilmeli |
