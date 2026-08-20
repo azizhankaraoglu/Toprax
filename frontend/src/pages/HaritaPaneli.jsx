@@ -9,6 +9,7 @@ import { MapDrawTools } from "@/components/MapDrawTools";
 import MapClickAdminPopup from "@/components/MapClickAdminPopup";
 import AdminAreaPopupLinks from "@/components/AdminAreaPopupLinks";
 import { MAP_WIDGET_REGISTRY, DEFAULT_WIDGET_KEYS } from "@/lib/mapWidgets";
+import { useParcelTools, ParcelToolsToggle, ParcelToolsMapLayer, ParcelToolsSidePanel } from "@/components/ParcelToolsPanel";
 import { moduleDetailPath } from "@/lib/moduleRoutes";
 import { directionsUrl } from "@/lib/directions";
 import {
@@ -322,6 +323,13 @@ export default function HaritaPaneli() {
   const [quickFieldTaskForm, setQuickFieldTaskForm] = useState({});
   const [quickFieldTaskBusy, setQuickFieldTaskBusy] = useState(false);
   const [quickFieldTaskMsg, setQuickFieldTaskMsg] = useState("");
+
+  // 2026-08-20 (kullanıcı isteği) — Parceller'deki "Araçlar" kutusu buraya
+  // EKLENDİ (Parcels.jsx'e dokunulmadı, bkz. ParcelToolsPanel.jsx docstring'i).
+  const parcelTools = useParcelTools({
+    parcels, farmers,
+    onChanged: () => api.get("/parcels", { params: { limit: 1200 } }).then((r) => setParcels(r.data)),
+  });
 
   useEffect(() => {
     (async () => {
@@ -934,6 +942,8 @@ export default function HaritaPaneli() {
           <PenTool size={14} /> {drawSelectActive ? "Çiziliyor… (poligon/dikdörtgen/daire)" : "Şekille Seç"}
         </button>
 
+        <ParcelToolsToggle pt={parcelTools} />
+
         {/* IT-16 — Harita Snapshot (kaydet/paylaş) */}
         <div className="relative">
           <button
@@ -1064,6 +1074,8 @@ export default function HaritaPaneli() {
           )}
         </div>
       </div>
+
+      <ParcelToolsSidePanel pt={parcelTools} />
 
       {/* IT-17 — Zaman Makinesi slider (açıkken görünür) */}
       {timeMachineActive && (
@@ -1207,8 +1219,11 @@ export default function HaritaPaneli() {
           <CoordinateReadout />
           <MeasureLayer active={measureActive} onResult={setMeasureResult} />
           {/* Boş alana tıklama → il/ilçe/mahalle popup'ı. Çizim/seçim aracı
-              açıkken devre dışı (tıklama o araca ait). */}
-          <MapClickAdminPopup disabled={measureActive || drawSelectActive} />
+              açıkken devre dışı (tıklama o araca ait). "Koordinat Al" parsel
+              aracı da (2026-08-20 eklendi) aynı sebeple eklendi — ikisi aynı
+              tıklamayı paylaşmasın. */}
+          <MapClickAdminPopup disabled={measureActive || drawSelectActive || !!parcelTools.tool} />
+          <ParcelToolsMapLayer pt={parcelTools} />
 
           {/* İdari Sınırlar katmanı — IT-13.6/Parcels.jsx ile aynı desen */}
           {visibleLayers.includes("admin_areas") && adminAreas.map((a) => {

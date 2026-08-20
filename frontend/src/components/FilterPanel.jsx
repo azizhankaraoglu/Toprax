@@ -58,6 +58,14 @@ export default function FilterPanel({ module, onResults, pageSize = 50, onFilter
   // tekrar tekrar aynı istek atılmasın diye).
   const [lookupGroupsByKey, setLookupGroupsByKey] = useState(null);
   const [lookupValuesByGroupId, setLookupValuesByGroupId] = useState({});
+  // 2026-08-20 — ÖNCEDEN seçenek listesi `/lookups/groups/{id}/values`
+  // (TAM katalog, ör. 81 il/973 ilçe) idi; parselde/çiftçide karşılığı
+  // olmayan değerler de filtrede görünüyordu. Artık AYRICA `/query/
+  // {module}/distinct?field=` (bkz. query_engine.py) ile o modülde
+  // GERÇEKTEN kullanılan değerler çekilip, aşağıdaki `lookupOptions`
+  // hesabında TAM katalog bu kümeye göre süzülür — hem doğru Türkçe
+  // etiket (lookup_values.label) hem sadece-DB'deki-veri garantisi.
+  const [distinctValuesByField, setDistinctValuesByField] = useState({});
 
   useEffect(() => {
     api.get(`/query/${module}/filterable-fields`).then((r) => {
@@ -90,6 +98,13 @@ export default function FilterPanel({ module, onResults, pageSize = 50, onFilter
     api.get(`/lookups/groups/${groupId}/values`).then((r) => {
       setLookupValuesByGroupId((prev) => ({ ...prev, [groupId]: r.data }));
     }).catch(() => setLookupValuesByGroupId((prev) => ({ ...prev, [groupId]: [] })));
+  }
+
+  function ensureDistinctValuesLoaded(fieldKey) {
+    if (!fieldKey || distinctValuesByField[fieldKey]) return;
+    api.get(`/query/${module}/distinct`, { params: { field: fieldKey } }).then((r) => {
+      setDistinctValuesByField((prev) => ({ ...prev, [fieldKey]: new Set(r.data.values || []) }));
+    }).catch(() => setDistinctValuesByField((prev) => ({ ...prev, [fieldKey]: new Set() })));
   }
 
   function loadSavedQueries() {
@@ -219,8 +234,13 @@ export default function FilterPanel({ module, onResults, pageSize = 50, onFilter
           {rows.map((row, idx) => {
             const fieldDef = fields.find((f) => f.key === row.field);
             const groupId = lookupGroupIdFor(fieldDef);
-            if (groupId) ensureLookupValuesLoaded(groupId);
-            const lookupOptions = groupId ? lookupValuesByGroupId[groupId] : null;
+            if (groupId) { ensureLookupValuesLoaded(groupId); ensureDistinctValuesLoaded(row.field); }
+            const inUseValues = groupId ? distinctValuesByField[row.field] : null;
+            // Tam katalog (doğru Türkçe etiketler için) × bu modülde
+            // GERÇEKTEN kullanılan değerler (DB-only kural) — kesişimi al.
+            const lookupOptions = groupId && inUseValues
+              ? (lookupValuesByGroupId[groupId] || []).filter((o) => o.is_active !== false && inUseValues.has(o.value))
+              : null;
             return (
             <div key={idx} className="flex items-center gap-2">
               {idx > 0 && (
@@ -250,12 +270,13 @@ export default function FilterPanel({ module, onResults, pageSize = 50, onFilter
                 </>
               ) : !NO_VALUE_OPS.has(row.operator) ? (
                 lookupOptions ? (
-                  // SON HAL #2 — bu alan bir lookup grubuna bağlı: serbest
-                  // metin yerine DB'de kayıtlı gerçek değerlerden seçilir
-                  // (yazım hatası/typo riski olmadan, tutarlı filtreleme).
+                  // SON HAL #2 (2026-08-20 güncellemesi) — bu alan bir lookup
+                  // grubuna bağlı: serbest metin yerine DB'de bu modülde
+                  // GERÇEKTEN kullanılan (ve doğru Türkçe etiketli) değerlerden
+                  // seçilir — tam lookup kataloğu DEĞİL (bkz. yukarıdaki kesişim).
                   <select className="input flex-1" value={row.value ?? ""} onChange={(e) => set(idx, { value: e.target.value })}>
                     <option value="">— değer seçin —</option>
-                    {lookupOptions.filter((o) => o.is_active !== false).map((o) => (
+                    {lookupOptions.map((o) => (
                       <option key={o.id} value={o.value}>{o.label}</option>
                     ))}
                   </select>

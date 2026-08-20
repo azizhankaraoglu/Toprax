@@ -709,15 +709,24 @@ export default function Parcels() {
             <option value="hayir">Hayır</option>
           </select>
         </div>
-        {lookupActive && (
-          <div className="mt-2 flex items-center gap-2 text-xs text-[var(--text-dim)]">
-            <span><b className="text-white">{visibleParcels.length}</b> parsel eşleşti</span>
-            <button className="underline hover:text-white" data-testid="lf-clear"
-                    onClick={() => { setLf({ il: "", ilce: "", mahalle: "", ada: "", parsel: "", areaMin: "", areaMax: "", ekili: "" }); setAiIds(null); }}>
-              Filtreleri temizle
-            </button>
-          </div>
-        )}
+        <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
+          {lookupActive ? (
+            <div className="flex items-center gap-2 text-xs text-[var(--text-dim)]">
+              <span><b className="text-white">{visibleParcels.length}</b> parsel eşleşti</span>
+              <button className="underline hover:text-white" data-testid="lf-clear"
+                      onClick={() => { setLf({ il: "", ilce: "", mahalle: "", ada: "", parsel: "", areaMin: "", areaMax: "", ekili: "" }); setAiIds(null); }}>
+                Filtreleri temizle
+              </button>
+            </div>
+          ) : <span />}
+          {/* 2026-08-20 (kullanıcı isteği) — AI Asistanı filtrenin SONUNA,
+              buton olarak taşındı (önceden Araçlar menüsünün yanında ayrı
+              bir satırdaydı). */}
+          <AiAssistantBox module="parcels"
+                          onResults={(items) => setAiIds(new Set(items.map((p) => p.id)))}
+                          placeholder='Örn: "Çumra&apos;daki en riskli 20 parseli göster"'
+                          testId="parcels-ai" />
+        </div>
       </div>
 
       {/* Denetim UI düzeltmesi (2026-07-24) — AI Asistanı artık kendi ayrı
@@ -774,11 +783,6 @@ export default function Parcels() {
             </>
           )}
         </div>
-
-        <AiAssistantBox module="parcels"
-                        onResults={(items) => setAiIds(new Set(items.map((p) => p.id)))}
-                        placeholder='Örn: "Çumra&apos;daki en riskli 20 parseli göster"'
-                        testId="parcels-ai" />
 
         {/* Aktif araç, menü kapalıyken de görünür kalmalı — kullanıcı hangi
             modda olduğunu menüyü açmadan bilmeli. */}

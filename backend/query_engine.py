@@ -471,6 +471,41 @@ def register_query_routes(api_router, db, current_user, require_permission, log_
         fields = await get_filterable_map(db, module)
         return {"module": module, "fields": sorted(fields.values(), key=lambda f: f["label"])}
 
+    @api_router.get("/query/{module}/distinct")
+    async def query_distinct(module: str, field: str, user=Depends(current_user)):
+        """
+        2026-08-20 — "Filtrelerde sadece DB'de gerçekten var olan değerler
+        gelsin" şikayeti: `FilterPanel.jsx` (Gelişmiş Filtre, 8+ ekranda)
+        lookup alanlarının (il/ilçe/mahalle vb.) değerlerini `lookup_values`
+        TAM KATALOĞUNDAN çekiyordu (81 il / 973 ilçe) — parselde/çiftçide
+        karşılığı olmasa bile hepsi listede görünüyordu. `parcel_routes.py`'nin
+        `GET /parcels/filter-options`'ı (`db.parcels.distinct(...)`) ZATEN
+        doğru yapıyordu; bu uç AYNI ilkeyi Query Engine'in TÜM modüllerine
+        (Farmers/Contracts/Plantings/Soil/...) genelleştirir — yeni bir
+        yetki/whitelist katmanı İCAT EDİLMEDİ, `get_filterable_map`'in
+        MEVCUT whitelist'i + soft-delete guard'ı aynen kullanılır.
+
+        BİLİNÇLİ SINIR: bu uç sadece FİLTRE/ARAMA ekranları içindir. Kayıt
+        OLUŞTURMA formları (`DynamicFieldsSection`/`QuickAdd`) BİLİNÇLİ
+        OLARAK bu uca bağlanmadı — henüz hiç parseli/çiftçisi olmayan bir
+        il/ilçeye İLK kaydı girebilmek için tam katalogda kalmaları gerekir
+        (kullanıcı kararı, 2026-08-20).
+        """
+        if module not in MODULE_COLLECTIONS:
+            raise HTTPException(404, f"Bilinmeyen modül: {module}")
+        from permissions import get_effective_permissions
+        perm_key = MODULE_PERMISSIONS[module]
+        perms = await get_effective_permissions(user, db)
+        if perm_key not in perms:
+            raise HTTPException(403, f"'{perm_key}' yetkiniz yok")
+        filterable = await get_filterable_map(db, module)
+        if field not in filterable:
+            raise HTTPException(400, f"'{field}' bu modülde filtrelenebilir değil")
+        collection = getattr(db, MODULE_COLLECTIONS[module])
+        values = await collection.distinct(field, {"is_active": {"$ne": False}})
+        values = sorted({v for v in values if v not in (None, "")}, key=lambda x: str(x))
+        return {"module": module, "field": field, "values": values}
+
     @api_router.post("/query/{module}")
     async def run_query(module: str, body: QueryRequest, request: Request, user=Depends(current_user)):
         filters = [f.model_dump() for f in body.filters]
