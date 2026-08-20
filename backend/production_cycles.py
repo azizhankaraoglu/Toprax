@@ -129,7 +129,10 @@ def register_production_cycle_routes(api_router, db, current_user, require_permi
         farmer = await db.farmers.find_one({"id": cycle["farmer_id"]}, {"_id": 0})
         parcel = await db.parcels.find_one({"id": cycle["parcel_id"]}, {"_id": 0})
         contracts = await db.contracts.find({"production_cycle_id": cycle_id}, {"_id": 0}).to_list(50)
-        plantings = await db.plantings.find({"production_cycle_id": cycle_id}, {"_id": 0}).to_list(50)
+        # 2026-08-20 — onay bekleyen çiftçi beyanları (is_active=False) sezon
+        # detayında "resmi" bir ekim kaydı gibi görünmesin.
+        plantings = await db.plantings.find(
+            {"production_cycle_id": cycle_id, "is_active": {"$ne": False}}, {"_id": 0}).to_list(50)
         soil_samples = await db.soil_samples.find({"production_cycle_id": cycle_id}, {"_id": 0}).to_list(50)
         return {
             "cycle": cycle,

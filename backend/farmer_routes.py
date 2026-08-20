@@ -347,6 +347,82 @@ def register_farmer_routes(api_router, db, current_user, require_permission, req
         ).sort([("scheduled_at", -1)]).to_list(50)
 
 
+    class FarmerPlantingCreate(BaseModel):
+        """2026-08-20 (OTURUM-DEVAM madde 14 — çiftçi ekim self-servisi).
+        Kullanıcı kararı: çiftçinin girdiği ekim kaydı DOĞRUDAN resmi
+        sayılmaz — `review_status="beklemede"` + `is_active=False` ile
+        açılır, personel `PUT /plantings/{id}/review` ile onaylayana kadar
+        `GET /plantings`, Query Engine, crop_classification.py eğitim
+        verisi ve ProductionCycle/ParcelDetail görünümlerinde HİÇ görünmez
+        (bkz. data_entry.py'nin review endpoint'i + bu turda eklenen
+        is_active filtreleri)."""
+        parcel_id: str
+        season: int
+        crop: str = "Şeker Pancarı"
+        variety: str
+        planting_date: str
+        expected_harvest_date: str
+
+    @api_router.post("/farmer/planting")
+    async def add_farmer_planting(body: FarmerPlantingCreate, request: Request, user=Depends(current_user),
+                                   _feat=Depends(require_feature("planting"))):
+        """Çiftçi kendi ekim kaydını GİRER ama bu kayıt personel onaylayana
+        kadar 'resmi' sayılmaz (bkz. sınıf docstring'i)."""
+        from idempotency import get_cached_response, save_response
+        idem_key, cached = await get_cached_response(db, request, "farmer_planting:create")
+        if cached is not None:
+            return cached
+
+        if user.get("role") != "ciftci" or not user.get("farmer_id"):
+            raise HTTPException(403, "Sadece çiftçi ekleyebilir")
+
+        parcel = await db.parcels.find_one({"id": body.parcel_id}, {"_id": 0})
+        if not parcel:
+            raise HTTPException(404, "Parsel bulunamadı")
+        if parcel.get("farmer_id") != user["farmer_id"]:
+            raise HTTPException(403, "Bu parsel size ait değil")
+
+        from production_cycles import ensure_cycle_for
+        doc = body.model_dump()
+        doc["id"] = str(uuid.uuid4())
+        doc["farmer_id"] = user["farmer_id"]
+        doc["region_id"] = parcel.get("region_id")
+        doc["stage"] = "ekim"
+        doc["actual_harvest_date"] = None
+        doc["production_cycle_id"] = await ensure_cycle_for(db, body.parcel_id, body.season, user["farmer_id"])
+        doc["source"] = "farmer_portal"
+        doc["review_status"] = "beklemede"
+        doc["is_active"] = False
+        doc["created_at"] = datetime.now(timezone.utc).isoformat()
+        await db.plantings.insert_one(doc)
+        doc.pop("_id", None)
+
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "type": "ekim_onay_bekliyor",
+            "title": "Onay bekleyen ekim kaydı",
+            "message": f"{user.get('full_name', 'Çiftçi')} {parcel.get('name', 'bir parsel')} için "
+                       f"'{body.variety}' ekim kaydı gönderdi, onayınızı bekliyor",
+            "channel": "in_app", "status": "yeni", "farmer_id": user["farmer_id"],
+            "module": "plantings", "entity_id": doc["id"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+        await save_response(db, idem_key, "farmer_planting:create", doc)
+        return doc
+
+
+    @api_router.get("/farmer/plantings")
+    async def list_farmer_plantings(user=Depends(current_user), _feat=Depends(require_feature("planting"))):
+        """Çiftçinin kendi ekim kayıtları — onay durumuyla birlikte (beklemede
+        olanlar da dahil, sadece burada görünürler)."""
+        if user.get("role") != "ciftci" or not user.get("farmer_id"):
+            raise HTTPException(403, "Sadece çiftçi görebilir")
+        return await db.plantings.find(
+            {"farmer_id": user["farmer_id"]}, {"_id": 0}
+        ).sort([("created_at", -1)]).to_list(50)
+
+
     @api_router.post("/farmer/soil-sample")
     async def add_soil_sample(body: SoilSampleCreate, user=Depends(current_user)):
         """Çiftçi toprak analizi sonucu ekler"""

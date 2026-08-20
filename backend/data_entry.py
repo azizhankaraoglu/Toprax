@@ -374,6 +374,49 @@ def register_data_entry_routes(api_router, db, current_user, require_permission,
         await log_audit(db, user, action="update", entity="planting", entity_id=planting_id, old_value=old, new_value=new, request=request)
         return new
 
+    # ---- 2026-08-20 (OTURUM-DEVAM madde 14 — çiftçi ekim self-servisi) -------
+    # Kullanıcı kararı: çiftçinin mobilden girdiği ekim kaydı DOĞRUDAN resmi
+    # sayılmaz — `is_active=False` + `review_status="beklemede"` ile açılır
+    # (farmer_routes.py POST /farmer/planting). Bu haliyle `GET /plantings`,
+    # `FilterPanel`/Query Engine (`soft_delete_guard`), crop_classification.py
+    # ve parcel_routes.py'nin embedded listesi ZATEN is_active=False kayıtları
+    # ELEDİĞİ için (bkz. bu iterasyonda eklenen filtreler) "resmi" hiçbir
+    # yerde görünmez — personel burada onaylayınca `is_active=True` olup
+    # normal bir Planting'den farksız hale gelir.
+    class PlantingReviewDecision(BaseModel):
+        decision: str                      # onayla | reddet
+        note: Optional[str] = None
+
+    @api_router.get("/plantings/pending-review")
+    async def list_pending_plantings(user=Depends(require_permission("plantings:edit")),
+                                      _feat=Depends(require_feature("planting"))):
+        return await db.plantings.find(
+            {"review_status": "beklemede"}, {"_id": 0}
+        ).sort("created_at", -1).to_list(200)
+
+    @api_router.put("/plantings/{planting_id}/review")
+    async def review_planting(planting_id: str, body: PlantingReviewDecision, request: Request,
+                               user=Depends(require_permission("plantings:edit")), _feat=Depends(require_feature("planting"))):
+        old = await db.plantings.find_one({"id": planting_id}, {"_id": 0})
+        if not old:
+            raise HTTPException(404, "Ekim kaydı bulunamadı")
+        if old.get("review_status") != "beklemede":
+            raise HTTPException(400, "Bu kayıt onay beklemiyor")
+        if body.decision not in ("onayla", "reddet"):
+            raise HTTPException(400, "decision 'onayla' veya 'reddet' olmalı")
+        updates = {
+            "review_status": "onaylandi" if body.decision == "onayla" else "reddedildi",
+            "is_active": body.decision == "onayla",
+            "reviewed_by": user.get("full_name") or user.get("email"),
+            "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            "review_note": body.note,
+        }
+        await db.plantings.update_one({"id": planting_id}, {"$set": updates})
+        new = await db.plantings.find_one({"id": planting_id}, {"_id": 0})
+        await log_audit(db, user, action="review", entity="planting", entity_id=planting_id,
+                         old_value=old, new_value=new, request=request)
+        return new
+
     @api_router.delete("/plantings/{planting_id}")
     async def delete_planting(planting_id: str, request: Request,
                                user=Depends(require_permission("plantings:delete")), _feat=Depends(require_feature("planting"))):

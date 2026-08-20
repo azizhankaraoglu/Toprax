@@ -154,8 +154,11 @@ def register_parcel_routes(api_router, db, current_user, require_permission, req
             raise HTTPException(404, "Parsel bulunamadı")
     
         farmer = await db.farmers.find_one({"id": p["farmer_id"]}, {"_id": 0})
+        # 2026-08-20 — is_active filtresi: çiftçinin mobilden gönderip henüz
+        # personel onaylamadığı ekim kayıtları (review_status="beklemede",
+        # is_active=False) burada da "resmi" gibi görünmesin.
         plantings = await db.plantings.find(
-            {"parcel_id": parcel_id}, {"_id": 0}
+            {"parcel_id": parcel_id, "is_active": {"$ne": False}}, {"_id": 0}
         ).sort([("season", -1)]).to_list(50)
         soil = await db.soil_samples.find(
             {"parcel_id": parcel_id}, {"_id": 0}

@@ -134,6 +134,24 @@ export default function EkimKaydi() {
   const [sel, setSel] = useState(new Set());
   const [busyDelete, setBusyDelete] = useState(false);
 
+  // 2026-08-20 (OTURUM-DEVAM madde 14) — çiftçinin mobilden gönderdiği ekim
+  // beyanları burada onaylanır/reddedilir; onaylanana kadar HİÇBİR resmi
+  // listede görünmezler (bkz. backend/data_entry.py review endpoint'i).
+  const [pending, setPending] = useState([]);
+  const [pendingBusy, setPendingBusy] = useState(null);
+  const loadPending = () => api.get("/plantings/pending-review").then((r) => setPending(r.data)).catch(() => {});
+  useEffect(() => { loadPending(); }, []);
+  async function reviewPlanting(id, decision) {
+    setPendingBusy(id);
+    try {
+      await api.put(`/plantings/${id}/review`, { decision });
+      setPending((prev) => prev.filter((p) => p.id !== id));
+      if (decision === "onayla") load();
+    } finally {
+      setPendingBusy(null);
+    }
+  }
+
   const load = () => {
     const p = { season: Number(season) };
     if (parcelFilter) p.parcel_id = parcelFilter;
@@ -205,6 +223,28 @@ export default function EkimKaydi() {
           <b>{filterParcelName}</b>
           <button className="text-[var(--text-dim)] hover:text-white ml-1"
                   onClick={() => setParams({})} title="Filtreyi kaldır"><X size={14} /></button>
+        </div>
+      )}
+
+      {pending.length > 0 && (
+        <div className="card p-4 mb-4 border-l-4 border-[var(--warning,#F59E0B)]" data-testid="planting-pending-review">
+          <h3 className="text-sm font-medium mb-3">Onay Bekleyen Çiftçi Ekim Beyanları ({pending.length})</h3>
+          <div className="space-y-2">
+            {pending.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2 text-sm">
+                <div>
+                  <div>{parcelsById.get(p.parcel_id)?.name || p.parcel_id} — {p.variety} ({p.season})</div>
+                  <div className="text-xs text-[var(--text-dim)]">Ekim: {p.planting_date} · Beklenen hasat: {p.expected_harvest_date}</div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={() => reviewPlanting(p.id, "onayla")} disabled={pendingBusy === p.id}
+                          className="btn btn-primary text-xs" data-testid={`planting-approve-${p.id}`}>Onayla</button>
+                  <button onClick={() => reviewPlanting(p.id, "reddet")} disabled={pendingBusy === p.id}
+                          className="btn btn-ghost text-xs text-red-400" data-testid={`planting-reject-${p.id}`}>Reddet</button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

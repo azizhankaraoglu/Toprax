@@ -644,8 +644,10 @@ def register_crop_classification_routes(api_router, db, current_user, require_pe
         parsel+sezon iki kez eklenmez (catalog_registry seed deseniyle AYNI).
         """
         season = season or date.today().year
+        # 2026-08-20 — is_active filtresi: onay bekleyen çiftçi beyanları
+        # (review_status="beklemede") eğitim verisine KARIŞMASIN.
         plantings = await db.plantings.find(
-            {"season": season, "crop": {"$nin": [None, ""]}}, {"_id": 0}).limit(
+            {"season": season, "crop": {"$nin": [None, ""]}, "is_active": {"$ne": False}}, {"_id": 0}).limit(
             max(1, min(limit, 2000))).to_list(2000)
         created = skipped = no_series = 0
         for pl in plantings:

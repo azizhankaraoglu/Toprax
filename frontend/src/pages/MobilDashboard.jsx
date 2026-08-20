@@ -47,7 +47,7 @@ import {
   Wifi, WifiOff, LayoutDashboard, ListChecks, Camera, MapPin, CloudUpload,
   CheckCircle2, Clock, RefreshCw, ThumbsUp, ThumbsDown, Truck, Flag,
   PlayCircle, Send, Lock, XCircle, RotateCcw, FileText, Droplets,
-  Satellite, Wallet, KeyRound, Video, Star, MessageCircle, CalendarClock,
+  Satellite, Wallet, KeyRound, Video, Star, MessageCircle, CalendarClock, Sprout,
 } from "lucide-react";
 
 const MENU_ROUTES = {
@@ -251,6 +251,13 @@ export default function MobilDashboard() {
   const [caseMsgText, setCaseMsgText] = useState("");
   const [caseMsgBusy, setCaseMsgBusy] = useState(false);
 
+  // --- 2026-08-20 (madde 14) — ekim self-servisi. Kullanıcı kararı: bu
+  // kayıt DOĞRUDAN resmi sayılmaz, personel onayına düşer (bkz. backend/
+  // farmer_routes.py POST /farmer/planting docstring'i).
+  const [myPlantings, setMyPlantings] = useState([]);
+  const [plantingForm, setPlantingForm] = useState({ parcel_id: "", season: new Date().getFullYear(), variety: "", planting_date: "", expected_harvest_date: "" });
+  const [plantingBusy, setPlantingBusy] = useState(false);
+
   // --- IT-39: teslim kodu ---
   const [deliverableRequests, setDeliverableRequests] = useState([]);
   const [generatedCodes, setGeneratedCodes] = useState({}); // request_id -> {code, expires_at}
@@ -384,6 +391,7 @@ export default function MobilDashboard() {
       api.get("/farmer/appointments").then((r) => setFarmerAppointments(r.data)).catch(() => {});
       api.get("/case-categories").then((r) => setCaseCategories(r.data)).catch(() => {});
       api.get("/portal/cases").then((r) => setMyCases(r.data)).catch(() => {});
+      api.get("/farmer/plantings").then((r) => setMyPlantings(r.data)).catch(() => {});
     } else {
       api.get("/support-requests", { params: { status: "teslim_edildi" } }).then((r) => setDeliverableRequests(r.data)).catch(() => {});
     }
@@ -617,6 +625,34 @@ export default function MobilDashboard() {
       }
     } finally {
       setApptBusy(false);
+    }
+  }
+
+  async function submitPlanting(e) {
+    e.preventDefault();
+    if (plantingBusy || !plantingForm.parcel_id || !plantingForm.variety.trim() ||
+        !plantingForm.planting_date || !plantingForm.expected_harvest_date) return;
+    setPlantingBusy(true);
+    setSubmitMsg("");
+    const payload = { ...plantingForm, season: Number(plantingForm.season), variety: plantingForm.variety.trim() };
+    const idemKey = makeIdempotencyKey();
+    try {
+      if (!navigator.onLine) throw new Error("offline");
+      const { data } = await api.post("/farmer/planting", payload, { headers: { "X-Idempotency-Key": idemKey } });
+      setMyPlantings((prev) => [data, ...prev]);
+      setSubmitMsg("Ekim kaydı gönderildi — personel onayı bekliyor.");
+      setPlantingForm({ parcel_id: "", season: new Date().getFullYear(), variety: "", planting_date: "", expected_harvest_date: "" });
+    } catch (err) {
+      if (!navigator.onLine || err.message === "offline" || !err.response) {
+        await enqueue({ method: "post", url: "/farmer/planting", body: payload, idempotency_key: idemKey });
+        setSubmitMsg("Bağlantı yok — ekim kaydı cihazda saklandı, bağlantı gelince gönderilecek.");
+        setPlantingForm({ parcel_id: "", season: new Date().getFullYear(), variety: "", planting_date: "", expected_harvest_date: "" });
+        refreshQueueCount();
+      } else {
+        setSubmitMsg("Hata: " + (err.response?.data?.detail || "Ekim kaydı oluşturulamadı"));
+      }
+    } finally {
+      setPlantingBusy(false);
     }
   }
 
@@ -1159,6 +1195,42 @@ export default function MobilDashboard() {
               <div key={a.id} className="flex items-center justify-between border-b border-[var(--border)] py-1.5 text-xs">
                 <span>{(a.scheduled_at || "").replace("T", " ").slice(0, 16)} — {a.truck_plate}</span>
                 <span className="badge badge-neutral text-[10px]">{a.status}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* 2026-08-20 (madde 14) — Ekim self-servisi: kayıt DOĞRUDAN
+              resmi sayılmaz, personel onayı bekler (kullanıcı kararı). */}
+          <div className="card p-4 mb-4" data-testid="farmer-planting-panel">
+            <h3 className="text-sm font-medium mb-3 flex items-center gap-2"><Sprout size={14} className="text-[var(--primary)]"/>Ekim Kaydı Ekle</h3>
+            <form onSubmit={submitPlanting} className="space-y-2 mb-3">
+              <select className="input text-sm" required value={plantingForm.parcel_id}
+                onChange={(e) => setPlantingForm((p) => ({ ...p, parcel_id: e.target.value }))} data-testid="planting-parcel-select">
+                <option value="">Parsel seç...</option>
+                {farmerParcels.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <div className="flex gap-2">
+                <input type="number" className="input text-sm flex-1" required placeholder="Sezon"
+                  value={plantingForm.season} onChange={(e) => setPlantingForm((p) => ({ ...p, season: e.target.value }))} />
+                <input className="input text-sm flex-1" required placeholder="Çeşit" value={plantingForm.variety}
+                  onChange={(e) => setPlantingForm((p) => ({ ...p, variety: e.target.value }))} data-testid="planting-variety"/>
+              </div>
+              <div className="flex gap-2">
+                <input type="date" className="input text-sm flex-1" required value={plantingForm.planting_date}
+                  onChange={(e) => setPlantingForm((p) => ({ ...p, planting_date: e.target.value }))} />
+                <input type="date" className="input text-sm flex-1" required value={plantingForm.expected_harvest_date}
+                  onChange={(e) => setPlantingForm((p) => ({ ...p, expected_harvest_date: e.target.value }))} />
+              </div>
+              <button type="submit" disabled={plantingBusy} className="btn btn-primary w-full text-xs" data-testid="planting-submit">Gönder (Onaya Düşer)</button>
+            </form>
+            {myPlantings.length === 0 ? (
+              <div className="text-xs text-[var(--text-dim)]">Kayıtlı ekim beyanınız yok.</div>
+            ) : myPlantings.slice(0, 5).map((p) => (
+              <div key={p.id} className="flex items-center justify-between border-b border-[var(--border)] py-1.5 text-xs">
+                <span>{p.variety} — {p.planting_date}</span>
+                <span className={`badge text-[10px] ${p.review_status === "onaylandi" ? "badge-a" : p.review_status === "reddedildi" ? "badge-d" : "badge-c"}`}>
+                  {p.review_status === "onaylandi" ? "Onaylandı" : p.review_status === "reddedildi" ? "Reddedildi" : "Beklemede"}
+                </span>
               </div>
             ))}
           </div>
