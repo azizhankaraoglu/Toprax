@@ -34,11 +34,12 @@ komutlarıyla birlikte gerçek durumu gösteriyor.
 |---|---|---|
 | 11 | **Bildirim merkezi TAMAMLANDI** — gün bazlı gruplama zaten vardı (`Other.jsx`); bu turda `archived` alanı + `PUT /notifications/{id}/archive`/`/unarchive` + `target_user_id` ile kişiye özel hedefleme (`_notification_scope_filter`, broadcast geriye uyumlu) eklendi. Bildirimler ekranına "Arşivlenenler" filtresi + satır bazlı arşivle/geri al butonu. Build v1.4/20082026-1138 olarak derlendi, Docker'a alındı, GitHub'a push edildi (`karar-destek-2026-08-19` dalı, commit 505dda8). | ✅ |
 
-## ❌ HİÇ YAPILMADI — sıradaki iş
+| 8 | **Mobil derinleştirme TAMAMLANDI.** Kendi verisini girme zaten vardı (sulama/toprak/formlar). Fabrika randevusu: `data_entry.py`'nin ZATEN VAR OLAN `appointments` modeli `POST/GET /farmer/appointment*` ile çiftçiye self-servis açıldı — yeni bir veri modeli İCAT EDİLMEDİ. Uzmanla iletişim + kooperatifle çift yönlü yazışma: `case_management.py`'nin (IT-28 "Bize Ulaşın") `/portal/cases*` uçları ZATEN tam bidirectional mesajlaşma sağlıyordu (kategori seç → talep aç → personel/çiftçi karşılıklı mesaj) ama hiç mobil UI'sı yoktu — `MobilDashboard.jsx`'e eklendi. `case_categories` koleksiyonu boştu, 14 varsayılan kategoriyle seed edildi. Build v1.5/20082026-1243, GitHub'a push edildi (commit c1e838b). | ✅ |
+
+## ❌ HİÇ YAPILMADI / ERTELENDİ — sıradaki iş
 
 | # | Konu | Durum |
 |---|---|---|
-| 8 | **Mobil derinleştirme** — uzmanla iletişim, kendi verisini girme, fabrika randevusu, kooperatifle çift yönlü yazışma | Kod yazılmadı |
 | 9 | **VRA (değişken oranlı uygulama)** — zon haritası → shapefile/ISOXML dışa aktarma | Kod yazılmadı |
 | 10 | **Demo senaryo oynatıcı** — `scripts/demo_scenario.py` + "Senaryoyu Oynat" ekranı | Kod yazılmadı |
 | 12 | **Harita Stüdyosu elden geçirme** | Kullanıcı bilinçli erteledi ("en son onu beraber elden geçirelim") |
