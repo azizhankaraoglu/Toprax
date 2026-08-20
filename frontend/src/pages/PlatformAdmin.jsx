@@ -89,7 +89,9 @@ export default function PlatformAdmin() {
     .then((r) => setTenants(r.data))
     .catch((e) => setError(e.response?.data?.detail || "Yüklenemedi"));
 
-  useEffect(load, []);
+  // Bug fix (2026-08-20): `load` bir Promise döndürüyor — useEffect(load, [])
+  // React'e bunu cleanup fonksiyonu sanıp unmount'ta ÇAĞIRMASINA yol açıyordu.
+  useEffect(() => { load(); }, []);
 
   useEffect(() => {
     if (view === "stats") api.get("/god-mode/stats").then((r) => setStats(r.data));

@@ -111,7 +111,12 @@ function MapControls({
 
   return (
     <div className="absolute top-3 right-3 z-[500] flex flex-col items-end gap-2" data-testid="map-controls">
-      <div className="flex gap-1.5">
+      {/* Bug fix (2026-08-20) — bu iki buton `.btn-ghost` (transparent zemin)
+          kullanıyordu ve doğrudan uydu görüntüsünün ÜZERİNE bindirilmişti;
+          tarla/toprak renklerine karışıp "görünmüyor" şikayetine yol açtı.
+          `MapLegend`'in (yukarıda) ZATEN doğru yaptığı gibi opak `card` zemin +
+          gölge eklendi — yeni bir tasarım dili icat edilmedi. */}
+      <div className="flex gap-1.5 card p-1.5 shadow-lg">
         <Btn id="layers" icon={Layers} label="Katmanlar" />
         <Btn id="basemap" icon={MapIcon} label="Altlık" />
       </div>

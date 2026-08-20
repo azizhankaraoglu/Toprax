@@ -14,7 +14,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "@/api";
-import { MapContainer, TileLayer, Polygon, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Polygon, Popup, useMap } from "react-leaflet";
+import * as turf from "@turf/turf";
 import AdminAreaPopupLinks from "@/components/AdminAreaPopupLinks";
 import MapClickAdminPopup from "@/components/MapClickAdminPopup";
 import { ArrowLeft, MapPin, Droplets, FlaskConical, Sprout, Award, Satellite, Radio, Plane, Pencil, Check, X, Plus, Calendar, Trash2, Landmark, Flame } from "lucide-react";
@@ -37,6 +38,23 @@ const SOIL_TYPES = ["Killi", "Kumlu", "Tınlı", "Kireçli", "Killi-Tınlı"];
 const IRRIGATION_TYPES = ["Damla", "Yağmurlama", "Karık", "Yok"];
 const CYCLE_STATUS_LABELS = { planning: "Planlama", active: "Aktif", harvesting: "Hasat", completed: "Tamamlandı", cancelled: "İptal" };
 const CYCLE_STATUS_BADGE = { planning: "badge-neutral", active: "badge-b", harvesting: "badge-c", completed: "badge-a", cancelled: "badge-d" };
+
+/** 2026-08-20 — parsel değişince (veya ilk mount'ta) haritayı GERÇEKTEN
+ *  parselin ortasına uçurur. `Parcels.jsx`'teki AYNI `MapFlyTo` deseni:
+ *  `MapContainer`'ın `center` prop'u SADECE ilk mount'ta okunur (react-leaflet
+ *  gotcha'sı, CLAUDE.md'de belgeli) — bu yüzden parselden parsele React Router
+ *  ile geçişte (tam sayfa yenilemesi olmadan) harita hiç hareket etmiyordu. */
+function MapFlyTo({ target }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!target?.geometry?.coordinates?.[0]?.[0]) return;
+    try {
+      const c = turf.centroid(target.geometry).geometry.coordinates;
+      map.flyTo([c[1], c[0]], 17, { duration: 0.6 });
+    } catch { /* geometri bozuksa sessizce geç */ }
+  }, [target, map]);
+  return null;
+}
 
 export default function ParcelDetail() {
   const { id } = useParams();
@@ -201,8 +219,20 @@ export default function ParcelDetail() {
   if (!data) return <div className="p-10 text-[var(--text-dim)]">Yükleniyor…</div>;
 
   const { parcel, farmer, plantings, soil_samples, irrigation_events, yields, tasks, iot_sensors = [], drone_missions = [], contracts = [] } = data;
-  const centerLat = parcel.geometry?.coordinates[0][0][1] || 39.5;
-  const centerLng = parcel.geometry?.coordinates[0][0][0] || 33.5;
+  // Bug fix (2026-08-20): ÖNCEDEN poligonun İLK KÖŞE NOKTASI merkez sayılıyordu
+  // (`coordinates[0][0]`) — düzgün olmayan parsellerde bu köşede kalıp harita
+  // parseli düzgün ortalamıyordu. Artık gerçek centroid kullanılıyor (`MapFlyTo`
+  // ile AYNI hesap, `Parcels.jsx`'teki emsalle tutarlı).
+  let centerLat = 39.5, centerLng = 33.5;
+  if (parcel.geometry?.coordinates?.[0]?.[0]) {
+    try {
+      const c = turf.centroid(parcel.geometry).geometry.coordinates;
+      centerLng = c[0]; centerLat = c[1];
+    } catch {
+      centerLat = parcel.geometry.coordinates[0][0][1];
+      centerLng = parcel.geometry.coordinates[0][0][0];
+    }
+  }
   const riskColor = RISK_COLORS[parcel.risk_level] || "#4ade80";
 
   return (
@@ -223,6 +253,7 @@ export default function ParcelDetail() {
             // basemap tanımıyla AYNI Esri URL'leri (anahtarsız/ücretsiz) —
             // yeni bir basemap kataloğu İCAT EDİLMEDİ.
             <MapContainer center={[centerLat, centerLng]} zoom={17} style={{ height: "100%", width: "100%" }}>
+              <MapFlyTo target={parcel} />
               <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                          attribution="Tiles &copy; Esri"/>
               <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"

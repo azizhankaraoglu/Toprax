@@ -151,10 +151,13 @@ export default function WorkspaceDrawer() {
                 className={`w-full text-left p-3 border-b border-[var(--border)] hover:bg-[var(--surface-2)] min-w-0 ${n.status !== "okundu" ? "bg-[var(--primary)]/5" : ""}`}
               >
                 <div className="flex items-start justify-between gap-2 min-w-0">
-                  {/* Denetim (2026-07-24): truncate uzun Türkçe başlıkları tek
-                      satırda kesip "yazılar yarım görünüyor" şikayetine yol
-                      açıyordu — 2 satıra kadar sarılır, sonrası kırpılır. */}
-                  <div className="text-sm font-medium break-words line-clamp-2 min-w-0">{n.title}</div>
+                  {/* 2026-08-20 — `line-clamp-2` kaldırıldı: uzun Türkçe
+                      başlıklar 2 satırdan sonra "..." ile GERÇEKTEN kesiliyordu
+                      ve kullanıcı bunu "yarım görünüyor" olarak bildirdi (2026-
+                      07-24'teki tek-satır `truncate` düzeltmesi yeterli
+                      değilmiş). Artık tam metin sarılır — çekmece kartı
+                      uzayabilir, ama başlık asla kırpılmaz. */}
+                  <div className="text-sm font-medium break-words min-w-0">{n.title}</div>
                   {n.status !== "okundu" && <span className="w-2 h-2 rounded-full bg-[var(--primary)] mt-1.5 shrink-0" />}
                 </div>
                 {/* break-words — uzun/boşluksuz mesajlar (URL vb.) 420px'lik

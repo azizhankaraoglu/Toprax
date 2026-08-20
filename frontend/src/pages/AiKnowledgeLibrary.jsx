@@ -250,7 +250,11 @@ function ValidationTab() {
   const [queue, setQueue] = useState([]);
   const [msg, setMsg] = useState("");
   const load = () => api.get("/ai/validation-queue?status=bekliyor").then((r) => setQueue(r.data.items || [])).catch(() => {});
-  useEffect(load, []);
+  // Bug fix (2026-08-20): `load` bir Promise döndürüyor — useEffect(load, [])
+  // React'e bunu cleanup fonksiyonu sanıp unmount'ta ÇAĞIRMASINA yol açıyordu
+  // ("l is not a function" / Promise, fonksiyon değil). Sekmeler arası geçişte
+  // (bileşen unmount olunca) tüm sayfayı düşürüyordu.
+  useEffect(() => { load(); }, []);
 
   async function decide(item, decision) {
     try { await api.post(`/ai/validation-queue/${item.id}/decide`, { decision }); setMsg(`Karar: ${decision}`); load(); }
@@ -293,7 +297,8 @@ function ModelsTab() {
   const [msg, setMsg] = useState("");
   const [nm, setNm] = useState({ name: "", task_type: "classification" });
   const load = () => api.get("/ai/models").then((r) => setModels(r.data.items || [])).catch(() => {});
-  useEffect(load, []);
+  // Bug fix (2026-08-20): aynı Promise-as-cleanup hatası (bkz. ValidationTab).
+  useEffect(() => { load(); }, []);
 
   async function create() {
     if (!nm.name) return;

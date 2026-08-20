@@ -44,7 +44,9 @@ export function FormListesi() {
   const [forms, setForms] = useState([]);
 
   const load = () => api.get("/forms").then((r) => setForms(r.data));
-  useEffect(load, []);
+  // Bug fix (2026-08-20): `load` bir Promise döndürüyor — useEffect(load, [])
+  // React'e bunu cleanup fonksiyonu sanıp unmount'ta ÇAĞIRMASINA yol açıyordu.
+  useEffect(() => { load(); }, []);
 
   async function deleteForm(id) {
     if (!window.confirm("Form ve tüm yanıtları silinecek. Emin misin?")) return;

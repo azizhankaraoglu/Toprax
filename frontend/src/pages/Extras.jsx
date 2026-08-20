@@ -76,7 +76,10 @@ export function AyarlarEntegrasyon() {
     });
     setForms(initialForms);
   });
-  useEffect(load, []);
+  // Bug fix (2026-08-20): `load` bir Promise döndürüyor — useEffect(load, [])
+  // React'e bunu cleanup fonksiyonu sanıp unmount'ta ÇAĞIRMASINA yol açıyordu
+  // ("l is not a function" / Promise, fonksiyon değil).
+  useEffect(() => { load(); }, []);
 
   function setField(itype, key, value) {
     setForms((f) => ({ ...f, [itype]: { ...f[itype], config: { ...f[itype]?.config, [key]: value } } }));

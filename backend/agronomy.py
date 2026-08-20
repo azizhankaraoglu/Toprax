@@ -802,7 +802,11 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
         # olurdu. Analiz `/solar/parcels/{id}` ile bir kez yapılır ve parselde
         # saklanır; burada yalnızca okunur.
         from remote_sensing.solar import solar_signals
-        sig.update(solar_signals(None, parcel))
+        # Bug fix (2026-08-20): solar_signals async tanımlı ama await'siz
+        # çağrılıyordu — dict.update() coroutine'i iterate etmeye çalışıp
+        # "TypeError: 'coroutine' object is not iterable" ile HER analiz
+        # çağrısında %100 500 dönüyordu (canlı traceback'te doğrulandı).
+        sig.update(await solar_signals(None, parcel))
 
         # --- Toprak biyolojisi — en güncel kayıt ---
         from soil_biology import biology_signals
