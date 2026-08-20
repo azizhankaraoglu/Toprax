@@ -47,7 +47,7 @@ import {
   Wifi, WifiOff, LayoutDashboard, ListChecks, Camera, MapPin, CloudUpload,
   CheckCircle2, Clock, RefreshCw, ThumbsUp, ThumbsDown, Truck, Flag,
   PlayCircle, Send, Lock, XCircle, RotateCcw, FileText, Droplets,
-  Satellite, Wallet, KeyRound, Video, Star,
+  Satellite, Wallet, KeyRound, Video, Star, MessageCircle, CalendarClock,
 } from "lucide-react";
 
 const MENU_ROUTES = {
@@ -230,6 +230,27 @@ export default function MobilDashboard() {
   const [supportForm, setSupportForm] = useState({ production_cycle_id: "", support_type_id: "", requested_amount: "" });
   const [supportBusy, setSupportBusy] = useState(false);
 
+  // --- 2026-08-20 (FAZ 13 madde 8) — fabrika randevusu self-servisi.
+  // YENİ bir veri modeli YOK: `data_entry.py`'nin ZATEN VAR OLAN
+  // `appointments` koleksiyonu (personelin `/logistics/appointments`'ıyla
+  // AYNI şema) `/farmer/appointment*` uçlarıyla çiftçiye açıldı.
+  const [farmerAppointments, setFarmerAppointments] = useState([]);
+  const [apptForm, setApptForm] = useState({ scheduled_at: "", truck_plate: "", estimated_ton: "" });
+  const [apptBusy, setApptBusy] = useState(false);
+
+  // --- 2026-08-20 (FAZ 13 madde 8) — uzmanla iletişim + kooperatifle çift
+  // yönlü yazışma. YENİ bir backend YAZILMADI: `case_management.py`'nin
+  // (IT-28 "Bize Ulaşın") `/portal/cases*` uçları ZATEN tam bidirectional
+  // mesajlaşma sağlıyordu, sadece mobil UI'sı hiç yazılmamıştı.
+  const [caseCategories, setCaseCategories] = useState([]);
+  const [myCases, setMyCases] = useState([]);
+  const [caseForm, setCaseForm] = useState({ subject: "", category_id: "", description: "" });
+  const [caseBusy, setCaseBusy] = useState(false);
+  const [selectedCaseId, setSelectedCaseId] = useState("");
+  const [caseMessages, setCaseMessages] = useState([]);
+  const [caseMsgText, setCaseMsgText] = useState("");
+  const [caseMsgBusy, setCaseMsgBusy] = useState(false);
+
   // --- IT-39: teslim kodu ---
   const [deliverableRequests, setDeliverableRequests] = useState([]);
   const [generatedCodes, setGeneratedCodes] = useState({}); // request_id -> {code, expires_at}
@@ -360,6 +381,9 @@ export default function MobilDashboard() {
       api.get("/portal/visits").then((r) => setMyVisits(r.data)).catch(() => {});
       api.get("/portal/production-cycles").then((r) => setSupportCycles(r.data)).catch(() => {});
       api.get("/portal/support-types").then((r) => setSupportTypes(r.data)).catch(() => {});
+      api.get("/farmer/appointments").then((r) => setFarmerAppointments(r.data)).catch(() => {});
+      api.get("/case-categories").then((r) => setCaseCategories(r.data)).catch(() => {});
+      api.get("/portal/cases").then((r) => setMyCases(r.data)).catch(() => {});
     } else {
       api.get("/support-requests", { params: { status: "teslim_edildi" } }).then((r) => setDeliverableRequests(r.data)).catch(() => {});
     }
@@ -563,6 +587,76 @@ export default function MobilDashboard() {
       }
     } finally {
       setSupportBusy(false);
+    }
+  }
+
+  async function submitAppointment(e) {
+    e.preventDefault();
+    if (apptBusy || !apptForm.scheduled_at || !apptForm.truck_plate.trim() || !apptForm.estimated_ton) return;
+    setApptBusy(true);
+    setSubmitMsg("");
+    const payload = {
+      scheduled_at: apptForm.scheduled_at, truck_plate: apptForm.truck_plate.trim().toUpperCase(),
+      estimated_ton: Number(apptForm.estimated_ton),
+    };
+    const idemKey = makeIdempotencyKey();
+    try {
+      if (!navigator.onLine) throw new Error("offline");
+      const { data } = await api.post("/farmer/appointment", payload, { headers: { "X-Idempotency-Key": idemKey } });
+      setFarmerAppointments((prev) => [data, ...prev]);
+      setSubmitMsg("Randevu talebi oluşturuldu.");
+      setApptForm({ scheduled_at: "", truck_plate: "", estimated_ton: "" });
+    } catch (err) {
+      if (!navigator.onLine || err.message === "offline" || !err.response) {
+        await enqueue({ method: "post", url: "/farmer/appointment", body: payload, idempotency_key: idemKey });
+        setSubmitMsg("Bağlantı yok — randevu talebi cihazda saklandı, bağlantı gelince gönderilecek.");
+        setApptForm({ scheduled_at: "", truck_plate: "", estimated_ton: "" });
+        refreshQueueCount();
+      } else {
+        setSubmitMsg("Hata: " + (err.response?.data?.detail || "Randevu oluşturulamadı"));
+      }
+    } finally {
+      setApptBusy(false);
+    }
+  }
+
+  async function submitCase(e) {
+    e.preventDefault();
+    if (caseBusy || !caseForm.subject.trim() || !caseForm.category_id) return;
+    setCaseBusy(true);
+    setSubmitMsg("");
+    try {
+      const { data } = await api.post("/portal/cases", caseForm);
+      setMyCases((prev) => [data, ...prev]);
+      setCaseForm({ subject: "", category_id: "", description: "" });
+      setSubmitMsg("Talep gönderildi.");
+      loadCaseMessages(data.id);
+    } catch (err) {
+      setSubmitMsg("Hata: " + (err.response?.data?.detail || "Gönderilemedi"));
+    } finally {
+      setCaseBusy(false);
+    }
+  }
+
+  function loadCaseMessages(caseId) {
+    setSelectedCaseId(caseId);
+    setCaseMessages([]);
+    if (!caseId) return;
+    api.get(`/portal/cases/${caseId}/messages`).then((r) => setCaseMessages(r.data)).catch(() => {});
+  }
+
+  async function sendCaseMessage(e) {
+    e.preventDefault();
+    if (caseMsgBusy || !caseMsgText.trim() || !selectedCaseId) return;
+    setCaseMsgBusy(true);
+    try {
+      const { data } = await api.post(`/portal/cases/${selectedCaseId}/messages`, { message: caseMsgText.trim() });
+      setCaseMessages((prev) => [...prev, data]);
+      setCaseMsgText("");
+    } catch (err) {
+      setSubmitMsg("Hata: " + (err.response?.data?.detail || "Mesaj gönderilemedi"));
+    } finally {
+      setCaseMsgBusy(false);
     }
   }
 
@@ -1042,6 +1136,87 @@ export default function MobilDashboard() {
                 value={deliveryCodeInput} onChange={(e) => setDeliveryCodeInput(e.target.value)} data-testid="delivery-code-input"/>
               <button type="submit" className="btn btn-primary text-xs" data-testid="delivery-code-confirm">Onayla</button>
             </form>
+          </div>
+
+          {/* 2026-08-20 (madde 8) — Fabrika Randevusu: personelin ZATEN
+              var olan appointments modeli, çiftçi self-servisi. */}
+          <div className="card p-4 mb-4" data-testid="farmer-appointment-panel">
+            <h3 className="text-sm font-medium mb-3 flex items-center gap-2"><CalendarClock size={14} className="text-[var(--primary)]"/>Fabrika Randevusu</h3>
+            <form onSubmit={submitAppointment} className="space-y-2 mb-3">
+              <input type="datetime-local" className="input text-sm" required value={apptForm.scheduled_at}
+                onChange={(e) => setApptForm((p) => ({ ...p, scheduled_at: e.target.value }))} data-testid="appt-datetime"/>
+              <div className="flex gap-2">
+                <input className="input text-sm flex-1" required placeholder="Plaka" value={apptForm.truck_plate}
+                  onChange={(e) => setApptForm((p) => ({ ...p, truck_plate: e.target.value }))} data-testid="appt-plate"/>
+                <input type="number" step="0.1" min="0" className="input text-sm flex-1" required placeholder="Tahmini ton"
+                  value={apptForm.estimated_ton} onChange={(e) => setApptForm((p) => ({ ...p, estimated_ton: e.target.value }))} data-testid="appt-ton"/>
+              </div>
+              <button type="submit" disabled={apptBusy} className="btn btn-primary w-full text-xs" data-testid="appt-submit">Randevu Talep Et</button>
+            </form>
+            {farmerAppointments.length === 0 ? (
+              <div className="text-xs text-[var(--text-dim)]">Kayıtlı randevu yok.</div>
+            ) : farmerAppointments.slice(0, 5).map((a) => (
+              <div key={a.id} className="flex items-center justify-between border-b border-[var(--border)] py-1.5 text-xs">
+                <span>{(a.scheduled_at || "").replace("T", " ").slice(0, 16)} — {a.truck_plate}</span>
+                <span className="badge badge-neutral text-[10px]">{a.status}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* 2026-08-20 (madde 8) — Uzmanla İletişim / Kooperatifle Çift
+              Yönlü Yazışma: case_management.py'nin (IT-28 "Bize Ulaşın")
+              ZATEN VAR OLAN /portal/cases* uçları, önceden hiç mobil UI'sı
+              yoktu. Yeni bir talep açmak hem "uzmana danış" hem "kooperatife
+              yaz" senaryosunu karşılar; personel tarafı zaten CaseManagement.jsx'te var. */}
+          <div className="card p-4 mb-4" data-testid="farmer-cases-panel">
+            <h3 className="text-sm font-medium mb-3 flex items-center gap-2"><MessageCircle size={14} className="text-[var(--primary)]"/>Kooperatifle Yazış / Bize Ulaşın</h3>
+            <form onSubmit={submitCase} className="space-y-2 mb-3">
+              <select className="input text-sm" required value={caseForm.category_id}
+                onChange={(e) => setCaseForm((p) => ({ ...p, category_id: e.target.value }))} data-testid="case-category-select">
+                <option value="">Konu seç...</option>
+                {caseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <input className="input text-sm" required placeholder="Başlık" value={caseForm.subject}
+                onChange={(e) => setCaseForm((p) => ({ ...p, subject: e.target.value }))} data-testid="case-subject"/>
+              <textarea className="input text-sm" rows={2} placeholder="Açıklama (opsiyonel)" value={caseForm.description}
+                onChange={(e) => setCaseForm((p) => ({ ...p, description: e.target.value }))} data-testid="case-description"/>
+              <button type="submit" disabled={caseBusy} className="btn btn-primary w-full text-xs" data-testid="case-submit">Gönder</button>
+            </form>
+
+            {myCases.length === 0 ? (
+              <div className="text-xs text-[var(--text-dim)]">Henüz bir talebiniz yok.</div>
+            ) : (
+              <div className="space-y-1 mb-2">
+                {myCases.map((c) => (
+                  <button key={c.id} onClick={() => loadCaseMessages(c.id)}
+                    className={`w-full text-left p-2 rounded-lg text-xs border ${selectedCaseId === c.id ? "border-[var(--primary)] bg-[var(--primary)]/5" : "border-[var(--border)]"}`}
+                    data-testid={`case-row-${c.id}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{c.subject}</span>
+                      <span className="badge badge-neutral text-[9px]">{c.status}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {selectedCaseId && (
+              <div className="border-t border-[var(--border)] pt-2 mt-2" data-testid="case-thread">
+                <div className="space-y-1.5 max-h-48 overflow-y-auto mb-2">
+                  {caseMessages.map((m) => (
+                    <div key={m.id} className={`text-xs p-2 rounded-lg ${m.sender_type === "farmer" ? "bg-[var(--primary)]/10 ml-6" : "bg-[var(--surface-2)] mr-6"}`}>
+                      <div className="text-[10px] text-[var(--text-dim)] mb-0.5">{m.sender_name} · {(m.created_at || "").replace("T", " ").slice(0, 16)}</div>
+                      {m.message}
+                    </div>
+                  ))}
+                </div>
+                <form onSubmit={sendCaseMessage} className="flex gap-2">
+                  <input className="input text-sm flex-1" placeholder="Mesaj yaz..." value={caseMsgText}
+                    onChange={(e) => setCaseMsgText(e.target.value)} data-testid="case-msg-input"/>
+                  <button type="submit" disabled={caseMsgBusy} className="btn btn-primary text-xs" data-testid="case-msg-send"><Send size={13}/></button>
+                </form>
+              </div>
+            )}
           </div>
         </>
       )}

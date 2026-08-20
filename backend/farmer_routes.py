@@ -280,6 +280,73 @@ def register_farmer_routes(api_router, db, current_user, require_permission, req
         return doc
 
 
+    class FarmerAppointmentCreate(BaseModel):
+        """2026-08-20 (FAZ 13 madde 8 devamı) — Fabrika randevusu, çiftçi
+        self-servisi. YENİ bir veri modeli İCAT EDİLMEDİ — `data_entry.py`'nin
+        ZATEN VAR OLAN `appointments` koleksiyonu (personelin `POST
+        /logistics/appointments`'ı ile AYNI şema/durum makinesi: planlı→
+        geldi→tartıldı→tamamlandı) doğrudan kullanılıyor; çiftçi sadece
+        KENDİ `farmer_id`'siyle bir "planlı" kayıt açabiliyor, personel
+        akışına (durum güncelleme/silme) DOKUNMUYOR."""
+        scheduled_at: str
+        truck_plate: str
+        estimated_ton: float
+
+    @api_router.post("/farmer/appointment")
+    async def add_farmer_appointment(body: FarmerAppointmentCreate, request: Request, user=Depends(current_user),
+                                      _feat=Depends(require_feature("logistics"))):
+        """Çiftçi kendi adına fabrika (kantar) randevusu talep eder."""
+        from idempotency import get_cached_response, save_response
+        idem_key, cached = await get_cached_response(db, request, "farmer_appointment:create")
+        if cached is not None:
+            return cached
+
+        if user.get("role") != "ciftci" or not user.get("farmer_id"):
+            raise HTTPException(403, "Sadece çiftçi ekleyebilir")
+
+        farmer = await db.farmers.find_one({"id": user["farmer_id"]}, {"_id": 0})
+        if not farmer:
+            raise HTTPException(404, "Çiftçi kaydı bulunamadı")
+
+        doc = body.model_dump()
+        doc["id"] = str(uuid.uuid4())
+        doc["farmer_id"] = user["farmer_id"]
+        doc["region_id"] = farmer.get("region_id")
+        doc["status"] = "planlı"
+        doc["actual_ton"] = None
+        doc["polar_oran"] = None
+        doc["created_by_farmer"] = True
+        await db.appointments.insert_one(doc)
+        doc.pop("_id", None)
+
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "type": "randevu_talebi",
+            "title": "Yeni fabrika randevu talebi",
+            "message": f"{user.get('full_name', 'Çiftçi')} {body.scheduled_at[:16].replace('T', ' ')} için "
+                       f"{body.truck_plate} plakalı araçla randevu talep etti (~{body.estimated_ton} ton)",
+            "channel": "in_app",
+            "status": "yeni",
+            "farmer_id": user["farmer_id"],
+            "module": "logistics",
+            "entity_id": doc["id"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+        await save_response(db, idem_key, "farmer_appointment:create", doc)
+        return doc
+
+
+    @api_router.get("/farmer/appointments")
+    async def list_farmer_appointments(user=Depends(current_user), _feat=Depends(require_feature("logistics"))):
+        """Çiftçinin kendi fabrika randevuları — sahiplik kontrolü ile."""
+        if user.get("role") != "ciftci" or not user.get("farmer_id"):
+            raise HTTPException(403, "Sadece çiftçi görebilir")
+        return await db.appointments.find(
+            {"farmer_id": user["farmer_id"], "is_active": {"$ne": False}}, {"_id": 0}
+        ).sort([("scheduled_at", -1)]).to_list(50)
+
+
     @api_router.post("/farmer/soil-sample")
     async def add_soil_sample(body: SoilSampleCreate, user=Depends(current_user)):
         """Çiftçi toprak analizi sonucu ekler"""
