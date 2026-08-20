@@ -28,6 +28,12 @@ komutlarıyla birlikte gerçek durumu gösteriyor.
 | B7 | Copernicus CLMS iskelet | **Bilinçli.** Bağlanmadı, boş döner, uydurma sonuç ÜRETMEZ. Zincir Sentinel-2'ye düşer. Not: `sentinel2.py` zaten Copernicus CDSE'dir — "Copernicus" ve "Sentinel-2" ayrı kaynak değil |
 | 15 | `l is not a function` | Hiçbir rotada tekrar üretilemedi (bu turda 20 + önceki turda 33 rota tarandı). Tekrarlarsa **hangi sayfa + hangi tıklama + hangi rol** gerekiyor |
 
+## ✅ 2026-08-20 turunda tamamlanan
+
+| # | Konu | Durum |
+|---|---|---|
+| 11 | **Bildirim merkezi TAMAMLANDI** — gün bazlı gruplama zaten vardı (`Other.jsx`); bu turda `archived` alanı + `PUT /notifications/{id}/archive`/`/unarchive` + `target_user_id` ile kişiye özel hedefleme (`_notification_scope_filter`, broadcast geriye uyumlu) eklendi. Bildirimler ekranına "Arşivlenenler" filtresi + satır bazlı arşivle/geri al butonu. Build v1.4/20082026-1138 olarak derlendi, Docker'a alındı, GitHub'a push edildi (`karar-destek-2026-08-19` dalı, commit 505dda8). | ✅ |
+
 ## ❌ HİÇ YAPILMADI — sıradaki iş
 
 | # | Konu | Durum |
@@ -35,7 +41,6 @@ komutlarıyla birlikte gerçek durumu gösteriyor.
 | 8 | **Mobil derinleştirme** — uzmanla iletişim, kendi verisini girme, fabrika randevusu, kooperatifle çift yönlü yazışma | Kod yazılmadı |
 | 9 | **VRA (değişken oranlı uygulama)** — zon haritası → shapefile/ISOXML dışa aktarma | Kod yazılmadı |
 | 10 | **Demo senaryo oynatıcı** — `scripts/demo_scenario.py` + "Senaryoyu Oynat" ekranı | Kod yazılmadı |
-| 11 | **Bildirim merkezi** — sunucu tarafı sayfalama/filtre VAR (`dashboard_routes.py`, `{items,total,unread}` zarfı); **eksik:** gün bazlı gruplama, arşivleme, kişiye özel hedefleme (bildirimler hâlâ tenant geneli) | Yarım |
 | 12 | **Harita Stüdyosu elden geçirme** | Kullanıcı bilinçli erteledi ("en son onu beraber elden geçirelim") |
 | 14 | **Çiftçi self-servis 3 akışı** — sözleşme onaylama, ekim planlama, randevu alma | Ertelendi; üçü de veri modeli kararı gerektiriyor (Karar Protokolü) |
 | 16 | **Devir dokümanı** | Yazılmadı. **Not:** BU dosya fiilen devir dokümanı işlevi görüyor (ortam, kök nedenler, kalan işler); ayrı/resmî bir belge isteniyorsa kapsamı netleştirilmeli |
