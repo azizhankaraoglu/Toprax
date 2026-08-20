@@ -14,7 +14,8 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapContainer, TileLayer, Polygon, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Polygon, Popup, useMapEvents } from "react-leaflet";
+import * as turf from "@turf/turf";
 import api from "@/api";
 import { MapDrawTools } from "@/components/MapDrawTools";
 import { BASEMAPS, getStoredBasemap, storeBasemap } from "@/lib/basemaps";
@@ -298,6 +299,24 @@ function BolgeTab({ meta, flash }) {
 /* =====================================================================
    SEKME 2 — ALANI TARA (kayıtsız alanlar)
    ===================================================================== */
+/** 2026-08-20 (OTURUM-DEVAM madde 6) — "haritada olmalı ve tıklanılan yerde
+ *  ne ekili olduğu tespit edilmeli". Tıklanan noktanın etrafına küçük bir
+ *  kare tampon poligon kurup MEVCUT `POST /crop-classification/area` ucunu
+ *  (backend'in `classify_with_chain()`'i geometri-agnostiktir, yeni bir
+ *  backend mantığı GEREKMEDİ) `cell_m` tam tamponu kapsayacak şekilde
+ *  çağırır — tek hücrelik bir "alan taraması" olarak, mevcut sonuç
+ *  render'ıyla (data.hucreler) TUTARLI şekilde çalışır. */
+function ClickToDetectHandler({ active, onPick }) {
+  useMapEvents({
+    click(e) {
+      if (!active) return;
+      const buffered = turf.buffer(turf.point([e.latlng.lng, e.latlng.lat]), 0.02, { units: "kilometers" });
+      onPick(buffered.geometry, e.latlng);
+    },
+  });
+  return null;
+}
+
 function AlanTab({ meta, flash }) {
   const [geometry, setGeometry] = useState(null);
   const [crop, setCrop] = useState("");
@@ -305,18 +324,34 @@ function AlanTab({ meta, flash }) {
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState(null);
   const [basemapKey, setBasemapKey] = useState(() => getStoredBasemap("crop"));
+  // 2026-08-20 — tıkla-tespit modu: çizim aracından BAĞIMSIZ, aynı anda ikisi
+  // birlikte açık kalmaz (kullanıcı ya alan çizer ya tek nokta tıklar).
+  const [clickMode, setClickMode] = useState(false);
+  const [clickPoint, setClickPoint] = useState(null);
 
   const base = BASEMAPS[basemapKey] || BASEMAPS.hibrit;
 
-  async function run() {
-    if (!geometry) return flash("err", "Önce haritada bir alan çizin.");
+  async function runWith(geom, cell) {
     setBusy(true); setData(null);
     try {
       const r = await api.post("/crop-classification/area",
-                               { geometry, crop: crop || null, cell_m: cellM });
+                               { geometry: geom, crop: crop || null, cell_m: cell });
       setData(r.data);
       if (r.data.uyari) flash("err", r.data.uyari);
     } catch (e) { flash("err", errText(e)); } finally { setBusy(false); }
+  }
+
+  async function run() {
+    if (!geometry) return flash("err", "Önce haritada bir alan çizin.");
+    await runWith(geometry, cellM);
+  }
+
+  async function onMapClick(pointGeometry, latlng) {
+    setClickPoint(latlng);
+    setGeometry(null);
+    // ~40m kenarlı bir tampon üretildi (buffer 0.02 km yarıçap) — cell_m'i
+    // buna uyacak şekilde büyük tutuyoruz ki backend TEK hücre üretsin.
+    await runWith(pointGeometry, 100);
   }
 
   return (
@@ -345,10 +380,21 @@ function AlanTab({ meta, flash }) {
             {busy ? <Loader2 size={15} className="animate-spin" /> : <Target size={15} />} Alanı Tara
           </button>
         </div>
+        <div className="flex items-center gap-2 mt-3">
+          <button type="button"
+                  className={`btn ${clickMode ? "btn-primary" : "btn-ghost"} text-xs`}
+                  onClick={() => { setClickMode((v) => !v); setGeometry(null); setClickPoint(null); }}
+                  data-testid="click-detect-toggle">
+            <Target size={13} /> {clickMode ? "Tıkla-Tespit AÇIK — haritada bir noktaya tıklayın" : "Tıkla-Tespit Modu"}
+          </button>
+        </div>
         <p className="text-[11px] text-[var(--text-dim)] mt-2">
           Haritadaki çizim aracıyla bir alan belirleyin — kayıtlı parsel olması
-          <b> gerekmez</b>. Alan ızgaraya bölünüp her hücre ayrı sınıflandırılır.
+          <b> gerekmez</b>. Alan ızgaraya bölünüp her hücre ayrı sınıflandırılır. Ya da
+          "Tıkla-Tespit Modu"nu açıp haritada TEK bir noktaya tıklayarak o noktada ne
+          ekili olduğunu sorun.
           {geometry && <span className="text-[var(--primary)]"> · Alan çizildi ✓</span>}
+          {clickPoint && <span className="text-[var(--primary)]"> · Nokta seçildi ({clickPoint.lat.toFixed(5)}, {clickPoint.lng.toFixed(5)})</span>}
         </p>
       </div>
 
@@ -356,7 +402,8 @@ function AlanTab({ meta, flash }) {
         <MapContainer center={[38.0, 32.7]} zoom={11} style={{ height: "100%", width: "100%" }}>
           <TileLayer key={basemapKey} url={base.url} attribution={base.attribution} />
           {base.overlay && <TileLayer key={`${basemapKey}-ov`} url={base.overlay} />}
-          <MapDrawTools mode="select" onCreated={(g) => setGeometry(g)} />
+          {!clickMode && <MapDrawTools mode="select" onCreated={(g) => { setGeometry(g); setClickPoint(null); }} />}
+          <ClickToDetectHandler active={clickMode} onPick={onMapClick} />
 
           {/* Sınıflandırılan hücreler */}
           {(data?.hucreler || []).map((c, i) => (

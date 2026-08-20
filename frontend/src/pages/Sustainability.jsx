@@ -198,9 +198,13 @@ export default function Sustainability() {
                     <td className="p-3">{fmt(p.alan_dekar)} da</td>
                     <td className="p-3">{fmt(p.kg_co2e, 0)} kg</td>
                     <td className="p-3">{fmt(p.dekar_basina)} kg/da</td>
-                    <td className="p-3 text-right">
+                    <td className="p-3 text-right flex justify-end gap-1">
                       <button className="btn btn-ghost text-xs"
                               onClick={() => nav(`/parseller/${p.parcel_id}`)}>Parsel →</button>
+                      {/* 2026-08-20 — parsele özel karbon detay sayfası (ParcelCarbonDetail.jsx) */}
+                      <button className="btn btn-ghost text-xs"
+                              onClick={() => nav(`/parseller/${p.parcel_id}/karbon`)}
+                              data-testid={`carbon-detail-${p.parcel_id}`}>Karbon Raporu →</button>
                     </td>
                   </tr>
                 ))}

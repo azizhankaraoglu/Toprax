@@ -249,6 +249,177 @@ DEFAULT_VARIETIES = [
     "Gazelle", "Kaunas", "Modus", "Sabrina", "Vasco",
 ]
 
+# =====================================================================
+# 2026-08-20 (OTURUM-DEVAM madde 9) — Pancar dışında 5 ürün + gerçek
+# agronomik kural kütüphaneleri. Kullanıcı kararı: "Buğday, Arpa, Mısır,
+# Ayçiçeği, Yonca". Diğer ürünler (kullanıcının kendi kuracağı) için
+# admin ekranı zaten var (`/agronomy/crops` + `/agronomy/rules` CRUD'u,
+# CatalogManager.jsx deseni) — bu 5'i sadece BAŞLANGIÇ kütüphanesi olarak
+# seed eder, motora yeni bir mekanizma EKLEMEZ (SIGNAL_CATALOG/evaluate_rules
+# zaten ürün-agnostik). Eşikler Türkiye/Konya ovası koşulları için genel
+# kabul görmüş agronomik referans değerlerdir (kesin sözleşme koşulu
+# DEĞİLDİR — ziraat mühendisi ekrandan düzenleyebilir, bkz. modül docstring'i).
+# =====================================================================
+ADDITIONAL_CROPS: List[Dict[str, Any]] = [
+    {
+        "key": "bugday", "label": "Buğday", "match_terms": ["buğday", "bugday", "ekmeklik buğday"],
+        "rules": [
+            {"name": "Toprak analizi hiç yok", "category": "toprak", "signal": "toprak_analiz_var",
+             "operator": "eq", "value": 0, "score_delta": -20, "is_blocking": False,
+             "advice": "Toprak analizi olmadan gübreleme kör yapılır — özellikle azot dozu protein/verim dengesini belirler."},
+            {"name": "Çok asitli toprak (pH < 5.5)", "category": "toprak", "signal": "toprak_ph",
+             "operator": "lt", "value": 5.5, "score_delta": -20, "is_blocking": False,
+             "advice": "Buğday hafif asitten alkaliye geniş bir pH aralığına tolerelıdır ama pH 5.5 altında alüminyum toksisitesi kök gelişimini engeller — kireçleme değerlendirilmeli."},
+            {"name": "Yüksek tuzluluk (EC > 6)", "category": "toprak", "signal": "toprak_ec",
+             "operator": "gt", "value": 6.0, "score_delta": -25, "is_blocking": False,
+             "advice": "Buğday orta düzeyde tuz toleranslıdır ama EC 6'nın üzerinde çimlenme ve kardeşlenme belirgin azalır."},
+            {"name": "Düşük organik madde (< %1.2)", "category": "toprak", "signal": "toprak_om",
+             "operator": "lt", "value": 1.2, "score_delta": -10, "is_blocking": False,
+             "advice": "Organik madde düşük — su tutma kapasitesi ve azot mineralizasyonu zayıf kalır."},
+            {"name": "Düşük azot (N < 15 ppm)", "category": "toprak", "signal": "toprak_n",
+             "operator": "lt", "value": 15, "score_delta": -12, "is_blocking": False,
+             "advice": "Azot eksikliği kardeşlenmeyi ve tane proteinini düşürür — taban + üst gübre planı gözden geçirilmeli."},
+            {"name": "Düşük fosfor (P < 8 ppm)", "category": "toprak", "signal": "toprak_p",
+             "operator": "lt", "value": 8, "score_delta": -10, "is_blocking": False,
+             "advice": "Fosfor eksikliği kök ve kardeş gelişimini erken dönemde sınırlar."},
+            {"name": "Ardışık buğday (3+ yıl) — hastalık riski", "category": "gecmis", "signal": "ardisik_pancar_yili",
+             "operator": "gte", "value": 3, "score_delta": -15, "is_blocking": False,
+             "advice": "Uzun süreli buğday monokültürü kök/kılçık hastalıklarını (kök çürüklüğü, septoria) biriktirir — baklagil/çapa bitkisiyle münavebe önerilir."},
+            {"name": "Geçmiş verim düşük (< 3.5 ton/dekar)", "category": "gecmis", "signal": "ort_verim_ton_dekar",
+             "operator": "lt", "value": 3.5, "score_delta": -10, "is_blocking": False,
+             "advice": "Geçmiş verim ortalamanın altında — çeşit/gübre/sulama programı gözden geçirilmeli."},
+            {"name": "Sulama imkânı yok (kuru tarım)", "category": "su", "signal": "sulama_tipi",
+             "operator": "eq", "value": "kuru", "score_delta": -8, "is_blocking": False,
+             "advice": "Buğday kuru tarıma en uygun tahıllardan biridir ama kritik dönemde (başaklanma) su stresi verimi düşürür — imkân varsa destekleme sulaması planlanmalı."},
+            {"name": "Hastalık geçmişi var", "category": "hastalik", "signal": "hastalik_sayisi",
+             "operator": "gte", "value": 1, "score_delta": -10, "is_blocking": False,
+             "advice": "Geçmiş hastalık kaydı var — pas/septoria dayanıklı çeşit tercih edilmeli."},
+        ],
+    },
+    {
+        "key": "arpa", "label": "Arpa", "match_terms": ["arpa"],
+        "rules": [
+            {"name": "Toprak analizi hiç yok", "category": "toprak", "signal": "toprak_analiz_var",
+             "operator": "eq", "value": 0, "score_delta": -18, "is_blocking": False,
+             "advice": "Toprak analizi olmadan gübreleme planlanamaz."},
+            {"name": "Çok asitli toprak (pH < 6.0)", "category": "toprak", "signal": "toprak_ph",
+             "operator": "lt", "value": 6.0, "score_delta": -20, "is_blocking": False,
+             "advice": "Arpa, tahıllar arasında asit toprağa EN HASSAS olandır (buğdaydan bile) — pH 6'nın altında kireçleme değerlendirilmeli."},
+            {"name": "Yüksek tuzluluk (EC > 8)", "category": "toprak", "signal": "toprak_ec",
+             "operator": "gt", "value": 8.0, "score_delta": -15, "is_blocking": False,
+             "advice": "Arpa yaygın tahıllar arasında EN TUZ TOLERANSLI olandır (EC 8'e kadar iyi tolere eder) — yine de üst sınırın aşılması verimi düşürür."},
+            {"name": "Düşük azot (N < 12 ppm)", "category": "toprak", "signal": "toprak_n",
+             "operator": "lt", "value": 12, "score_delta": -10, "is_blocking": False,
+             "advice": "Azot eksikliği kardeşlenmeyi sınırlar; malt arpasında aşırı azot ise protein oranını istenmeyen şekilde yükseltir — hedefe göre dozlanmalı."},
+            {"name": "Aşırı azot (N > 55 ppm) — yatmaya yol açar", "category": "toprak", "signal": "toprak_n",
+             "operator": "gt", "value": 55, "score_delta": -12, "is_blocking": False,
+             "advice": "Aşırı azot sap boyunu artırıp yatmaya (lodging) ve malt kalitesinde protein fazlalığına yol açar."},
+            {"name": "Ardışık arpa/tahıl (3+ yıl)", "category": "gecmis", "signal": "ardisik_pancar_yili",
+             "operator": "gte", "value": 3, "score_delta": -12, "is_blocking": False,
+             "advice": "Uzun süreli tahıl monokültürü kök hastalığı baskısını artırır — münavebe önerilir."},
+            {"name": "Geçmiş verim düşük (< 3 ton/dekar)", "category": "gecmis", "signal": "ort_verim_ton_dekar",
+             "operator": "lt", "value": 3.0, "score_delta": -8, "is_blocking": False,
+             "advice": "Geçmiş verim düşük — çeşit/gübre programı gözden geçirilmeli."},
+            {"name": "Sulama imkânı yok (kuru tarım)", "category": "su", "signal": "sulama_tipi",
+             "operator": "eq", "value": "kuru", "score_delta": -5, "is_blocking": False,
+             "advice": "Arpa kuraklığa en dayanıklı tahıllardan biridir — kuru tarımda dahi makul verim beklenebilir."},
+            {"name": "Hastalık geçmişi var", "category": "hastalik", "signal": "hastalik_sayisi",
+             "operator": "gte", "value": 1, "score_delta": -8, "is_blocking": False,
+             "advice": "Geçmiş hastalık kaydı — külleme/yaprak lekesi dayanıklı çeşit tercih edilmeli."},
+        ],
+    },
+    {
+        "key": "misir", "label": "Mısır", "match_terms": ["mısır", "misir", "silajlık mısır"],
+        "rules": [
+            {"name": "Toprak analizi hiç yok", "category": "toprak", "signal": "toprak_analiz_var",
+             "operator": "eq", "value": 0, "score_delta": -22, "is_blocking": False,
+             "advice": "Mısır yüksek besin talebi olan bir bitkidir — analiz olmadan gübreleme ciddi verim kaybına yol açabilir."},
+            {"name": "Asitli toprak (pH < 5.8)", "category": "toprak", "signal": "toprak_ph",
+             "operator": "lt", "value": 5.8, "score_delta": -15, "is_blocking": False,
+             "advice": "Mısır hafif asit-nötr toprağı sever (6.0-7.0 ideal); pH 5.8 altında besin alımı (özellikle P) kısıtlanır."},
+            {"name": "Yüksek tuzluluk (EC > 3.5)", "category": "toprak", "signal": "toprak_ec",
+             "operator": "gt", "value": 3.5, "score_delta": -30, "is_blocking": True,
+             "advice": "Mısır tuza ORTA-HASSAS bir bitkidir — bu seviyede çimlenme ve fide gelişimi ciddi zarar görür."},
+            {"name": "Düşük azot (N < 20 ppm)", "category": "toprak", "signal": "toprak_n",
+             "operator": "lt", "value": 20, "score_delta": -15, "is_blocking": False,
+             "advice": "Mısır tahıllar arasında EN YÜKSEK azot talebine sahiptir — düşük azotta bitki boyu ve koçan dolgunluğu belirgin düşer."},
+            {"name": "Düşük potasyum (K < 150 ppm)", "category": "toprak", "signal": "toprak_k",
+             "operator": "lt", "value": 150, "score_delta": -12, "is_blocking": False,
+             "advice": "Potasyum eksikliği sap sağlamlığını ve kuraklık toleransını azaltır."},
+            {"name": "Sulama altyapısı yok (kuru tarım)", "category": "su", "signal": "sulama_tipi",
+             "operator": "eq", "value": "kuru", "score_delta": -35, "is_blocking": True,
+             "advice": "Mısır (özellikle II. ürün) yüksek su ister — sulama olmadan Konya ovası koşullarında ekonomik verim alınamaz."},
+            {"name": "Sulama kaydı hiç yok", "category": "su", "signal": "sulama_olay_sayisi",
+             "operator": "eq", "value": 0, "score_delta": -8, "is_blocking": False,
+             "advice": "Sulama takibi yapılmıyor — püskül çıkarma/tane doldurma dönemindeki kritik su stresi yönetilemez."},
+            {"name": "Ardışık mısır (3+ yıl) — kök kurdu riski", "category": "gecmis", "signal": "ardisik_pancar_yili",
+             "operator": "gte", "value": 3, "score_delta": -18, "is_blocking": False,
+             "advice": "Sürekli mısır ekimi mısır kök kurdu (rootworm) ve fusarium baskısını artırır — münavebe önerilir."},
+            {"name": "Geçmiş verim düşük (< 8 ton/dekar)", "category": "gecmis", "signal": "ort_verim_ton_dekar",
+             "operator": "lt", "value": 8.0, "score_delta": -10, "is_blocking": False,
+             "advice": "Geçmiş verim potansiyelin altında — hibrit çeşit/gübre/sulama programı gözden geçirilmeli."},
+        ],
+    },
+    {
+        "key": "aycicegi", "label": "Ayçiçeği", "match_terms": ["ayçiçeği", "aycicegi", "ayçiçegi"],
+        "rules": [
+            {"name": "Toprak analizi hiç yok", "category": "toprak", "signal": "toprak_analiz_var",
+             "operator": "eq", "value": 0, "score_delta": -15, "is_blocking": False,
+             "advice": "Toprak analizi olmadan gübreleme planlanamaz."},
+            {"name": "Aşırı asitli toprak (pH < 6.0)", "category": "toprak", "signal": "toprak_ph",
+             "operator": "lt", "value": 6.0, "score_delta": -12, "is_blocking": False,
+             "advice": "Ayçiçeği nötre yakın pH (6.5-7.5) ister — asitli toprakta bor eksikliği riski artar."},
+            {"name": "Yüksek tuzluluk (EC > 5)", "category": "toprak", "signal": "toprak_ec",
+             "operator": "gt", "value": 5.0, "score_delta": -10, "is_blocking": False,
+             "advice": "Ayçiçeği orta-yüksek düzeyde tuza toleranslıdır ama bu seviyenin üzerinde verim kaybı başlar."},
+            {"name": "Ardışık ayçiçeği (2+ yıl) — Sclerotinia/Canavar Otu riski", "category": "gecmis", "signal": "ardisik_pancar_yili",
+             "operator": "gte", "value": 2, "score_delta": -25, "is_blocking": False,
+             "advice": "Ayçiçeği KESİN olarak en az 4-5 yıl münavebe ister — üst üste ekim Sclerotinia (beyaz çürüklük) ve canavar otu (Orobanche) baskısını hızla artırır."},
+            {"name": "Uzun süreli monokültür (4+ yıl ayçiçeği)", "category": "gecmis", "signal": "ardisik_pancar_yili",
+             "operator": "gte", "value": 4, "score_delta": -20, "is_blocking": True,
+             "advice": "4+ yıl kesintisiz ayçiçeği agronomik olarak SAKINCALIDIR — canavar otu popülasyonu toprakta kalıcı hale gelir, bu sezon başka bir ürüne geçilmesi zorunlu değerlendirilmeli."},
+            {"name": "Geçmiş verim düşük (< 2.5 ton/dekar)", "category": "gecmis", "signal": "ort_verim_ton_dekar",
+             "operator": "lt", "value": 2.5, "score_delta": -8, "is_blocking": False,
+             "advice": "Geçmiş verim düşük — çeşit ve besin programı gözden geçirilmeli."},
+            {"name": "Sulama imkânı yok (kuru tarım)", "category": "su", "signal": "sulama_tipi",
+             "operator": "eq", "value": "kuru", "score_delta": -5, "is_blocking": False,
+             "advice": "Ayçiçeği derin kök yapısıyla nispeten kuraklığa dayanıklıdır — kuru tarımda da makul verim alınabilir."},
+            {"name": "Hastalık geçmişi var", "category": "hastalik", "signal": "hastalik_sayisi",
+             "operator": "gte", "value": 1, "score_delta": -15, "is_blocking": False,
+             "advice": "Geçmiş hastalık kaydı — Sclerotinia/mildiyö dayanıklı çeşit ve geniş münavebe zorunlu değerlendirilmeli."},
+        ],
+    },
+    {
+        "key": "yonca", "label": "Yonca", "match_terms": ["yonca", "alfalfa"],
+        "rules": [
+            {"name": "Toprak analizi hiç yok", "category": "toprak", "signal": "toprak_analiz_var",
+             "operator": "eq", "value": 0, "score_delta": -15, "is_blocking": False,
+             "advice": "Yonca çok yıllık bir bitkidir — kuruluş öncesi toprak analizi hayati önemdedir, sonradan düzeltme şansı sınırlıdır."},
+            {"name": "Asitli toprak (pH < 6.5) — yoncanın en hassas olduğu koşul", "category": "toprak", "signal": "toprak_ph",
+             "operator": "lt", "value": 6.5, "score_delta": -30, "is_blocking": False,
+             "advice": "Yonca, tarla bitkileri arasında asit toprağa EN HASSAS olanlardan biridir (nötr-hafif alkali, 6.5-7.5 ister) — pH düşükse rizobiyum bakterisi (azot fiksasyonu) çalışmaz, kireçleme kuruluş öncesi ZORUNLU değerlendirilmeli."},
+            {"name": "Yüksek tuzluluk (EC > 4)", "category": "toprak", "signal": "toprak_ec",
+             "operator": "gt", "value": 4.0, "score_delta": -20, "is_blocking": False,
+             "advice": "Yonca kuruluş döneminde tuza hassastır (yerleşik bitki orta toleranslı olsa da) — yüksek EC'de çimlenme oranı düşer."},
+            {"name": "Düşük potasyum (K < 150 ppm)", "category": "toprak", "signal": "toprak_k",
+             "operator": "lt", "value": 150, "score_delta": -12, "is_blocking": False,
+             "advice": "Yonca çok yıllık ve sık biçilen bir bitki olduğundan potasyum ihtiyacı yüksektir — eksiklik kalıcı verim düşüşüne yol açar."},
+            {"name": "Ardışık yonca — otoksisite riski (yonca yorgunluğu)", "category": "gecmis", "signal": "ardisik_pancar_yili",
+             "operator": "gte", "value": 1, "score_delta": -25, "is_blocking": True,
+             "advice": "Yonca kendi kendine ZEHİRLENİR (otoksisite/'alfalfa autotoxicity') — sökülen bir yonca tarlasına HEMEN yeniden yonca ekilmesi fide çıkışını ciddi engeller; en az 1-2 yıl başka ürünle ara verilmesi ZORUNLU değerlendirilmeli."},
+            {"name": "Sulama altyapısı yok (kuru tarım)", "category": "su", "signal": "sulama_tipi",
+             "operator": "eq", "value": "kuru", "score_delta": -25, "is_blocking": False,
+             "advice": "Yonca özellikle kuruluş döneminde ve yaz biçimlerinde yüksek su ister — kuru tarımda kuruluş başarısı ve yıllık biçim sayısı ciddi düşer."},
+            {"name": "Sulama kaydı hiç yok", "category": "su", "signal": "sulama_olay_sayisi",
+             "operator": "eq", "value": 0, "score_delta": -8, "is_blocking": False,
+             "advice": "Sulama takibi yapılmıyor — biçim sonrası yeniden sürgün için düzenli su kritik."},
+            {"name": "Hastalık geçmişi var", "category": "hastalik", "signal": "hastalik_sayisi",
+             "operator": "gte", "value": 1, "score_delta": -10, "is_blocking": False,
+             "advice": "Geçmiş hastalık kaydı — kök/kök boğazı çürüklüğüne dayanıklı çeşit tercih edilmeli, drenajı zayıf alanlardan kaçınılmalı (yonca durgun suya çok hassastır)."},
+        ],
+    },
+]
+
 
 # =====================================================================
 # SAF MOTOR — DB/HTTP bağımsız (birim-test edilebilir)
@@ -705,6 +876,64 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
         return {"rules_added": added, "varieties_added": varieties_added,
                 "total_rules": await db.agronomy_rules.count_documents({"is_active": {"$ne": False}})}
 
+    @api_router.post("/agronomy/crops/seed-additional")
+    async def seed_additional_crops(request: Request,
+                                    user=Depends(require_permission("agronomy:rules_manage"))):
+        """2026-08-20 — Buğday/Arpa/Mısır/Ayçiçeği/Yonca'nın (ADDITIONAL_CROPS)
+        varsayılan kural kütüphanelerini idempotent olarak yükler. `seed_
+        defaults`'un pancara özel sürümüyle AYNI desen (kayıt varsa dokunulmaz,
+        eksikse eklenir) — tek fark burada BİRDEN FAZLA ürün üzerinde döner."""
+        crops_added, rules_added, prompts_added, crops_fixed = 0, 0, 0, 0
+        for crop_spec in ADDITIONAL_CROPS:
+            key = crop_spec["key"]
+            existing = await db.agronomy_crops.find_one({"key": key}, {"_id": 0})
+            if not existing:
+                await db.agronomy_crops.insert_one({
+                    "id": str(uuid.uuid4()), "key": key, "label": crop_spec["label"],
+                    "match_terms": crop_spec["match_terms"], "is_active": True,
+                    "is_default": False, "created_at": _now(),
+                })
+                crops_added += 1
+            else:
+                # 2026-08-20 — `seed_defaults`'un pancar için yaptığı "kendini
+                # onaran seed" ile AYNI ilke: "arpa" gibi daha önce ham anahtarla
+                # (label="arpa", match_terms=["arpa"]) oluşmuş bir kayıt varsa
+                # etiket/eş anlamlı terimler kanonik değerlerle TAMAMLANIR —
+                # kullanıcının ELLE farklı bir etiket girdiği durum korunur
+                # (label zaten anahtardan FARKLIYSA dokunulmaz).
+                fixes: Dict[str, Any] = {}
+                if not existing.get("label") or existing.get("label") == key:
+                    fixes["label"] = crop_spec["label"]
+                missing_terms = [t for t in crop_spec["match_terms"]
+                                 if t not in (existing.get("match_terms") or [])]
+                if missing_terms:
+                    fixes["match_terms"] = (existing.get("match_terms") or []) + missing_terms
+                if fixes:
+                    await db.agronomy_crops.update_one({"key": key}, {"$set": fixes})
+                    crops_fixed += 1
+
+            for i, r in enumerate(crop_spec["rules"]):
+                if await db.agronomy_rules.find_one({"name": r["name"], "crop": key}, {"_id": 0}):
+                    continue
+                doc = dict(r)
+                doc.update({"id": str(uuid.uuid4()), "crop": key, "is_active": True,
+                            "is_default": True, "order": (i + 1) * 10, "created_at": _now()})
+                await db.agronomy_rules.insert_one(doc)
+                rules_added += 1
+
+            pkey = _prompt_key(key)
+            if not await db.agronomy_prompts.find_one({"key": pkey}, {"_id": 0}):
+                p = _default_prompt_for(crop_spec["label"])
+                p.update({"id": str(uuid.uuid4()), "key": pkey, "crop": key, "created_at": _now()})
+                await db.agronomy_prompts.insert_one(p)
+                prompts_added += 1
+
+        await log_audit(db, user, action="seed", entity="agronomy",
+                        entity_id="additional_crops",
+                        new_value={"crops": crops_added, "rules": rules_added}, request=request)
+        return {"crops_added": crops_added, "crops_fixed": crops_fixed,
+                "rules_added": rules_added, "prompts_added": prompts_added}
+
     # =================================================================
     # Sinyal toplama — GERÇEK veriden
     # =================================================================
@@ -972,6 +1201,65 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
             filt["parcel_id"] = parcel_id
         return await db.agronomy_analyses.find(filt, {"_id": 0}).sort(
             [("created_at", -1)]).limit(min(limit, 200)).to_list(200)
+
+    # =================================================================
+    # ÜRÜN ÖNERİSİ — 2026-08-20 (OTURUM-DEVAM madde 9): "sistem bize seçilen
+    # parsel(ler)e en uygun bitki türünü önermeli". `bulk-analyze`'in TERSİ:
+    # o TEK ürünü ÇOK parselde tarar, bu TÜM aktif ürünleri seçilen parsel(ler)
+    # de tarayıp SIRALAR. AYNI saf `_gather_signals`/`evaluate_rules` motoru
+    # yeniden kullanılır — yeni bir karar motoru YAZILMADI. AI çağrısı YAPILMAZ
+    # (N parsel × M ürün için pahalı olurdu, bulk-analyze'deki AYNI karar).
+    # =================================================================
+    class RecommendCropRequest(BaseModel):
+        parcel_ids: List[str]
+        season: Optional[int] = None
+
+    @api_router.post("/ekim-planlama/recommend-crop")
+    async def recommend_crop(body: RecommendCropRequest,
+                             user=Depends(require_permission("agronomy:analyze"))):
+        if not body.parcel_ids:
+            raise HTTPException(400, "parcel_ids boş olamaz")
+        if len(body.parcel_ids) > 200:
+            raise HTTPException(400, "Tek seferde en fazla 200 parsel değerlendirilebilir")
+
+        season = body.season or datetime.now(timezone.utc).year
+        crops = await db.agronomy_crops.find({"is_active": {"$ne": False}}, {"_id": 0}).to_list(200)
+        # Kural kütüphanesi boş olan ürünler (ör. yeni eklenmiş ama henüz
+        # kural girilmemiş) sessizce atlanır — analyze()'in 400'ü BURADA
+        # kullanıcıyı durdurmaz, sadece o ürün öneri listesine giremez.
+        crop_rules = {}
+        for c in crops:
+            rules = await db.agronomy_rules.find(
+                {"is_active": {"$ne": False}, "crop": c["key"]}, {"_id": 0}).sort([("order", 1)]).to_list(500)
+            if rules:
+                crop_rules[c["key"]] = (c, rules)
+        skipped_crops = [c["label"] for c in crops if c["key"] not in crop_rules]
+
+        results = []
+        for pid in body.parcel_ids:
+            parcel = await db.parcels.find_one({"id": pid, "is_active": {"$ne": False}}, {"_id": 0})
+            if not parcel:
+                results.append({"parcel_id": pid, "parcel_name": None, "error": "Parsel bulunamadı", "ranking": []})
+                continue
+            ranking = []
+            for crop_key, (crop_doc, rules) in crop_rules.items():
+                sig, _ = await _gather_signals(parcel, season, crop_doc.get("match_terms") or [])
+                result = evaluate_rules(rules, sig)
+                ranking.append({
+                    "crop": crop_key, "crop_label": crop_doc["label"],
+                    "score": result["score"], "decision": result["decision"],
+                    "decision_label": result["decision_label"], "blocking": result["blocking"],
+                    "top_findings": [m["name"] for m in result["matched_rules"][:3]],
+                })
+            ranking.sort(key=lambda r: (r["blocking"], -r["score"]))
+            results.append({
+                "parcel_id": pid, "parcel_name": parcel.get("name"),
+                "best_crop": ranking[0] if ranking and not ranking[0]["blocking"] else None,
+                "ranking": ranking,
+            })
+
+        return {"season": season, "evaluated_crops": list(crop_rules.keys()),
+                "skipped_crops_no_rules": skipped_crops, "results": results}
 
     # =================================================================
     # TOPLU SORGU — Denetim düzeltmesi (2026-07-24): "bu sene X ekmeye en

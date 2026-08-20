@@ -47,6 +47,11 @@ const LAYER_CATALOG = [
   { key: "parcels", label: "Parseller" },
   { key: "admin_areas", label: "İdari Sınırlar" },
   { key: "field_tasks", label: "Saha Görevleri" },
+  // 2026-08-20 (OTURUM-DEVAM madde 13) — Dashboard'daki yangın kartı bu
+  // katmana derin bağlantı veriyor (?layer=yangin). Backend ZATEN hazırdı
+  // (satellite_provider.py'nin GET /satellite/fire-summary'si lat/lon
+  // taşıyan yangın listesi döner) — yeni bir uç YAZILMADI.
+  { key: "yangin", label: "Yangın (NASA FIRMS)" },
 ];
 const DEFAULT_LAYERS = ["parcels"];
 
@@ -265,8 +270,20 @@ export default function HaritaPaneli() {
     else downloadBlob(JSON.stringify(fc, null, 2), "parseller.geojson", "application/geo+json");
     setExportOpen(false);
   };
-  const [visibleLayers, setVisibleLayers] = useState(DEFAULT_LAYERS);
-  const [layersOpen, setLayersOpen] = useState(false);
+  // 2026-08-20 — Dashboard'daki yangın kartından `?layer=yangin` ile
+  // gelindiyse o katman baştan açık olsun (deep-link).
+  const [visibleLayers, setVisibleLayers] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("layer");
+    return requested && !DEFAULT_LAYERS.includes(requested)
+      ? [...DEFAULT_LAYERS, requested] : DEFAULT_LAYERS;
+  });
+  const [layersOpen, setLayersOpen] = useState(() => new URLSearchParams(window.location.search).get("layer") === "yangin");
+  const [fireData, setFireData] = useState(null);
+  useEffect(() => {
+    if (!visibleLayers.includes("yangin") || fireData) return;
+    api.get("/satellite/fire-summary").then((r) => setFireData(r.data)).catch(() => setFireData({ available: false }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleLayers]);
   const [adminAreas, setAdminAreas] = useState([]);
   // Hangi idari seviyelerin çizileceği (Parcels.jsx ile AYNI varsayılan).
   const [adminLevels, setAdminLevels] = useState({ il: true, ilce: true, mahalle: false });
@@ -1205,6 +1222,13 @@ export default function HaritaPaneli() {
         </div>
       )}
 
+      {visibleLayers.includes("yangin") && fireData && (
+        <div className={`card p-3 mb-3 text-sm ${fireData.available && fireData.yangin_sayisi > 0 ? "text-amber-400" : "text-[var(--text-dim)]"}`}
+             data-testid="fire-layer-status">
+          {fireData.available ? fireData.mesaj : (fireData.reason || "Yangın verisi alınamadı")}
+        </div>
+      )}
+
       <div className="card overflow-hidden" style={{ height: 560 }}>
         <MapContainer center={initialView.center} zoom={initialView.zoom} style={{ height: "100%", width: "100%" }}>
           <TileLayer
@@ -1294,6 +1318,38 @@ export default function HaritaPaneli() {
             </CircleMarker>
           ))}
 
+          {/* 2026-08-20 — Yangın katmanı (NASA FIRMS). Kullanıcının kendi
+              parselleri zaten "parcels" katmanında aynı haritada çiziliyor —
+              istek buydu ("yangın yerleri ile kendi parsellerini de görmeli"). */}
+          {visibleLayers.includes("yangin") && fireData?.available && (fireData.yanginlar || []).map((f, i) => (
+            <CircleMarker
+              key={i}
+              center={[f.lat, f.lon]}
+              radius={8}
+              pathOptions={{
+                color: f.mesafe_km <= 5 ? "#ef4444" : "#fb923c",
+                fillColor: f.mesafe_km <= 5 ? "#ef4444" : "#fb923c",
+                fillOpacity: 0.75, weight: 2,
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: 170 }}>
+                  <div style={{ fontWeight: 600 }}>🔥 Yangın Noktası</div>
+                  <div style={{ fontSize: 12, marginTop: 2 }}>
+                    En yakın parsel: <b>{f.en_yakin_parsel || "—"}</b> ({f.mesafe_km} km {f.yon})
+                  </div>
+                  {f.koy && <div style={{ fontSize: 11, opacity: 0.7 }}>Köy: {f.koy}</div>}
+                  {f.brightness && <div style={{ fontSize: 11, opacity: 0.7 }}>Parlaklık: {f.brightness}</div>}
+                  {f.en_yakin_parsel_id && (
+                    <button onClick={() => nav(`/parseller/${f.en_yakin_parsel_id}`)}
+                            className="btn btn-ghost text-[10px] px-2 py-1" style={{ marginTop: 6 }}>
+                      Parsele Git
+                    </button>
+                  )}
+                </div>
+              </Popup>
+            </CircleMarker>
+          ))}
           {/* Şekille seç aracı — IT-15 */}
           <MapDrawTools active={drawSelectActive} mode="select" onCreated={onDrawSelection} />
           {visibleLayers.includes("parcels") && scopedParcels.map((p) => {

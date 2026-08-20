@@ -181,7 +181,13 @@ function FireBanner() {
 
   return (
     <button
-      onClick={() => nav("/uzaktan-algilama?view=yangin")}
+      // Bug fix (2026-08-20) — ÖNCEDEN /uzaktan-algilama?view=yangin'e
+      // gidiyordu ama o sayfa `view` parametresini hiç okumuyordu VE hiç
+      // harita içermiyordu — tıklama "gerçek bir harita aç" niyetini hiç
+      // karşılamıyordu. Artık HaritaPaneli.jsx'in yeni "yangin" katmanına
+      // (?layer=yangin ile otomatik açılır) gider — kullanıcının kendi
+      // parselleri zaten aynı haritada "parcels" katmanında görünür.
+      onClick={() => nav("/harita-paneli?layer=yangin")}
       data-testid="dashboard-fire-banner"
       className={`w-full text-left card p-4 mb-4 flex items-center gap-3 hover:opacity-90 ${
         kritik ? "border border-red-500/40 bg-red-500/10" : "border border-amber-500/30 bg-amber-500/5"}`}

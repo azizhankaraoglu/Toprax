@@ -9,6 +9,7 @@
  * season_planner.py'nin işi). Burada sadece ölçüm ve özet var.
  */
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "@/api";
 import {
   Sun, Droplets, Leaf, Wind, RefreshCw, AlertTriangle, TrendingUp, Sprout, Flame,
@@ -46,6 +47,7 @@ function Empty({ text }) {
 }
 
 export default function ParcelInsightCards({ parcelId }) {
+  const nav = useNavigate();
   const [solar, setSolar] = useState(null);
   const [water, setWater] = useState(null);
   const [carbon, setCarbon] = useState(null);
@@ -166,8 +168,16 @@ export default function ParcelInsightCards({ parcelId }) {
         )}
       </Card>
 
-      {/* KARBON */}
-      <Card icon={Wind} title="Karbon Ayak İzi" subtitle="IPCC 2019 + tarımsal LCA — tahmindir">
+      {/* KARBON — 2026-08-20: "Detaylı Rapor" ile parsele özel tam sayfaya
+          gider (bkz. pages/ParcelCarbonDetail.jsx — bu kart ilk 3 kalemi/
+          önerileri özetliyor, tam sayfa TÜM kalemleri + sezon karşılaştırmasını gösterir). */}
+      <Card icon={Wind} title="Karbon Ayak İzi" subtitle="IPCC 2019 + tarımsal LCA — tahmindir"
+            action={
+              <button className="btn btn-ghost text-[10px] px-2 py-1"
+                      onClick={() => nav(`/parseller/${parcelId}/karbon`)} data-testid="carbon-detail-link">
+                Detaylı Rapor →
+              </button>
+            }>
         {!carbon?.ayak_izi ? (
           <Empty text="Karbon hesabı yapılamadı." />
         ) : (

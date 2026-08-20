@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import api from "@/api";
 import ParcelPicker from "@/components/ParcelPicker";
 import FilterPanel from "@/components/FilterPanel";
+import BulkParcelSelect from "@/components/BulkParcelSelect";
 import { Sprout, Search, BookOpen, Plus, Trash2, Sparkles, AlertTriangle, Layers, X } from "lucide-react";
 
 const DECISION_BADGE = {
@@ -142,6 +143,33 @@ export default function EkimPlanlama() {
     a.download = `ekim-uygunluk-${crop}-${bulkSeason}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  // --- Ürün Önerisi (2026-08-20, OTURUM-DEVAM madde 9) — "seçilen parsel(ler)e
+  // en uygun bitki türü" — bulk-analyze'in TERSİ (bir ürün × çok parsel yerine
+  // çok ürün × seçili parsel(ler)). BulkParcelSelect (EkimKaydi.jsx'teki toplu
+  // ekim/sulama akışlarıyla AYNI ortak bileşen) ile ÇOKLU parsel seçilir.
+  const [recSeason, setRecSeason] = useState(new Date().getFullYear());
+  const [recParcelIds, setRecParcelIds] = useState([]);
+  const [recBusy, setRecBusy] = useState(false);
+  const [recResult, setRecResult] = useState(null);
+  const [recError, setRecError] = useState("");
+
+  async function runRecommend() {
+    if (recParcelIds.length === 0) return;
+    setRecBusy(true);
+    setRecError("");
+    setRecResult(null);
+    try {
+      const { data } = await api.post("/ekim-planlama/recommend-crop", {
+        parcel_ids: recParcelIds, season: Number(recSeason),
+      });
+      setRecResult(data);
+    } catch (e) {
+      setRecError(e.response?.data?.detail || "Öneri hesaplanamadı.");
+    } finally {
+      setRecBusy(false);
+    }
   }
 
   // --- Bilgi kütüphanesi ---
@@ -334,6 +362,10 @@ export default function EkimPlanlama() {
         <button className={`tab ${tab === "toplu" ? "active" : ""}`} onClick={() => setTab("toplu")}
                 data-testid="tab-toplu">
           <Layers size={15} /> Toplu Sorgu
+        </button>
+        <button className={`tab ${tab === "oneri" ? "active" : ""}`} onClick={() => setTab("oneri")}
+                data-testid="tab-oneri">
+          <Sparkles size={15} /> Ürün Önerisi
         </button>
         <button className={`tab ${tab === "kutuphane" ? "active" : ""}`} onClick={() => setTab("kutuphane")}
                 data-testid="tab-kutuphane">
@@ -627,6 +659,76 @@ export default function EkimPlanlama() {
               {bulkResult.results.length === 0 && (
                 <p className="muted">Sonuç yok — kriterlerle eşleşen parsel bulunamadı.</p>
               )}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === "oneri" && (
+        <>
+          <div className="card">
+            <h3>Parsel(ler) Seç</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Bir veya birden fazla parsel seçin — sistem TÜM aktif ürünlerin kural
+              kütüphanesini bu parsel(ler)e uygulayıp en uygun ürünü sıralayarak önerir.
+            </p>
+            <BulkParcelSelect onSelectionChange={setRecParcelIds} testId="recommend-parcel-select" />
+          </div>
+
+          <div className="card" style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div>
+              <label className="muted" style={{ fontSize: 12 }}>Sezon</label>
+              <input className="input" type="number" value={recSeason}
+                     onChange={(e) => setRecSeason(e.target.value)} style={{ width: 100 }} />
+            </div>
+            <button className="btn btn-primary" onClick={runRecommend}
+                    disabled={recBusy || recParcelIds.length === 0} data-testid="recommend-submit">
+              <Sparkles size={14} />
+              {recParcelIds.length === 0 ? "Önce parsel seçin" : recBusy ? "Hesaplanıyor…" : `Ürün Öner (${recParcelIds.length} parsel)`}
+            </button>
+            {recError && <span style={{ color: "var(--danger, #ef4444)" }}>{recError}</span>}
+          </div>
+
+          {recResult && (
+            <div className="card">
+              <h3>Sonuçlar</h3>
+              {recResult.skipped_crops_no_rules?.length > 0 && (
+                <p className="muted" style={{ fontSize: 12 }}>
+                  Kural kütüphanesi boş olduğu için değerlendirilmeyen ürünler: {recResult.skipped_crops_no_rules.join(", ")}
+                </p>
+              )}
+              {recResult.results.map((r) => (
+                <div key={r.parcel_id} className="card" style={{ marginBottom: 10, background: "var(--surface-2)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <strong>{r.parcel_name || r.parcel_id}</strong>
+                    {r.best_crop && (
+                      <span className="badge badge-a" data-testid={`recommend-best-${r.parcel_id}`}>
+                        En uygun: {r.best_crop.crop_label} (%{r.best_crop.score})
+                      </span>
+                    )}
+                  </div>
+                  {r.error && <p className="muted">{r.error}</p>}
+                  {!r.error && (
+                    <table className="table" style={{ fontSize: 13 }}>
+                      <thead><tr><th>Ürün</th><th>Uygunluk</th><th>Karar</th><th>Öne Çıkan Bulgular</th></tr></thead>
+                      <tbody>
+                        {r.ranking.map((rk) => (
+                          <tr key={rk.crop}>
+                            <td>{rk.crop_label}</td>
+                            <td style={{ fontWeight: 700 }}>%{rk.score}</td>
+                            <td>
+                              <span className={`badge ${DECISION_BADGE[rk.decision]?.cls || "badge-neutral"}`}>
+                                {DECISION_BADGE[rk.decision]?.text || rk.decision}
+                              </span>
+                            </td>
+                            <td className="muted">{rk.top_findings.join(", ") || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </>

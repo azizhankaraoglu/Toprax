@@ -736,8 +736,38 @@ export function HastalikTespiti() {
   const [history, setHistory] = useState([]);
   const fileRef = useRef();
 
+  // 2026-08-20 (OTURUM-DEVAM madde 14) — tespit sonucu hakkında AI ile
+  // sohbet + geçmişi tutma. backend/extras.py'nin yeni /ai/disease-
+  // detections/{id}/messages ikilisi (case_messages deseninin kopyası).
+  const [chatDetectionId, setChatDetectionId] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+
   const loadHistory = () => api.get("/ai/disease-history").then((r) => setHistory(r.data));
   useEffect(loadHistory, []);
+
+  function openChat(detectionId) {
+    setChatDetectionId(detectionId);
+    setChatMessages([]);
+    api.get(`/ai/disease-detections/${detectionId}/messages`).then((r) => setChatMessages(r.data)).catch(() => {});
+  }
+
+  async function sendChatMessage(e) {
+    e.preventDefault();
+    if (chatBusy || !chatInput.trim() || !chatDetectionId) return;
+    setChatBusy(true);
+    const text = chatInput.trim();
+    setChatInput("");
+    try {
+      const { data } = await api.post(`/ai/disease-detections/${chatDetectionId}/messages`, { message: text });
+      setChatMessages((prev) => [...prev, data.user_message, data.ai_message]);
+    } catch (err) {
+      alert("Sohbet hatası: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setChatBusy(false);
+    }
+  }
 
   function onSelect(e) {
     const f = e.target.files?.[0];
@@ -754,6 +784,7 @@ export function HastalikTespiti() {
     try {
       const { data } = await api.post("/ai/disease-detect", { image_base64: photo });
       setResult(data);
+      openChat(data.id);
       loadHistory();
     } catch (err) {
       alert("AI hatası: " + (err.response?.data?.detail || err.message));
@@ -833,6 +864,39 @@ export function HastalikTespiti() {
         </div>
       </div>
 
+      {/* 2026-08-20 (madde 14) — tespit hakkında AI ile sohbet, geçmiş tutulur. */}
+      {chatDetectionId && (
+        <div className="card mt-6 p-4" data-testid="disease-chat-panel">
+          <h3 className="font-display text-lg mb-3 flex items-center gap-2">
+            <Brain size={16} className="text-[var(--primary)]" /> Bu Tespit Hakkında Sohbet Et
+          </h3>
+          <div className="space-y-2 max-h-[320px] overflow-y-auto scrollbar mb-3">
+            {chatMessages.length === 0 && (
+              <div className="text-xs text-[var(--text-dim)] py-4 text-center">
+                Bu hastalık/öneri hakkında bir soru sorun — ör. "bu ilacı ne zaman uygulamalıyım?"
+              </div>
+            )}
+            {chatMessages.map((m) => (
+              <div key={m.id} className={`text-sm p-3 rounded-lg max-w-[85%] ${
+                m.sender_type === "user" ? "bg-[var(--primary)]/10 ml-auto" : "bg-[var(--surface-2)] mr-auto"}`}>
+                <div className="text-[10px] text-[var(--text-dim)] mb-1">
+                  {m.sender_name} · {new Date(m.created_at).toLocaleString("tr-TR")}
+                </div>
+                <div className="whitespace-pre-wrap">{m.message}</div>
+              </div>
+            ))}
+          </div>
+          <form onSubmit={sendChatMessage} className="flex gap-2">
+            <input className="input flex-1" placeholder="Soru yazın…" value={chatInput}
+                   onChange={(e) => setChatInput(e.target.value)} data-testid="disease-chat-input" />
+            <button type="submit" disabled={chatBusy || !chatInput.trim()} className="btn btn-primary"
+                    data-testid="disease-chat-send">
+              {chatBusy ? <Loader2 size={14} className="animate-spin" /> : "Gönder"}
+            </button>
+          </form>
+        </div>
+      )}
+
       {history.length > 0 && (
         <div className="card mt-6 overflow-hidden">
           <div className="p-4 border-b border-[var(--border)]">
@@ -840,9 +904,15 @@ export function HastalikTespiti() {
           </div>
           <div className="max-h-[300px] overflow-y-auto scrollbar">
             {history.map((h) => (
-              <div key={h.id} className="p-4 border-b border-[var(--border)] text-sm">
-                <div className="text-xs text-[var(--text-dim)]">{new Date(h.created_at).toLocaleString("tr-TR")}</div>
-                <div className="mt-1 line-clamp-2">{h.result?.substring(0, 200)}…</div>
+              <div key={h.id} className="p-4 border-b border-[var(--border)] text-sm flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs text-[var(--text-dim)]">{new Date(h.created_at).toLocaleString("tr-TR")}</div>
+                  <div className="mt-1 line-clamp-2">{h.result?.substring(0, 200)}…</div>
+                </div>
+                <button className="btn btn-ghost text-xs shrink-0" onClick={() => openChat(h.id)}
+                        data-testid={`disease-history-chat-${h.id}`}>
+                  <Brain size={12} /> Sohbet
+                </button>
               </div>
             ))}
           </div>

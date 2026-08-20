@@ -182,6 +182,87 @@ def register_extra_routes(api_router, db, current_user, is_admin, require_featur
         return docs
 
     # =====================================================================
+    # 2026-08-20 (OTURUM-DEVAM madde 14) — AI Hastalık Tespiti sohbeti.
+    # Yeniden kullanılan desen: `case_management.py`'nin `case_messages`
+    # koleksiyonu (id + created_at sıralı, basit ekle/listele) — kod
+    # tabanındaki en temiz "geçmişli konuşma" emsali, YENİ bir mimari
+    # İCAT EDİLMEDİ. AI yanıtı yine `governed_generate(scope="disease")`
+    # üzerinden geçer (guardrail/RAG aynen uygulanır). Fotoğraf DB'de
+    # SAKLANMADIĞI için (bkz. ai_disease_detect — img_b64 kalıcı değil)
+    # takip sorularında orijinal tespitin METİN sonucu bağlam olarak
+    # kullanılır — görüntü tekrar gönderilmez.
+    # =====================================================================
+    class DiseaseChatMessage(BaseModel):
+        message: str
+
+    def _check_disease_detection_access(doc: dict, user: dict):
+        if user.get("role") == "ciftci" and doc.get("farmer_id") != user.get("farmer_id"):
+            raise HTTPException(403, "Bu tespite erişiminiz yok")
+
+    @api_router.get("/ai/disease-detections/{detection_id}/messages")
+    async def list_disease_messages(detection_id: str, user=Depends(current_user),
+                                    _feat=Depends(require_feature("ai"))):
+        detection = await db.disease_detections.find_one({"id": detection_id}, {"_id": 0})
+        if not detection:
+            raise HTTPException(404, "Tespit bulunamadı")
+        _check_disease_detection_access(detection, user)
+        return await db.disease_detection_messages.find(
+            {"detection_id": detection_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
+
+    @api_router.post("/ai/disease-detections/{detection_id}/messages")
+    async def send_disease_message(detection_id: str, body: DiseaseChatMessage, request: Request,
+                                   user=Depends(current_user), _feat=Depends(require_feature("ai"))):
+        detection = await db.disease_detections.find_one({"id": detection_id}, {"_id": 0})
+        if not detection:
+            raise HTTPException(404, "Tespit bulunamadı")
+        _check_disease_detection_access(detection, user)
+
+        user_msg = {
+            "id": str(uuid.uuid4()), "detection_id": detection_id, "sender_type": "user",
+            "sender_name": user.get("full_name") or user.get("email"), "message": body.message,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.disease_detection_messages.insert_one(dict(user_msg))
+
+        history = await db.disease_detection_messages.find(
+            {"detection_id": detection_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
+        gecmis_metni = "\n".join(
+            f"{'Kullanıcı' if h['sender_type'] == 'user' else 'Sen'}: {h['message']}" for h in history[:-1])
+
+        log_id = await _check_ai_limit(user, "disease_detect")
+        from ai_governance import governed_generate
+        system_prompt = (
+            "Sen bir tarım uzmanı ziraat mühendisisin. Daha önce şu bitki hastalığı tespitini yapmıştın:\n"
+            f"{detection.get('result') or '(tespit metni yok)'}\n\n"
+            "Kullanıcı şimdi bu tespit hakkında takip sorusu soruyor. Önceki konuşma geçmişini dikkate alarak "
+            "kısa, net ve Türkçe yanıt ver. Kararını/teşhisini değiştirmiyorsun, sadece açıklıyor ve "
+            "somut öneriler veriyorsun."
+        )
+        if gecmis_metni:
+            system_prompt += f"\n\nKONUŞMA GEÇMİŞİ:\n{gecmis_metni}"
+
+        res = await governed_generate(
+            db, "disease", body.message, base_system_prompt=system_prompt, use_rag=True, user=user,
+        )
+        await _mark_ai_routed(log_id, res.get("routed_as"))
+
+        if res.get("blocked"):
+            ai_text = res.get("answer") or "Bu soru kurum politikası gereği yanıtlanamadı."
+        elif res.get("error"):
+            ai_text = f"AI şu anda yanıt veremiyor ({res['error']}) — daha sonra tekrar deneyin."
+        else:
+            ai_text = res.get("answer") or "Yanıt üretilemedi."
+
+        ai_msg = {
+            "id": str(uuid.uuid4()), "detection_id": detection_id, "sender_type": "ai",
+            "sender_name": "AI Ziraat Mühendisi", "message": ai_text,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.disease_detection_messages.insert_one(dict(ai_msg))
+
+        return {"user_message": user_msg, "ai_message": ai_msg}
+
+    # =====================================================================
     # AI COPILOT — Doğal dil ile parsel/çiftçi sorgusu
     # =====================================================================
     # Roadmap örneği: "Çumra'daki en riskli 20 parseli göster" veya
