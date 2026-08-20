@@ -99,6 +99,7 @@ FEATURE_FLAG_LABELS = {
     "report_builder": "Rapor Oluşturucu",
     # (Denetim Faz 7, 2026-07-24) Harita Stüdyosu
     "map_studio": "Harita Stüdyosu",
+    "vra": "VRA (Değişken Oranlı Uygulama)",
 }
 
 HEALTH_STATUS_LABELS = {"saglikli": "Sağlıklı", "uyari": "Uyarı", "hata": "Hata", "kurulu_degil": "Kurulu Değil"}

@@ -8,7 +8,7 @@ import {
   Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Sparkles,
   UserCog, ShieldCheck, LayoutList, Landmark, Compass, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, ClipboardCheck,
   Workflow, CheckSquare, Inbox, Radio, FileBarChart2, Layers,
-  CalendarClock, Bug, Factory, BrainCircuit, Leaf
+  CalendarClock, Bug, Factory, BrainCircuit, Leaf, LayoutGrid
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
 import AnnouncementPopup from "@/components/AnnouncementPopup";
@@ -50,6 +50,7 @@ const navGroups = [
       { to: "/urun-tanima", icon: Sprout, label: "Ürün Tanıma (Uydu)", featureFlag: "remote_sensing" },
       { to: "/karbon-ayak-izi", icon: Leaf, label: "Karbon Ayak İzi" },
       { to: "/uzaktan-algilama", icon: Satellite, label: "Uzaktan Algılama", featureFlag: "remote_sensing" },
+      { to: "/vra", icon: LayoutGrid, label: "VRA (Değişken Oranlı Uygulama)", featureFlag: "vra" },
     ]
   },
   {

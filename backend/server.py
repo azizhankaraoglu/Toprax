@@ -453,6 +453,13 @@ register_automation_routes(api_router, db, current_user, require_permission, log
 from case_management import register_case_routes
 register_case_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
 
+# 2026-08-20 (OTURUM-DEVAM madde 9) — VRA (Değişken Oranlı Uygulama):
+# parsel bazlı zon haritası → shapefile/ISOXML dışa aktarma. Yeni bir GIS
+# altyapısı İCAT EDİLMEDİ — `parcels.geometry` + `pyshp` (geo_import.py'nin
+# ZATEN bağımlılığı) kullanılır.
+from vra import register_vra_routes
+register_vra_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+
 # PR-04 (ROADMAP-URUNLESTIRME.md): Migration Runner + Surum Yukseltme/Geri
 # Alma. raw_db kullanir (tenant filtresiz) -- migration'lar sema seviyesinde
 # calisir. Surum numarasi Health Center'da (platform_core.py) gorunur.

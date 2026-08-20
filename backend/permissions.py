@@ -250,6 +250,15 @@ PERMISSION_CATALOG = {
             {"key": "remote_sensing:task_manage", "label": "Task Kuyruğu Yönetimi"},
         ],
     },
+    # 2026-08-20 (OTURUM-DEVAM madde 9) — VRA (Değişken Oranlı Uygulama).
+    "vra": {
+        "label": "VRA (Değişken Oranlı Uygulama)",
+        "permissions": [
+            {"key": "vra:view", "label": "Zon Haritalarını Görüntüle"},
+            {"key": "vra:create", "label": "Zon Haritası Oluştur"},
+            {"key": "vra:export", "label": "Shapefile/ISOXML Dışa Aktar"},
+        ],
+    },
     "communications": {
         "label": "İletişim Merkezi (Communication Hub)",
         "permissions": [
@@ -404,6 +413,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "contracts:view", "contracts:create", "contracts:edit", "contracts:delete",
         "plantings:view", "plantings:create", "plantings:edit", "plantings:delete",
         "agronomy:analyze", "agronomy:rules_manage",
+        "vra:view", "vra:create", "vra:export",
         "karne:manage",
         "soil:view", "soil:create", "soil:edit", "soil:delete",
         "irrigation:view", "irrigation:create", "irrigation:edit", "irrigation:delete",
@@ -451,6 +461,7 @@ DEFAULT_ROLE_PERMISSIONS: Dict[str, List[str]] = {
         # de düzenleyebilir (kullanıcının "düzenlenebilir AI bilgi
         # kütüphanesi" isteğinin asıl hedef kitlesi).
         "agronomy:analyze", "agronomy:rules_manage",
+        "vra:view", "vra:create", "vra:export",
         "soil:view", "soil:create", "soil:edit", "soil:delete",
         "irrigation:view", "irrigation:create", "irrigation:edit", "irrigation:delete",
         "operations:view", "operations:tasks_manage",
