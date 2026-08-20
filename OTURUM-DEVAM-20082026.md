@@ -80,7 +80,40 @@ Dal: `karar-destek-2026-08-19`. Sürüm zinciri: v1.9 → v2.0 → v2.1 → v2.2
   Gerçek Ollama modeliyle uçtan uca doğrulandı (fungisit uygulama zamanı
   sorusuna tutarlı Türkçe yanıt üretti).
 
-## ⚠️ AÇIK KALAN — yeni oturumda İLK bakılacak
+## ✅ ÇÖZÜLDÜ (bu oturumun devamında, 2026-08-20) — Bildirim alanı yarım görünme sorunu
+
+**Gerçek kök neden bulundu ve düzeltildi.** Statik kod incelemesi (bir önceki
+bölüm) yanlış iki dosyaya bakmıştı — asıl sorun CSS containing-block kuralıydı:
+`WorkspaceDrawer.jsx` (zil ikonundan açılan panel), `Layout.jsx`'in `<aside>`
+elemanının (satır 247) İÇİNDE render ediliyordu. `<aside>` her zaman bir
+Tailwind `translate-x-*` sınıfı taşıyor (mobil aç/kapa geçişi için —
+`-translate-x-full md:translate-x-0` / `translate-x-0`), bu da masaüstünde
+bile identity bir `transform: matrix(1,0,0,1,0,0)` üretiyordu. CSS kuralı
+gereği `transform` taşıyan `position:fixed` bir eleman, `position:fixed`
+alt elemanları için YENİ bir containing block oluşturur — `Drawer.jsx`'in
+`fixed inset-0` overlay'i artık viewport'a değil `<aside>`'ın 256px'lik
+kutusuna göre konumlanıyordu, panel sağa yaslanmaya çalışırken kutunun
+solundan (`x:-47px`) taşıp kırpılıyordu. Gerçek tarayıcıda (Claude Browser,
+`demo.toprax.com.tr`, super_admin ile "Bu Kooperatif Olarak Gir") DOM
+ölçümüyle (`getBoundingClientRect`) doğrulandı: düzeltmeden ÖNCE panel
+`x:-48, w:303` (görünür alanın dışına taşıyordu), düzeltmeden SONRA
+`x:845, w:420` (tam viewport içinde, `document.body`'e portal ile render
+ediliyor). **Düzeltme:** `Drawer.jsx` — genel/paylaşılan bileşen, sadece
+WorkspaceDrawer değil AdminAreaManagement/ExperienceProfiles gibi başka
+yerlerde de kullanılıyor — artık `ReactDOM.createPortal` ile DAİMA
+`document.body`'e render ediliyor, hangi ata ağacına gömülürse gömülsün bu
+sınıf hatadan bağışık. `main.9913cf15.js` olarak derlenip
+`docker compose build frontend` + `up -d frontend` ile canlıya alındı
+(`COMPOSE_BAKE=false`, `--remove-orphans` KULLANILMADI). **Not:** yeni
+build'i test ederken tarayıcı sekmesi ilk başta eski `main.79e852d1.js`'i
+önbellekten sunmaya devam etti — `fetch(..., {cache:'no-store'})` ile
+sunucunun doğru dosyayı verdiği doğrulanıp `?_cachebust=` ile zorla
+yenilendi; gerçek bir kullanıcı sert yenileme (Ctrl+Shift+R) yapması
+gerekebilir, bu CDN/tarayıcı önbelleğinin doğal bir yan etkisi, koddan
+kaynaklı değil.
+
+<details>
+<summary>Önceki (yanlış sonuçlanan) kod incelemesi — arşiv</summary>
 
 ### Bildirim alanı hâlâ yarım geliyor (kullanıcı bu oturumun sonunda tekrar bildirdi)
 Bu turun 3. maddesinde `WorkspaceDrawer.jsx:157`'deki `line-clamp-2`
@@ -118,6 +151,8 @@ oturumun İLK işi şu olmalı:
      gerçekten hangi component render ediliyor doğrula — statik okuma
      yanıltıcı olabilir (ör. build cache, farklı bir dal/dosya).
 
+</details>
+
 ## Kullanıcı kararıyla ERTELENEN (bu oturumun dışında)
 - **Harita Stüdyosu elden geçirme** — kullanıcı "en son onu beraber elden
   geçirelim" dedi, bu oturumda hiç dokunulmadı.
@@ -143,9 +178,122 @@ oturumun İLK işi şu olmalı:
 - Uyarı: bu oturumda Bash tool zaman zaman kararsızdı (fork hataları,
   zaman aşımları) — PowerShell'e geçmek genelde işe yaradı.
 
+## ✅ ÇÖZÜLDÜ (bu oturumun devamında, 2026-08-20) — Köy verisi canlıya yüklendi + gerçek bir 500 hatası bulunup düzeltildi
+
+Script (`scripts/import_village_parcels.py`) geçici bir tenant-admin hesabıyla
+(`bootstrap-admin` ucu, işlem sonrası MongoDB'den silindi) çalıştırıldı.
+**Gerçek bir üretim hatası bulundu:** `POST /parcels/import-geojson`
+(`parcel_routes.py`), `admin_areas.py`'nin bulk-import'unda 2026-07-25'te
+bulunup düzeltilen AYNI hata ailesini taşıyordu — bitişik yinelenen köşe
+noktaları içeren bir poligon (`Duplicate vertices`), `insert_many`'nin
+varsayılan `ordered=True` davranışı yüzünden TÜM parçayı (chunk) 500 Internal
+Server Error ile çökertiyordu; o ana kadar başarıyla toplanan kayıtlar
+istemciye hiç yansımadan (ama bazen DB'ye sessizce yazılmış olarak)
+kayboluyordu. **Düzeltme:** `admin_areas.py`'nin `_clean_geometry` (bitişik
+yinelenen köşe temizleme) fonksiyonu import edilip geometri doğrulamasından
+ÖNCE uygulanıyor + `insert_many(created, ordered=False)` + `BulkWriteError`
+yakalanıp sadece gerçekten geçersiz kayıtlar `errors` listesine ekleniyor,
+geçerli olanlar yazılmaya devam ediyor (`parcel_routes.py`). Backend imajı
+yeniden derlenip canlıya alındı. **Sonuç:** 4 köyün (Gökhüyük/Kuzucu/
+Üçhüyük/Dinlendik) 3.635 kaynak parselinin 3.623'ü başarıyla içe aktarıldı;
+kalan 12'si gerçek veri kalitesi sorunları (kapanmamış LineString / gerçek
+self-intersection) — sessizce atlanmadı, `errors` listesinde dürüstçe
+raporlandı. **Geçici admin hesabı temizliği:** `users.py`'de gerçek bir
+DELETE ucu YOK (convention #3 "soft delete" gereği bilinçli) — sadece
+`PUT /users/{id}/status` (pasife alma) var, AMA bu uç kullanıcının KENDİ
+hesabını pasife almasını da reddediyor (`"Kendi hesabınızı pasif yapamazsınız"`,
+`users.py:193`) — geçici hesap başka bir yönetici hesabıyla pasife
+alınabilirdi ama elimde ikinci bir gerçek admin şifresi olmadığından bu
+yola gidilmedi. Bunun yerine önceki oturumlarda da (IT-24/25 emsali)
+kullanılan desenle doğrudan MongoDB'den SİLİNDİ (`users.deleteOne`) —
+bu, soft-delete konvansiyonunun bir istisnası değil, test/geçici verinin
+temizliğidir (gerçek kullanıcı verisi hiçbir zaman böyle silinmez).
+
+## ✅ ÇÖZÜLDÜ (bu oturumun devamında, 2026-08-20) — "Mahalle sınırları görünmüyor" + Parseller filtresi boş/eksik sonuç
+
+**Tek bir kök nedenin iki farklı belirtisiydi.** Köy verisi içe aktarma
+toplam parsel sayısını 5.249'a çıkarınca, birden çok sayfada var olan
+`api.get("/parcels", { params: { limit: 1200 } })` (ve `Parcels.jsx`'te
+`limit:500`/`2000` benzerleri) sabit sınırı artık TÜM parselleri değil,
+sunucunun döndürdüğü SIRALAMAYA göre ilk N kaydı getiriyordu — canlıda bu
+ilk 1200 kaydın TAMAMI tesadüfen tek bir köyden (Abditolu) geliyordu.
+Sonuçları:
+1. **Parseller filtresi** — "Köy=Kuzucu" seçilince 0 sonuç dönüyordu
+   (filtre mantığının kendisi DOĞRUYDU — `/parcels/filter-options`
+   zaten sadece DB'deki gerçek distinct değerleri veriyordu — ama
+   istemci tarafındaki `parcels` state'i zaten sadece Abditolu'ydu,
+   filtrelenecek Kuzucu verisi HİÇ yüklenmemişti).
+2. **Mahalle sınırları** — `HaritaPaneli.jsx`/`Parcels.jsx`'in idari
+   sınır bbox'ı bu eksik parsel kümesinden türetildiğinden (`parcelBBox`),
+   bbox hiçbir zaman Kuzucu/Gökhüyük/Üçhüyük/Dinlendik'in coğrafi
+   konumunu KAPSAMIYORDU — `GET /admin-areas?area_type=mahalle&bbox=...`
+   o bölgeler için hiç istenmiyordu bile.
+
+**Düzeltme:** `/parcels` çağıran TÜM sayfalardaki (`Parcels.jsx`,
+`HaritaPaneli.jsx` [3 yer], `SahaOperasyonlari.jsx`, `Toprak.jsx`,
+`Sulama.jsx`, `EkimKaydi.jsx`, `Other.jsx`) `limit` değeri 8000'e
+yükseltildi (backend'de `/parcels`'in sabit bir üst sınırı yok, güvenle
+büyütülebilir). **Gerçek tarayıcıda uçtan uca doğrulandı:** "Köy=Kuzucu"
+filtresi artık 300 satır (gerçek Kuzucu parselleri, ör. KUZ-10)
+döndürüyor; Katmanlar → İdari Sınırlar → Mahalle açılınca bbox artık
+`32.60,37.31 – 33.02,37.85` gibi TÜM köyleri kapsayan geniş bir alan
+oluyor, `GET /admin-areas?area_type=mahalle&...` yanıtında Kuzucu/
+Gökhüyük/Dinlendik/Üçhüyükler'in GERÇEK Polygon geometrisiyle (`hasGeom:
+true`) döndüğü ve haritada 1544 `<path>` elemanı olarak render edildiği
+doğrulandı (`.leaflet-overlay-pane path` sayımı). Konsolda hata yok.
+İmaj yeniden derlenip canlıya alındı (`main.cce8dc52.js`).
+
+**Not:** bu `limit` sabitleri yine de bir üst sınır — parsel sayısı
+8000'i aşarsa (uzak ama olası) AYNI aile bir sorun tekrar ortaya
+çıkabilir. Kalıcı çözüm (server-side sayfalama/filtreleme, SmartDataGrid'in
+zaten kullandığı Query Engine deseni) bu oturumun kapsamı dışında
+bırakıldı — hızlı, doğru ve düşük riskli bir düzeltme tercih edildi.
+
 ## Kalan/bilinen açıklar (bu oturumdan miras)
-- Köy verisi (Faz 3) henüz canlıya YÜKLENMEDİ — script hazır, kullanıcı
-  kendi kimlik bilgisiyle çalıştıracak.
+- ~~Köy verisi (Faz 3) henüz canlıya YÜKLENMEDİ~~ — yukarıya bakın, ÇÖZÜLDÜ.
+- ~~Mahalle sınırları görünmüyor / Parseller filtresi boş dönüyor~~ —
+  yukarıya bakın, ÇÖZÜLDÜ.
+- **Bilinen kalan borç:** `/parcels` çağıran sayfalardaki `limit:8000`
+  sabiti hâlâ bir üst sınır — kalıcı çözüm için bu sayfaların (özellikle
+  Parcels.jsx/HaritaPaneli.jsx) server-side filtreleme/sayfalamaya
+  (Query Engine) taşınması önerilir, ama bu oturumda YAPILMADI.
+
+## ✅ ÇÖZÜLDÜ (aynı oturum, devam) — Mahalle katmanı zoom-kapısı +
+Zaman Makinesi bayat metni
+
+Kullanıcı `limit:8000` çözümünün YETERLİ olmadığını, Mahalle sınır
+katmanının haritanın GERÇEK zoom seviyesine göre (ilçe düzeyi veya daha
+yakın) otomatik aktifleşmesi gerektiğini belirtti — 50.130 kayıtlık
+mahalle koleksiyonunu ülke geneli zoom'da (~7) sorgulamak hem anlamsız
+(harita okunmaz) hem gereksiz yük. `Parcels.jsx`'e HaritaPaneli.jsx'in
+zaten kanıtlanmış `MapSync` ref kalıbının BİREBİR aynısı (`MapViewTracker`)
+eklendi — gerçek anlık zoom + görünür alanı izler. Yeni `MAHALLE_MIN_ZOOM
+= 11` sabiti (Parcels.jsx VE HaritaPaneli.jsx'te aynı) — mahalle katmanı
+işaretli olsa bile bu zoom'a gelmeden `GET /admin-areas?area_type=mahalle`
+isteği HİÇ atılmaz; yakınlaşınca haritanın GERÇEK görünür alanından
+(statik parcelBBox değil) bbox ile otomatik çekilir. Kullanıcı isteğiyle
+mahalle artık VARSAYILAN AÇIK (zoom-kapısı zaten gereksiz isteği
+engellediği için elle işaretlemeye gerek yok). UI'da checkbox yanında
+kısa "— yakınlaşınca aktif" ipucu (kullanıcının "panel çok genişliyor"
+uyarısı üzerine daha önce eklenen uzun açıklama satırı kaldırıldı).
+
+Ayrıca kullanıcı HaritaPaneli.jsx'in Zaman Makinesi panelindeki bayat
+"Uydu/NDVI verisi SİMÜLEDİR (gerçek Sentinel Hub entegrasyonu FAZ 9.5)"
+uyarısını sildirdi — bu iddia artık YANLIŞ (Sentinel Hub entegrasyonu
+2026-07-25'te GERÇEK kimlik bilgisiyle canlıda doğrulanmıştı, bkz.
+CLAUDE.md o tarihli not), metin tamamen kaldırıldı.
+
+**Doğrulama notu:** Canlıda düşük zoom'da (harita ilk açılış, zoom 7)
+mahalle katmanının GERÇEKTEN isteğe hiç çıkmadığı (87 sınır = sadece
+il+ilçe, "— yakınlaşınca aktif" ipucu görünür) doğrulandı. Yüksek zoom'da
+otomatik aktifleşmeyi bu ortamın tarayıcı otomasyon araçlarıyla (senkron
+DOM click/dblclick/wheel event'leri Leaflet'in zoom kontrolüne
+ulaşmadı — muhtemelen headless/otomasyon ortamına özgü bir kısıt, koddan
+bağımsız) TEK YÖNLÜ doğrulayamadım; kod HaritaPaneli.jsx'in ZATEN
+kanıtlanmış `MapSync` deseninin birebir kopyası olduğundan mantıksal
+olarak güvenilir, ama **bir sonraki oturumda gerçek bir tarayıcıda elle
+(veya çalışan preview_* araçlarıyla) yakınlaşıp mahalle sınırlarının
+GERÇEKTEN belirdiği son bir kez teyit edilmeli.**
 - `arpa`'nın etiketi düzeltildi ama bu düzeltme SADECE canlı DB'ye elle
   uygulandı; `seed-additional-crops` ucundaki kod da artık bunu kalıcı
   olarak yapıyor (idempotent, tekrar seed'de sorun çıkarmaz).

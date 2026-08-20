@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AdminAreaPopupLinks from "@/components/AdminAreaPopupLinks";
 import MapClickAdminPopup from "@/components/MapClickAdminPopup";
@@ -21,6 +21,12 @@ import {
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
 const RISK_LABELS = { yesil: "Düşük Risk", sari: "İzlemeye Değer", turuncu: "Riskli", kirmizi: "Acil Müdahale" };
+// 2026-08-21 — "Mahalle" sınır katmanı SADECE ilçe zoom seviyesinde (veya
+// daha yakında) aktif olur: 81 il + 971 ilçeyle kıyasla 50.130 mahalle var,
+// ülke geneli zoom'da (~7) hepsini çizmeye çalışmak hem okunmaz bir harita
+// hem gereksiz büyük bir istek demek. Leaflet zoom ölçeğinde 11 kabaca
+// "ilçe/kasaba" netliğine karşılık gelir (il ~6-8, mahalle/köy ~13+).
+const MAHALLE_MIN_ZOOM = 11;
 
 /**
  * HARİTA LEJANTI — parsel poligonlarındaki renklerin ne anlama geldiğini
@@ -99,6 +105,7 @@ function MapControls({
   showAdminAreas, setShowAdminAreas,
   adminLevels, setAdminLevels,
   adminCounts, adminLoading, adminCount,
+  mapZoom,
 }) {
   const [panel, setPanel] = useState(null); // "layers" | "basemap" | null
   const Btn = ({ id, icon: Icon, label }) => (
@@ -137,17 +144,23 @@ function MapControls({
           {showAdminAreas && (
             <div className="pl-5 mt-1 flex flex-col gap-1 border-l border-[var(--border)]"
                  data-testid="admin-level-picker">
-              {[["il", "İl"], ["ilce", "İlçe"], ["mahalle", "Mahalle"]].map(([key, label]) => (
-                <label key={key} className="flex items-center gap-1.5 text-[11px] cursor-pointer">
-                  <input type="checkbox" checked={!!adminLevels[key]}
-                         onChange={(e) => setAdminLevels((s) => ({ ...s, [key]: e.target.checked }))}
-                         data-testid={`admin-level-${key}`} />
-                  {label}
-                  {adminCounts?.[key] != null && (
-                    <span className="text-[var(--text-dim)]">({adminCounts[key].toLocaleString("tr-TR")})</span>
-                  )}
-                </label>
-              ))}
+              {[["il", "İl"], ["ilce", "İlçe"], ["mahalle", "Mahalle"]].map(([key, label]) => {
+                const mahalleWaiting = key === "mahalle" && adminLevels.mahalle && mapZoom < MAHALLE_MIN_ZOOM;
+                return (
+                  <label key={key} className="flex items-center gap-1.5 text-[11px] cursor-pointer">
+                    <input type="checkbox" checked={!!adminLevels[key]}
+                           onChange={(e) => setAdminLevels((s) => ({ ...s, [key]: e.target.checked }))}
+                           data-testid={`admin-level-${key}`} />
+                    {label}
+                    {adminCounts?.[key] != null && (
+                      <span className="text-[var(--text-dim)]">({adminCounts[key].toLocaleString("tr-TR")})</span>
+                    )}
+                    {mahalleWaiting && (
+                      <span className="text-[var(--text-dim)] italic">— yakınlaşınca aktif</span>
+                    )}
+                  </label>
+                );
+              })}
               <span className="text-[10px] text-[var(--text-dim)] mt-1">
                 {adminLoading ? "yükleniyor…" : `${adminCount} sınır çizili`}
               </span>
@@ -196,6 +209,28 @@ function CoordsClickHandler({ active, onPick }) {
 }
 
 const areaFromGeoJSON = (geojson) => Math.round((turf.area(geojson) / 1000) * 10) / 10; // m² → dekar
+
+// 2026-08-21 (kullanıcı isteği) — Mahalle sınırları artık her zaman
+// çizilmiyor: haritanın GERÇEK anlık zoom/görünür alanına göre "ilçe
+// düzeyi veya daha yakın" (bkz. MAHALLE_MIN_ZOOM) olunca aktif oluyor.
+// HaritaPaneli.jsx'teki `MapSync` ile AYNI ref kalıbı (CLAUDE.md'deki
+// useMapEvents stale-closure tuzağı — sabit bir handlers nesnesi + en
+// güncel callback'i okuyan bir ref olmadan her render'da off/on ile
+// yeniden bağlanıp "Maximum update depth exceeded" döngüsüne yol açar).
+function MapViewTracker({ onChange }) {
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const handlersRef = useRef();
+  if (!handlersRef.current) {
+    handlersRef.current = {
+      moveend() { onChangeRef.current(map); },
+      zoomend() { onChangeRef.current(map); },
+    };
+  }
+  const map = useMapEvents(handlersRef.current);
+  useEffect(() => { onChangeRef.current(map); }, [map]);
+  return null;
+}
 
 /** SON HAL — listeden seçilen parsele haritayı uçurur (liste↔harita senkronu).
  *  Sadece useEffect kullanır — CLAUDE.md'deki useMapEvents stale-closure
@@ -282,7 +317,11 @@ export default function Parcels() {
   // seviyeyi istediğini seçer (varsayılan: il + ilçe), veriler harita görünür
   // alanına göre (`bbox`) çekilir.
   const [showAdminAreas, setShowAdminAreas] = useState(false);
-  const [adminLevels, setAdminLevels] = useState({ il: true, ilce: true, mahalle: false });
+  // 2026-08-21 (kullanıcı isteği) — Mahalle artık VARSAYILAN AÇIK: zoom-kapısı
+  // (MAHALLE_MIN_ZOOM) zaten gereksiz isteği engellediği için kullanıcının
+  // her seferinde elle işaretlemesine gerek yok, ilçe zoom seviyesine
+  // gelince otomatik devreye girer.
+  const [adminLevels, setAdminLevels] = useState({ il: true, ilce: true, mahalle: true });
   // 2026-08-19 — harita üzeri kontroller: altlık seçimi (kalıcı) + parsel
   // katmanı aç/kapa + "Araçlar" menüsünün açık/kapalı durumu.
   const [basemapKey, setBasemapKey] = useState(() => getStoredBasemap("parcels"));
@@ -291,6 +330,14 @@ export default function Parcels() {
   const [adminAreas, setAdminAreas] = useState([]);
   const [adminCounts, setAdminCounts] = useState(null);
   const [adminLoading, setAdminLoading] = useState(false);
+  // 2026-08-21 — Mahalle zoom-kapısı için haritanın GERÇEK anlık zoom/görünür
+  // alanı (MapViewTracker ile beslenir, harita mount olur olmaz ilk değer gelir).
+  const [mapZoom, setMapZoom] = useState(7);
+  const [mapViewBounds, setMapViewBounds] = useState(null);
+  const onMapViewChange = useCallback((map) => {
+    setMapZoom(map.getZoom());
+    setMapViewBounds(map.getBounds());
+  }, []);
 
   // SON HAL — sabit lookup filtre çubuğu (DB'deki gerçek distinct değerler).
   // Dashboard drill-down'ları URL parametresiyle gelir (?ekili=evet|hayir,
@@ -312,7 +359,13 @@ export default function Parcels() {
   const [popupParcelOpen, setPopupParcelOpen] = useState(null);
 
   const load = useCallback(() => {
-    api.get("/parcels", { params: { limit: 1200 } }).then((r) => setParcels(r.data));
+    // 2026-08-20 — limit sabiti 1200'dü, köy verisi içe aktarma sonrası
+    // toplam parsel sayısı 5000'i geçince bu sınır TÜM parselleri değil
+    // sadece ilk 1200'ü (tesadüfen tek bir köyü) getirir hale geldi —
+    // liste/harita/filtre sessizce eksik veri üzerinde çalışıyordu
+    // ("Kuzucu" filtrelense bile 0 sonuç). Backend'de sabit bir üst sınır
+    // yok, bu yüzden büyütmek güvenli.
+    api.get("/parcels", { params: { limit: 8000 } }).then((r) => setParcels(r.data));
   }, []);
 
   // Seçili seviyeleri, parsellerin kapladığı alana göre yükler. Parseller
@@ -344,19 +397,34 @@ export default function Parcels() {
   // bbox ile sınırlı kalır.
   useEffect(() => {
     if (!showAdminAreas) return;
-    const levels = Object.entries(adminLevels).filter(([, on]) => on).map(([k]) => k);
+    // 2026-08-21 — "Mahalle" kutusu işaretli olsa bile, harita ilçe zoom
+    // seviyesine (MAHALLE_MIN_ZOOM) ya da daha yakına gelmeden İSTEĞE HİÇ
+    // ÇIKILMAZ (50.130 kayıtlık koleksiyonu ülke geneli zoom'da tarayıp
+    // 1200'lük limitle rastgele kırpmak yerine, kullanıcı yakınlaşınca
+    // otomatik aktifleşir — kullanıcı tercihi checkbox'ta KORUNUR, sadece
+    // fetch koşullu). Mahalle yakınlaştığında da parselBBox (ülke geneli
+    // olabilir) yerine haritanın GERÇEK görünür alanı kullanılır — aksi
+    // halde yakınlaşılmış bir görünümde bile geniş/eski bir bbox'tan binlerce
+    // mahalle istenmiş olurdu.
+    const mahalleReady = mapZoom >= MAHALLE_MIN_ZOOM && mapViewBounds;
+    const levels = Object.entries(adminLevels)
+      .filter(([k, on]) => on && (k !== "mahalle" || mahalleReady))
+      .map(([k]) => k);
     if (levels.length === 0) { setAdminAreas([]); return; }
+    const viewBBox = mapViewBounds
+      ? [mapViewBounds.getWest(), mapViewBounds.getSouth(), mapViewBounds.getEast(), mapViewBounds.getNorth()].join(",")
+      : null;
     setAdminLoading(true);
     Promise.all(levels.map((lvl) =>
       api.get("/admin-areas", {
         params: {
           area_type: lvl,
-          bbox: lvl === "il" ? undefined : (parcelBBox || undefined),
+          bbox: lvl === "il" ? undefined : (lvl === "mahalle" ? (viewBBox || undefined) : (parcelBBox || undefined)),
           limit: lvl === "il" ? 100 : 1200,
         },
       }).then((r) => r.data).catch(() => [])
     )).then((lists) => setAdminAreas(lists.flat())).finally(() => setAdminLoading(false));
-  }, [showAdminAreas, adminLevels, parcelBBox]);
+  }, [showAdminAreas, adminLevels, parcelBBox, mapZoom, mapViewBounds]);
 
   useEffect(() => {
     if (showAdminAreas && !adminCounts) {
@@ -905,6 +973,10 @@ export default function Parcels() {
             {/* Listeden seçilince haritayı seçili parsele uçur (SON HAL senkron) */}
             <MapFlyTo target={selected} />
 
+            {/* 2026-08-21 — Mahalle sınır katmanının zoom-kapısı için gerçek
+                anlık zoom/görünür alan takibi (bkz. MAHALLE_MIN_ZOOM). */}
+            <MapViewTracker onChange={onMapViewChange} />
+
             {/* Mevcut parseller — Katmanlar panelinden kapatılabilir
                 (idari sınırları tek başına incelemek için). */}
             {showParcels && visibleParcels.map((p) => {
@@ -1070,6 +1142,7 @@ export default function Parcels() {
             adminLevels={adminLevels} setAdminLevels={setAdminLevels}
             adminCounts={adminCounts} adminLoading={adminLoading}
             adminCount={adminAreas.length}
+            mapZoom={mapZoom}
           />
           <MapLegend showAdminAreas={showAdminAreas} mergeActive={tool === "merge"} />
         </div>

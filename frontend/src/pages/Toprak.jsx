@@ -43,7 +43,7 @@ export default function ToprakBilgisi() {
 
   useEffect(() => {
     load();
-    api.get("/parcels", { params: { limit: 500 } }).then((r) => setParcels(r.data));
+    api.get("/parcels", { params: { limit: 8000 } }).then((r) => setParcels(r.data));
   }, []);
 
   if (!summary) return <div className="p-10 text-[var(--text-dim)]">Yükleniyor…</div>;

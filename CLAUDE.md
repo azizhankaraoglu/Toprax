@@ -6,6 +6,12 @@
 > Son güncelleme (devam): 2026-07-11 — ROADMAP-URUNLESTIRME.md (on-premise urunlestirme, PR-01..PR-26 + P1-P4) TAMAMLANDI; FAZ 18 (Agricultural Intelligence Engine, IT-47..53) PLANLANDI (`AI-VIZYON-PLATFORMU-MIMARI.md` + ROADMAP-DETAY-TAM.md) ama HENUZ KOD YAZILMADI — bkz. memory/CLAUDE.md Bolum 11-12.
 > Son güncelleme (devam): 2026-07-23 — kullanıcı geri bildirimindeki 10 madde (layout/z-index düzeltmesi, gelişmiş filtre lookup entegrasyonu + 6 sayfaya yayılımı, AI Eğit çökmesi, Görev Yönetimi dashboard+task-type, Lookup/Form/Destek konsolidasyonu, toplu silme, sol menü daralt/genişlet + bildirim detay sayfası, sayfa başlıklarındaki iç kod adlarının temizlenmesi, kullanıcı renk teması) TAMAMLANDI — bkz. dosya sonu "Mevcut Durum" (2026-07-23 oturumu).
 > Son güncelleme (devam): 2026-07-24 — **ÖNEMLİ ORTAM UYARISI:** bu makinede TOPRAX'ın İKİ AYRI git deposu/klasörü var: bu dosyanın bulunduğu `C:\Users\Azizhan\Desktop\toprax_guncel\TOPRAX_Final_12072026_00` VE bağımsız gelişmiş `C:\App\TOPRAX_Final_12072026_00`. Çalışan `toprax-backend`/`toprax-frontend`/`toprax-mongo` Docker container'ları ÖNCEDEN `C:\App`'ten build ediliyordu; bu oturumda kullanıcı kararıyla BU dizin (Desktop kopyası) esas alındı ve `docker compose build` ile imajlar buradan yeniden derlendi (mongo'ya DOKUNULMADI — aynı veri volume'ü, veri kaybı yok). Yeni oturumlar `docker compose` komutlarını hep BU dizinden çalıştırmalı; `C:\App` kopyasının (kendi `elastic_reports.py`/`marnis_takbis.py` dosyaları + commit geçmişi olan) durumu kullanıcı tarafından ayrıca değerlendirilecek — detay için CHANGELOG.md'nin Faz 6 girişindeki "Dağıtım ortamı düzeltmesi" notuna bakın. Denetim raporu Faz 6 (Elastik Rapor Modülü, `backend/report_builder.py` + `pages/ReportBuilder.jsx`) TAMAMLANDI — bkz. dosya sonu "Mevcut Durum".
+> Son güncelleme (devam): 2026-08-20 — 15 maddelik geri bildirim turu (bkz.
+> `OTURUM-DEVAM-20082026.md`) TAMAMLANDI + o turdan miras kalan "bildirim
+> alanı yarım geliyor" şikayetinin gerçek kök nedeni (WorkspaceDrawer'ın
+> transform'lu bir `<aside>` içine gömülü olması → CSS containing-block
+> kırılması) bulunup `Drawer.jsx`'e `ReactDOM.createPortal` eklenerek
+> ÇÖZÜLDÜ — bkz. dosya sonu "Mevcut Durum".
 
 ---
 
@@ -2589,6 +2595,57 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   ollama'yı siler), 20 rota tarayıcıda çökme taramasından geçti, tüm backend
   uçları geçici bir super_admin ile gerçek HTTP çağrısıyla test edildi ve o
   kullanıcı SİLİNDİ.
+
+- ✅ **2026-08-20 — 15 maddelik geri bildirim turu (bkz. `OTURUM-DEVAM-
+  20082026.md`, 4 faz: v1.9→v2.2) + o oturumdan miras kalan tek açık madde
+  ("bildirim alanı yarım geliyor") ÇÖZÜLDÜ.** Gerçek kök neden CSS
+  containing-block kuralıydı, metin kırpması DEĞİL: `WorkspaceDrawer.jsx`,
+  `Layout.jsx`'in `<aside>`'ı (satır 247) İÇİNDE render ediliyordu; `<aside>`
+  mobil aç/kapa için her zaman bir Tailwind `translate-x-*` sınıfı taşıdığından
+  masaüstünde bile identity bir `transform` üretiyordu — `position:fixed`
+  + `transform` olan bir eleman, `position:fixed` alt elemanları için YENİ
+  bir containing block açar, bu yüzden `Drawer.jsx`'in `fixed inset-0`
+  overlay'i viewport yerine `<aside>`'ın 256px'lik kutusuna göre
+  konumlanıp panel sola taşarak (`x:-47px`) kırpılıyordu. **Düzeltme:**
+  `Drawer.jsx` (genel/paylaşılan bileşen — AdminAreaManagement/
+  ExperienceProfiles gibi başka yerlerde de kullanılıyor) artık
+  `ReactDOM.createPortal` ile DAİMA `document.body`'e render ediliyor —
+  hangi ata ağacına gömülürse gömülsün bu sınıf hatadan bağışık. Gerçek
+  tarayıcıda (`demo.toprax.com.tr`, super_admin ile) `getBoundingClientRect`
+  ile doğrulandı: düzeltmeden önce panel `x:-48,w:303` (görünür alan
+  dışına taşıyordu), sonra `x:845,w:420` (tam viewport içinde). Detaylı
+  kök neden analizi ve önceki (yanlış sonuçlanan) statik kod incelemesi
+  `OTURUM-DEVAM-20082026.md`'de arşivlendi.
+
+- ✅ **2026-08-20 (devam) — Köy verisi (Gökhüyük/Kuzucu/Üçhüyük/Dinlendik,
+  3.635 parsel) canlıya yüklendi + bu sırada bulunan GERÇEK bir 500 hatası
+  (`admin_areas.py`'nin 2026-07-25'te bulduğu AYNI "bitişik yinelenen köşe
+  → BulkWriteError → tüm chunk çöker" hatası, ama `parcels/import-geojson`'da
+  hiç düzeltilmemişti) `parcel_routes.py`'ye `_clean_geometry` +
+  `insert_many(ordered=False)` eklenerek giderildi + ardından "mahalle
+  sınırları görünmüyor" ve "Parseller filtresi boş/eksik sonuç dönüyor"
+  şikayetlerinin TEK bir kök nedeni bulundu: köy verisi toplam parsel
+  sayısını 5.249'a çıkarınca `/parcels` çağıran YEDİ sayfadaki eski
+  `limit:1200/500/2000` sabitleri artık TÜM parselleri değil, ilk N kaydı
+  (tesadüfen tek bir köyü) getiriyordu — hem client-side filtre hem harita
+  bbox'ı bu eksik veri üzerinde çalışıyordu. Tüm `limit` değerleri 8000'e
+  yükseltildi (backend'de üst sınır yok). Gerçek tarayıcıda uçtan uca
+  doğrulandı — detaylar `OTURUM-DEVAM-20082026.md`'de.
+
+- ✅ **2026-08-21 (Build 21082026-0054) — Mahalle katmanı zoom-kapısı +
+  Zaman Makinesi bayat metni:** `limit:8000` tek başına yeterli
+  bulunmadı — Mahalle sınır katmanı artık haritanın GERÇEK zoom
+  seviyesine göre (ilçe düzeyi/`MAHALLE_MIN_ZOOM=11` veya daha yakın)
+  otomatik aktifleşiyor (`Parcels.jsx`+`HaritaPaneli.jsx`, HaritaPaneli'nin
+  kanıtlanmış `MapSync` ref kalıbının birebir kopyası `MapViewTracker`
+  ile). Mahalle artık varsayılan AÇIK (zoom-kapısı gereksiz isteği zaten
+  engelliyor). HaritaPaneli.jsx'in Zaman Makinesi panelindeki bayat
+  "Uydu/NDVI verisi SİMÜLEDİR (FAZ 9.5)" uyarısı kaldırıldı (artık
+  yanlış — Sentinel Hub gerçek entegrasyonu 2026-07-25'te doğrulanmıştı).
+  Detaylar ve **bir sonraki oturumun önceliği** (yüksek zoom'da mahalle
+  otomatik aktifleşmesinin gerçek tarayıcıda elle teyidi — bu oturumda
+  tarayıcı otomasyonu sınırı yüzünden yapılamadı) `OTURUM-DEVAM-
+  20082026.md`'de.
 
 ## 7. Çalıştırma
 

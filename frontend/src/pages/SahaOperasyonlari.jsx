@@ -124,7 +124,7 @@ export default function SahaOperasyonlari() {
     api.get("/task-types").then((r) => setTaskTypes(r.data));
     api.get("/field-ops/assignable-users").then((r) => setStaff(r.data));
     api.get("/farmers", { params: { limit: 500 } }).then((r) => setFarmers(r.data));
-    api.get("/parcels", { params: { limit: 1200 } }).then((r) => setParcels(r.data));
+    api.get("/parcels", { params: { limit: 8000 } }).then((r) => setParcels(r.data));
     api.get("/field-ops/dashboard").then((r) => setDashboard(r.data));
   }, []);
 

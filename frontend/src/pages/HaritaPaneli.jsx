@@ -22,6 +22,9 @@ const RISK_LABELS = { yesil: "Düşük Risk", sari: "İzlemeye Değer", turuncu:
 const SELECT_COLOR = "#a78bfa";
 const DEFAULT_CENTER = [39.0, 33.5];
 const DEFAULT_ZOOM = 7;
+// Parcels.jsx'teki AYNI sabit/gerekçe (bkz. oradaki yorum) — "Mahalle"
+// katmanı sadece ilçe zoom seviyesinde veya daha yakında aktif olur.
+const MAHALLE_MIN_ZOOM = 11;
 
 // IT-15 — Basemap değiştirici: hepsi anahtarsız/ücretsiz genel XYZ servisleri
 // (uydu görüntüsü burada gerçek NDVI/Sentinel değil, sadece Esri'nin genel
@@ -239,6 +242,10 @@ export default function HaritaPaneli() {
   const [hasSavedWorkspace, setHasSavedWorkspace] = useState(false);
 
   const [mapBounds, setMapBounds] = useState(null);
+  // 2026-08-21 — Parcels.jsx'teki AYNI mahalle zoom-kapısı (bkz. MAHALLE_MIN_ZOOM
+  // orada) — reaktif olması (UI ipucu + effect bağımlılığı) gerektiğinden
+  // currentViewRef (salt ref, render tetiklemez) yerine ayrı bir state.
+  const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
   const currentViewRef = useRef({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM });
 
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -286,7 +293,9 @@ export default function HaritaPaneli() {
   }, [visibleLayers]);
   const [adminAreas, setAdminAreas] = useState([]);
   // Hangi idari seviyelerin çizileceği (Parcels.jsx ile AYNI varsayılan).
-  const [adminLevels, setAdminLevels] = useState({ il: true, ilce: true, mahalle: false });
+  // 2026-08-21 (kullanıcı isteği, Parcels.jsx ile AYNI) — Mahalle VARSAYILAN
+  // AÇIK: zoom-kapısı (MAHALLE_MIN_ZOOM) gereksiz isteği zaten engelliyor.
+  const [adminLevels, setAdminLevels] = useState({ il: true, ilce: true, mahalle: true });
 
   // IT-15 — çizim aracıyla seçim (polygon/rectangle/circle → içindeki parseller)
   const [drawSelectActive, setDrawSelectActive] = useState(false);
@@ -345,13 +354,13 @@ export default function HaritaPaneli() {
   // EKLENDİ (Parcels.jsx'e dokunulmadı, bkz. ParcelToolsPanel.jsx docstring'i).
   const parcelTools = useParcelTools({
     parcels, farmers,
-    onChanged: () => api.get("/parcels", { params: { limit: 1200 } }).then((r) => setParcels(r.data)),
+    onChanged: () => api.get("/parcels", { params: { limit: 8000 } }).then((r) => setParcels(r.data)),
   });
 
   useEffect(() => {
     (async () => {
       const [p, pc, t, f, ws, ft, tt, su] = await Promise.all([
-        api.get("/parcels", { params: { limit: 1200 } }),
+        api.get("/parcels", { params: { limit: 8000 } }),
         api.get("/production-cycles"),
         api.get("/operations/tasks"),
         api.get("/farmers", { params: { limit: 500 } }),
@@ -415,13 +424,18 @@ export default function HaritaPaneli() {
     if (!visibleLayers.includes("admin_areas") || !mapBounds) return;
     const bbox = [mapBounds.getWest(), mapBounds.getSouth(),
                   mapBounds.getEast(), mapBounds.getNorth()].join(",");
-    const levels = Object.entries(adminLevels).filter(([, on]) => on).map(([k]) => k);
+    // 2026-08-21 — Parcels.jsx'teki AYNI zoom-kapısı: "Mahalle" işaretli olsa
+    // bile ilçe zoom seviyesine (MAHALLE_MIN_ZOOM) gelmeden istek atılmaz.
+    const mahalleReady = mapZoom >= MAHALLE_MIN_ZOOM;
+    const levels = Object.entries(adminLevels)
+      .filter(([k, on]) => on && (k !== "mahalle" || mahalleReady))
+      .map(([k]) => k);
     if (!levels.length) { setAdminAreas([]); return; }
     Promise.all(levels.map((lvl) =>
       api.get("/admin-areas", { params: { area_type: lvl, bbox, limit: 1000 } })
          .then((r) => r.data).catch(() => [])
     )).then((lists) => setAdminAreas(lists.flat()));
-  }, [visibleLayers, adminLevels, mapBounds]);
+  }, [visibleLayers, adminLevels, mapBounds, mapZoom]);
 
   // IT-17 — Zaman Makinesi açıkken slider her değiştiğinde (veya ilk
   // açıldığında) o tarihteki NDVI/risk anlık görüntüsünü çeker.
@@ -537,6 +551,7 @@ export default function HaritaPaneli() {
 
   function onMapChange(map) {
     setMapBounds(map.getBounds());
+    setMapZoom(map.getZoom());
     const c = map.getCenter();
     currentViewRef.current = { center: [c.lat, c.lng], zoom: map.getZoom() };
   }
@@ -644,7 +659,7 @@ export default function HaritaPaneli() {
       setBulkMsg(`${data.updated_count} parsel güncellendi.`);
       setBulkForm({});
       setBulkPanel(null);
-      const fresh = await api.get("/parcels", { params: { limit: 1200 } });
+      const fresh = await api.get("/parcels", { params: { limit: 8000 } });
       setParcels(fresh.data);
     } catch (err) {
       setBulkMsg(err.response?.data?.detail || "Güncelleme başarısız.");
@@ -909,14 +924,18 @@ export default function HaritaPaneli() {
                         katmanı istenmeden açılmasın (2026-08-19). */}
                     {l.key === "admin_areas" && visibleLayers.includes("admin_areas") && (
                       <div className="pl-6 pt-1 flex flex-col gap-1">
-                        {[["il", "İl"], ["ilce", "İlçe"], ["mahalle", "Mahalle"]].map(([key, label]) => (
-                          <label key={key} className="flex items-center gap-2 text-[11px] cursor-pointer text-[var(--text-dim)]">
-                            <input type="checkbox" checked={!!adminLevels[key]}
-                                   onChange={(e) => setAdminLevels((s) => ({ ...s, [key]: e.target.checked }))}
-                                   data-testid={`map-admin-level-${key}`} />
-                            {label}
-                          </label>
-                        ))}
+                        {[["il", "İl"], ["ilce", "İlçe"], ["mahalle", "Mahalle"]].map(([key, label]) => {
+                          const mahalleWaiting = key === "mahalle" && adminLevels.mahalle && mapZoom < MAHALLE_MIN_ZOOM;
+                          return (
+                            <label key={key} className="flex items-center gap-2 text-[11px] cursor-pointer text-[var(--text-dim)]">
+                              <input type="checkbox" checked={!!adminLevels[key]}
+                                     onChange={(e) => setAdminLevels((s) => ({ ...s, [key]: e.target.checked }))}
+                                     data-testid={`map-admin-level-${key}`} />
+                              {label}
+                              {mahalleWaiting && <span className="italic">— yakınlaşınca aktif</span>}
+                            </label>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1115,10 +1134,6 @@ export default function HaritaPaneli() {
           />
           <div className="text-sm shrink-0 min-w-[140px]">
             {ndviLoading ? "Yükleniyor…" : formatTimeMachineDate(TIME_MACHINE_DATES[timeMachineIdx])}
-          </div>
-          <div className="text-[10px] text-[var(--text-dim)] w-full">
-            Uydu/NDVI verisi SİMÜLEDİR (gerçek Sentinel Hub entegrasyonu FAZ 9.5) — harita renkleri
-            ve widget'lar seçili tarihteki anlık görüntüyü yansıtır, veritabanındaki güncel değerler ETKİLENMEZ.
           </div>
         </div>
       )}

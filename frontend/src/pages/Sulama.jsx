@@ -97,7 +97,7 @@ export default function Sulama() {
   const parcelName = (pid) => { const p = parcels.find((x) => x.id === pid); return p ? `${p.parcel_code} — ${p.name}` : pid; };
   useEffect(() => {
     load();
-    api.get("/parcels", { params: { limit: 2000 } }).then((r) => setParcels(r.data));
+    api.get("/parcels", { params: { limit: 8000 } }).then((r) => setParcels(r.data));
   }, []);
   if (!data) return <div className="p-10 text-[var(--text-dim)]">Yükleniyor…</div>;
 

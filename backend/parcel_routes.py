@@ -18,9 +18,11 @@ from fastapi import HTTPException, Depends, Request, Query
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+from pymongo.errors import BulkWriteError
 from geo_validation import validate_geometry
 from geo_import import _close_linestring_to_polygon
 from platform_core import check_and_consume_limit
+from admin_areas import _clean_geometry
 
 
 class ParcelCreate(BaseModel):
@@ -749,6 +751,13 @@ def register_parcel_routes(api_router, db, current_user, require_permission, req
                 # 3B koordinatları (yükseklik) 2B'ye indir — hem alan hesabı hem
                 # 2dsphere index için gerekli (Google Earth/KML dosyaları 3B gelir).
                 geom = {"type": "Polygon", "coordinates": _to_2d_coords(geom["coordinates"])}
+                # 2026-08-20 — admin_areas.py'de 2026-07-25'te bulunan AYNI veri
+                # kalitesi sorunu (bitişik yinelenen köşe noktaları, ör. TUİK/köy
+                # sınır dosyalarında sık rastlanır) burada da görüldü: MongoDB'nin
+                # 2dsphere indeksi "Loop is not valid ... Duplicate vertices" ile
+                # reddediyordu. AYNI `_clean_geometry` (admin_areas.py) yeniden
+                # kullanılarak köklendi.
+                geom = _clean_geometry(geom)
 
                 # Denetim (2026-07-24): topoloji doğrulaması — bozuk (self-intersecting)
                 # geometri sessizce içeri alınmaz, hatalar listesinde raporlanır.
@@ -817,8 +826,28 @@ def register_parcel_routes(api_router, db, current_user, require_permission, req
             except Exception as e:
                 errors.append({"index": i, "error": str(e)})
 
+        # 2026-08-20 — admin_areas.py'nin bulk-import'undaki AYNI düzeltme
+        # (bkz. yukarıdaki `_clean_geometry` notu): `_clean_geometry` çoğu
+        # bitişik-köşe hatasını temizler ama BAŞKA geçersizlikler (self-
+        # intersection vb.) hâlâ MongoDB 2dsphere indeksinde `BulkWriteError`
+        # fırlatabilir. ESKİDEN varsayılan `ordered=True` bu durumda TÜM
+        # isteği 500 ile çökertiyordu — o ana kadar başarıyla toplanmış
+        # kayıtlar da yanıta hiç yansımadan (ama bazen DB'ye sessizce yazılmış
+        # olarak) kayboluyordu. `ordered=False` ile geçerli TÜM kayıtlar
+        # yazılır, sadece geçersiz olanlar `errors` listesine (index'iyle)
+        # eklenir.
         if created:
-            await db.parcels.insert_many(created)
+            try:
+                await db.parcels.insert_many(created, ordered=False)
+            except BulkWriteError as e:
+                failed_idx = {err["index"] for err in e.details.get("writeErrors", [])}
+                surviving = []
+                for idx, d in enumerate(created):
+                    if idx in failed_idx:
+                        errors.append({"index": None, "error": f"Geometri veritabanına yazılamadı: {d.get('name')}"})
+                    else:
+                        surviving.append(d)
+                created = surviving
             for d in created:
                 d.pop("_id", None)
 

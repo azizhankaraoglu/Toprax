@@ -70,7 +70,7 @@ const STATUS_OPTS = [
 export function Sozlesmeler() {
   const nav = useNavigate();
   const contractsQ = useFetch("/contracts", { params: { season: 2025 }, initialData: [] });
-  const parcelsQ = useFetch("/parcels", { params: { limit: 500 }, initialData: [] });
+  const parcelsQ = useFetch("/parcels", { params: { limit: 8000 }, initialData: [] });
   const contracts = contractsQ.data;
   const parcels = parcelsQ.data;
   const parcelsById = new Map(parcels.map((p) => [p.id, p]));

@@ -159,7 +159,7 @@ export default function EkimKaydi() {
   };
   useEffect(() => { load(); }, [season, parcelFilter]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    api.get("/parcels", { params: { limit: 2000 } })
+    api.get("/parcels", { params: { limit: 8000 } })
       .then((r) => setParcelsById(new Map((Array.isArray(r.data) ? r.data : []).map((p) => [p.id, p]))))
       .catch(() => {});
   }, []);
