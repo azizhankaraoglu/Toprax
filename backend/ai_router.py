@@ -65,6 +65,17 @@ class OllamaProvider(AIProvider):
         self.vision_model = vision_model
         self.timeout = timeout
 
+    def available_models(self) -> list:
+        """Sunucuda YÜKLÜ model adları (`/api/tags`). Erişilemezse boş liste —
+        çağıran taraf bunu "bilmiyorum" olarak yorumlar, hata olarak DEĞİL."""
+        try:
+            resp = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            if resp.status_code != 200:
+                return []
+            return [m.get("name", "") for m in (resp.json().get("models") or [])]
+        except Exception:  # noqa: BLE001
+            return []
+
     def _chat(self, model: str, system_prompt: str, user_text: str, images=None) -> str:
         message = {"role": "user", "content": user_text}
         if images:
@@ -78,6 +89,18 @@ class OllamaProvider(AIProvider):
             },
             timeout=self.timeout,
         )
+        # Ollama, İSTENEN MODEL YÜKLÜ DEĞİLSE de 404 döner — çıplak
+        # `raise_for_status()` bunu "404 Not Found for url .../api/chat"
+        # şeklinde, sanki uç nokta yokmuş gibi gösteriyordu. Gerçek sebebi
+        # ve çözümü söyleyen bir mesajla değiştiriyoruz.
+        if resp.status_code == 404:
+            yuklu = self.available_models()
+            raise RuntimeError(
+                f"Yerel LLM (Ollama) '{model}' modelini bulamadı. "
+                f"Sunucuda yüklü modeller: {', '.join(yuklu) or 'yok'}. "
+                f"Ayarlar > Entegrasyonlar > Yapay Zekâ bölümünden yüklü bir model seçin "
+                f"veya sunucuda `ollama pull {model}` komutunu çalıştırın."
+            )
         resp.raise_for_status()
         return resp.json()["message"]["content"]
 
@@ -85,7 +108,18 @@ class OllamaProvider(AIProvider):
         return self._chat(self.text_model, system_prompt, user_text)
 
     def generate_vision(self, system_prompt: str, user_text: str, image_b64: str) -> str:
-        return self._chat(self.vision_model, system_prompt, user_text, images=[image_b64])
+        """Görsel modeli yapılandırılmamış/yüklü değilse metin modeline düşer.
+        Metin modeli görseli yok sayabilir ama "404 Not Found" ile tamamen
+        çökmektense kısmi bir yanıt vermek daha iyidir — kullanıcı yine de
+        Entegrasyonlar ekranında gerçek bir vision modeli tanımlayabilir."""
+        model = self.vision_model
+        if model:
+            yuklu = self.available_models()
+            if yuklu and model not in yuklu:
+                model = self.text_model
+        else:
+            model = self.text_model
+        return self._chat(model, system_prompt, user_text, images=[image_b64])
 
     def ping(self) -> bool:
         """Ayarlar > Entegrasyonlar 'Bağlantıyı Test Et' için — model listesi
@@ -191,6 +225,9 @@ async def get_ai_router(db) -> HybridAIRouter:
             cfg.get("ollama_base_url") or DEFAULT_OLLAMA_BASE_URL,
             cfg.get("ollama_text_model") or DEFAULT_OLLAMA_TEXT_MODEL,
             cfg.get("ollama_vision_model") or DEFAULT_OLLAMA_VISION_MODEL,
+            # Yerel modeller (7B-14B) CPU'da ilk token'a kadar dakikalar
+            # sürebiliyor — dış API'nin 60 sn'lik varsayılanı burada yetmiyor.
+            timeout=int(cfg.get("ollama_timeout_seconds") or 300),
         )
 
     strategy = cfg.get("strategy") or "external_only"

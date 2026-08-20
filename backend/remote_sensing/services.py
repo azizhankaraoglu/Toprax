@@ -422,13 +422,25 @@ def register_remote_sensing_routes(api_router, db, current_user, require_permiss
             raise HTTPException(400, "Önce 'Uydu Analizini Güncelle' ile NDVI verisi üretin.")
         rule = _rs_rule_interpretation(parcel, m)
         ai_text, ai_powered, ai_error = None, False, None
+        # 2026-08-19 — İKİ düzeltme birden:
+        #  (1) Bu uç `get_ai_provider`'ı DOĞRUDAN çağırıyordu, yani yalnızca DIŞ
+        #      API ile çalışıyor, yerel LLM (Ollama) yapılandırılmışsa AI yorumu
+        #      hiç üretilmiyordu. Artık ai_router'ın hibrit yönlendiricisinden
+        #      geçiyor (yerel/dış/hibrit strateji).
+        #  (2) Çağrı `governed_generate()` üzerinden geçer — admin'in
+        #      guardrail'leri ve RAG bilgi bankası burada da uygulanır.
         try:
-            from integrations import get_ai_service_config
-            from ai_provider import get_ai_provider
-            cfg = await get_ai_service_config(db)
-            if cfg and cfg.get("api_key") and cfg.get("provider"):
-                provider = get_ai_provider(cfg["provider"], cfg["api_key"], cfg.get("model"))
-                ai_text = provider.generate_text(_AI_SYSTEM, _rs_ai_prompt(parcel, m, series))
+            from ai_governance import governed_generate
+            res = await governed_generate(
+                db, "remote_sensing", _rs_ai_prompt(parcel, m, series),
+                base_system_prompt=_AI_SYSTEM, use_rag=True, user=user,
+            )
+            if res.get("blocked"):
+                ai_error = f"Guardrail: {res.get('blocked_by')}"
+            elif res.get("error"):
+                ai_error = str(res["error"])[:220]
+            else:
+                ai_text = res.get("answer")
                 ai_powered = bool(ai_text)
         except Exception as e:
             ai_error = str(e)[:220]

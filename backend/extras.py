@@ -120,16 +120,25 @@ def register_extra_routes(api_router, db, current_user, is_admin, require_featur
 
         log_id = await _check_ai_limit(user, "disease_detect")
 
-        # Denetim Faz 4 — doğrudan OpenAI/Gemini/Anthropic/Ollama HTTP çağrısı
-        # burada YOK, tek bir ai_router.py (hibrit yerel/dış yönlendirici)
-        # üzerinden geçer (bkz. modül docstring'i).
-        try:
-            response = router.generate_vision(system_prompt, "Bu bitki fotoğrafını analiz et.", img_b64)
-            await _mark_ai_routed(log_id, router.routed_as)
-        except ValueError as e:
-            raise HTTPException(500, str(e))
-        except Exception as e:
-            raise HTTPException(500, f"AI hatası: {str(e)}")
+        # 2026-08-19 — çağrı `ai_governance.governed_generate()` üzerinden geçer
+        # (doğrudan ai_router DEĞİL). Burada `structured` BİLİNÇLİ OLARAK
+        # kullanılmadı: frontend yanıttaki JSON bloğunu regex ile ayıklıyor
+        # (`result.match(/\{[\s\S]*\}/)`, bkz. Extras.jsx), dolayısıyla
+        # guardrail'in sona eklediği "ilaç önerisi sorumluluk uyarısı" bloğun
+        # DIŞINDA kalır ve ayrıştırmayı bozmaz — üstelik o uyarı tam da bu
+        # ekran için tanımlanmış (DEFAULT_GUARDRAILS scopes: ["disease", ...]).
+        from ai_governance import governed_generate
+        res = await governed_generate(
+            db, "disease", "Bu bitki fotoğrafını analiz et.",
+            base_system_prompt=system_prompt, image_b64=img_b64,
+            use_rag=True, user=user,
+        )
+        if res.get("blocked"):
+            raise HTTPException(422, res.get("answer") or "İstek kurum politikası gereği reddedildi.")
+        if res.get("error"):
+            raise HTTPException(500, f"AI hatası: {res['error']}")
+        response = res.get("answer") or ""
+        await _mark_ai_routed(log_id, res.get("routed_as"))
 
         # AI'nin ham metin yanıtını yapısal alanlara ayrıştır (JSON bloğu
         # ```json ... ``` içinde gelebilir veya düz metinle karışık olabilir).
@@ -212,18 +221,32 @@ Sadece anlamlı olan alanları JSON'a dahil et, gereksiz alanları hiç ekleme.
 Örnek çıktı: {"region_name": "Konya", "risk_level": ["turuncu", "kirmizi"], "sort_by": "ndvi", "sort_dir": "asc", "limit": 20, "summary": "Konya bölgesindeki en riskli 20 parsel"}
 """
 
-    async def _call_ai_text(system_prompt: str, user_text: str):
-        """AI'ye metin isteği gönderir, (ham_yanıt, routed_as) döner. Denetim
-        Faz 4 — gerçek çağrı `ai_router.py`'nin hibrit yönlendiricisine
-        taşındı (yerel/dış/hibrit strateji), burada sadece o modülün
-        factory'sine geçirmekten ibaret."""
-        from ai_router import get_ai_router
-        router = await get_ai_router(db)
-        try:
-            text = router.generate_text(system_prompt, user_text)
-        except ValueError as e:
-            raise HTTPException(500, str(e))
-        return text, router.routed_as
+    async def _call_ai_text(system_prompt: str, user_text: str, user=None):
+        """AI'ye metin isteği gönderir, (ham_yanıt, routed_as) döner.
+
+        2026-08-19 — çağrı artık `ai_governance.governed_generate()` üzerinden
+        geçiyor (doğrudan `ai_router` DEĞİL): admin'in tanımladığı guardrail'ler
+        burada da uygulanır ve her çağrı denetim izine yazılır.
+
+        **`structured=True` KRİTİK:** copilot'un çıktısı JSON'dur. Yönetişim
+        promptu ("Türkçe yanıtla, maddeler hâlinde yaz") veya sona eklenen
+        zorunlu uyarı metni JSON'u ayrıştırılamaz hale getirirdi. Bu modda
+        yalnızca BİÇİMLENDİRME atlanır; girdi/çıktı engelleme ve loglama
+        çalışmaya devam eder (bkz. ai_governance.py docstring'i).
+        """
+        from ai_governance import governed_generate
+        res = await governed_generate(
+            db, "copilot", user_text,
+            base_system_prompt=system_prompt,
+            structured=True, use_rag=False, user=user,
+        )
+        if res.get("blocked"):
+            # Guardrail engelledi — filtre üretilemez, çağıran keyword
+            # fallback'ine düşsün diye boş metin döneriz (mevcut davranış).
+            raise HTTPException(422, res.get("answer") or "İstek kurum politikası gereği reddedildi.")
+        if res.get("error"):
+            raise HTTPException(500, res["error"])
+        return res.get("answer") or "", res.get("routed_as")
 
     REGION_NAMES = ["Konya", "Eskişehir", "Kayseri", "Erzurum", "Afyon", "Çorum", "Ankara", "Yozgat"]
 
@@ -332,7 +355,7 @@ Sadece anlamlı alanları dahil et.
 
         if ai_ready:
             log_id = await _check_ai_limit(user, "copilot")
-            raw, routed_as = await _call_ai_text(schema_prompt, body.query)
+            raw, routed_as = await _call_ai_text(schema_prompt, body.query, user=user)
             await _mark_ai_routed(log_id, routed_as)
             # AI bazen JSON'u ```json ... ``` bloğu içinde döner — temizle
             cleaned = raw.strip()

@@ -12,13 +12,164 @@ import FarmerSelect from "@/components/FarmerSelect";
 import BulkRemoteSensing from "@/components/BulkRemoteSensing";
 import ParcelsListPanel from "@/components/ParcelsListPanel";
 import AiAssistantBox from "@/components/AiAssistantBox";
-import { getBasemapUrl, getTheme } from "@/lib/theme";
+import { getTheme } from "@/lib/theme";
+import { BASEMAPS, getStoredBasemap, storeBasemap } from "@/lib/basemaps";
 import {
-  PenLine, Scissors, Combine, Crosshair, Upload, X, Check, Layers, Plus, Satellite, List, ClipboardPlus, Landmark
+  PenLine, Scissors, Combine, Crosshair, Upload, X, Check, Layers, Plus, Satellite, List,
+  ClipboardPlus, Landmark, Wrench, ChevronDown, Map as MapIcon,
 } from "lucide-react";
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
 const RISK_LABELS = { yesil: "Düşük Risk", sari: "İzlemeye Değer", turuncu: "Riskli", kirmizi: "Acil Müdahale" };
+
+/**
+ * HARİTA LEJANTI — parsel poligonlarındaki renklerin ne anlama geldiğini
+ * haritanın ÜZERİNDE açıklar. Renkler tek kaynaktan (RISK_COLORS) okunur;
+ * poligon çizimindeki (aşağıda) sabitlerle elle senkron tutulması gereken
+ * tek yerler seçim/birleştirme/idari sınır renkleridir.
+ */
+function MapLegend({ showAdminAreas, mergeActive }) {
+  const [open, setOpen] = useState(true);
+  const swatch = (style) => (
+    <span className="w-3.5 h-3.5 rounded-sm inline-block shrink-0 border" style={style} />
+  );
+  const rows = [
+    ...Object.entries(RISK_COLORS).map(([level, c]) => ({
+      key: level,
+      node: swatch({ background: `${c}66`, borderColor: c }),
+      label: RISK_LABELS[level],
+    })),
+    { key: "bilinmiyor", node: swatch({ background: "#4ade8066", borderColor: "#4ade80" }),
+      label: "Risk verisi yok (varsayılan)" },
+    { key: "secili", node: swatch({ background: "transparent", borderColor: "var(--text)", borderWidth: 3 }),
+      label: "Seçili parsel (kalın dış çizgi)" },
+    ...(mergeActive
+      ? [{ key: "merge", node: swatch({ background: "#a78bfa66", borderColor: "#a78bfa" }),
+           label: "Birleştirmek için seçildi" }]
+      : []),
+    ...(showAdminAreas
+      ? [{ key: "idari", node: swatch({ background: "transparent", borderColor: "#60a5fa", borderStyle: "dashed" }),
+           label: "İdari sınır (kesikli mavi)" }]
+      : []),
+  ];
+  return (
+    <div className="absolute bottom-3 left-3 z-[500] card p-0 overflow-hidden shadow-lg"
+         style={{ maxWidth: 240 }} data-testid="harita-lejanti">
+      <button type="button" onClick={() => setOpen((o) => !o)}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 text-[11px] uppercase tracking-wider text-[var(--text-dim)] hover:text-[var(--text)]">
+        Lejant <span>{open ? "−" : "+"}</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 flex flex-col gap-1.5">
+          {rows.map((r) => (
+            <span key={r.key} className="flex items-center gap-2 text-[11px] leading-tight">
+              {r.node}{r.label}
+            </span>
+          ))}
+          <span className="text-[10px] text-[var(--text-dim)] pt-1 border-t border-[var(--border)]">
+            Renk, parselin uydu/NDVI tabanlı risk seviyesini gösterir.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Araçlar menüsündeki tek satır. */
+function MenuItem({ icon: Icon, label, active, onClick, testId }) {
+  return (
+    <button type="button" onClick={onClick} data-testid={testId}
+            className={`w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-2 ${
+              active ? "bg-[var(--primary)] text-black font-medium" : "hover:bg-[var(--surface-2)]"}`}>
+      <Icon size={14} /> {label}
+    </button>
+  );
+}
+
+/**
+ * HARİTA ÜZERİ KONTROL PANELİ — Katmanlar + Altlık.
+ *
+ * Kullanıcı isteği (2026-08-19): idari sınır kutucukları sayfanın üstündeki
+ * toolbar'dan haritanın ÜZERİNE, KALICI bir katman kontrolüne taşınsın; ayrıca
+ * Parseller haritasında da (Harita Paneli'nde olduğu gibi) altlık seçimi olsun.
+ */
+function MapControls({
+  basemapKey, setBasemapKey,
+  showParcels, setShowParcels,
+  showAdminAreas, setShowAdminAreas,
+  adminLevels, setAdminLevels,
+  adminCounts, adminLoading, adminCount,
+}) {
+  const [panel, setPanel] = useState(null); // "layers" | "basemap" | null
+  const Btn = ({ id, icon: Icon, label }) => (
+    <button type="button" onClick={() => setPanel(panel === id ? null : id)}
+            data-testid={`map-ctrl-${id}`}
+            className={`btn text-xs ${panel === id ? "btn-primary" : "btn-ghost"}`}>
+      <Icon size={13} /> {label}
+    </button>
+  );
+
+  return (
+    <div className="absolute top-3 right-3 z-[500] flex flex-col items-end gap-2" data-testid="map-controls">
+      <div className="flex gap-1.5">
+        <Btn id="layers" icon={Layers} label="Katmanlar" />
+        <Btn id="basemap" icon={MapIcon} label="Altlık" />
+      </div>
+
+      {panel === "layers" && (
+        <div className="card p-3 shadow-xl" style={{ minWidth: 230 }} data-testid="layers-panel">
+          <label className="flex items-center gap-2 text-xs cursor-pointer py-1">
+            <input type="checkbox" checked={showParcels}
+                   onChange={(e) => setShowParcels(e.target.checked)} data-testid="layer-parcels" />
+            Parseller
+          </label>
+          <label className="flex items-center gap-2 text-xs cursor-pointer py-1">
+            <input type="checkbox" checked={showAdminAreas}
+                   onChange={(e) => setShowAdminAreas(e.target.checked)}
+                   data-testid="toggle-admin-areas-layer" />
+            İdari Sınırlar
+          </label>
+          {showAdminAreas && (
+            <div className="pl-5 mt-1 flex flex-col gap-1 border-l border-[var(--border)]"
+                 data-testid="admin-level-picker">
+              {[["il", "İl"], ["ilce", "İlçe"], ["mahalle", "Mahalle"]].map(([key, label]) => (
+                <label key={key} className="flex items-center gap-1.5 text-[11px] cursor-pointer">
+                  <input type="checkbox" checked={!!adminLevels[key]}
+                         onChange={(e) => setAdminLevels((s) => ({ ...s, [key]: e.target.checked }))}
+                         data-testid={`admin-level-${key}`} />
+                  {label}
+                  {adminCounts?.[key] != null && (
+                    <span className="text-[var(--text-dim)]">({adminCounts[key].toLocaleString("tr-TR")})</span>
+                  )}
+                </label>
+              ))}
+              <span className="text-[10px] text-[var(--text-dim)] mt-1">
+                {adminLoading ? "yükleniyor…" : `${adminCount} sınır çizili`}
+              </span>
+              <span className="text-[10px] text-[var(--text-dim)]">
+                İlçe/mahalle yalnızca parsellerin bulunduğu bölgede yüklenir.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {panel === "basemap" && (
+        <div className="card p-2 shadow-xl" style={{ minWidth: 150 }} data-testid="basemap-panel">
+          {Object.entries(BASEMAPS).map(([key, b]) => (
+            <button key={key} type="button"
+                    onClick={() => { setBasemapKey(key); storeBasemap("parcels", key); }}
+                    data-testid={`basemap-${key}`}
+                    className={`w-full text-left px-2 py-1.5 rounded text-xs ${
+                      basemapKey === key ? "bg-[var(--primary)] text-black font-medium" : "hover:bg-[var(--surface-2)]"}`}>
+              {b.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function RiskBadge({ level, label }) {
   const color = RISK_COLORS[level] || "#97a8a0";
@@ -127,6 +278,11 @@ export default function Parcels() {
   // alanına göre (`bbox`) çekilir.
   const [showAdminAreas, setShowAdminAreas] = useState(false);
   const [adminLevels, setAdminLevels] = useState({ il: true, ilce: true, mahalle: false });
+  // 2026-08-19 — harita üzeri kontroller: altlık seçimi (kalıcı) + parsel
+  // katmanı aç/kapa + "Araçlar" menüsünün açık/kapalı durumu.
+  const [basemapKey, setBasemapKey] = useState(() => getStoredBasemap("parcels"));
+  const [showParcels, setShowParcels] = useState(true);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [adminAreas, setAdminAreas] = useState([]);
   const [adminCounts, setAdminCounts] = useState(null);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -175,14 +331,25 @@ export default function Parcels() {
             Math.max(...lons) + pad, Math.max(...lats) + pad].join(",");
   }, [parcels]);
 
+  // 2026-08-19 — "İdari sınırlarda sadece Konya geliyor" şikâyetinin sebebi:
+  // bbox PARSELLERİN kapladığı alandan türetiliyordu ve tüm parseller Konya'da,
+  // dolayısıyla başka hiçbir ilin sınırı hiç istenmiyordu. Artık İL seviyesi
+  // bbox'SIZ çekilir (81 kayıt — tamamı gelir, kullanıcı ülke genelinde
+  // gezinebilir); ilçe/mahalle ise (971 / 50.130 kayıt) performans için
+  // bbox ile sınırlı kalır.
   useEffect(() => {
     if (!showAdminAreas) return;
     const levels = Object.entries(adminLevels).filter(([, on]) => on).map(([k]) => k);
     if (levels.length === 0) { setAdminAreas([]); return; }
     setAdminLoading(true);
     Promise.all(levels.map((lvl) =>
-      api.get("/admin-areas", { params: { area_type: lvl, bbox: parcelBBox || undefined, limit: 1200 } })
-         .then((r) => r.data).catch(() => [])
+      api.get("/admin-areas", {
+        params: {
+          area_type: lvl,
+          bbox: lvl === "il" ? undefined : (parcelBBox || undefined),
+          limit: lvl === "il" ? 100 : 1200,
+        },
+      }).then((r) => r.data).catch(() => [])
     )).then((lists) => setAdminAreas(lists.flat())).finally(() => setAdminLoading(false));
   }, [showAdminAreas, adminLevels, parcelBBox]);
 
@@ -467,6 +634,9 @@ export default function Parcels() {
     { key: "import", icon: Upload, label: "Toplu İçe Aktar (GeoJSON/KML/KMZ)" },
   ];
 
+  // Menü kapalıyken kaç şeyin açık olduğunu düğmenin üzerinde göstermek için.
+  const activeToolCount = (tool ? 1 : 0) + (showList ? 1 : 0) + (showBulkRS ? 1 : 0);
+
   return (
     <div className="p-8 max-w-[1700px]" data-testid="parcels-page">
       <header className="mb-4 flex items-end justify-between flex-wrap gap-3">
@@ -549,19 +719,70 @@ export default function Parcels() {
           satırında DEĞİL, Liste & Filtre / Uzaktan Algılama ile AYNI
           satırda (AiAssistantBox kapalıyken kompakt bir "btn btn-ghost"
           pill'i döndürdüğü için doğal olarak sığar, bkz. o bileşen). */}
+      {/* 2026-08-19 — TEK "Araçlar" menüsü. Önceden bu alanda İKİ ayrı satır
+          ve 12'ye yakın eşit ağırlıkta buton yan yana duruyordu; hangisinin
+          panel açtığı, hangisinin harita aracı olduğu ayırt edilemiyordu ve
+          ekranın üst yarısını yiyordu. Artık: panel/araç ayrımı menü içinde
+          başlıklandırılmış, harita altlık + katman seçimi ise haritanın
+          ÜZERİNE (kalıcı MapControls) taşındı. */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <button onClick={() => setShowList((s) => !s)}
-          className={`btn ${showList ? "btn-primary" : "btn-ghost"} text-xs`} data-testid="toggle-list-panel">
-          <List size={14} /> Liste & Filtre (Toplu Seç/Sil)
-        </button>
-        <button onClick={() => setShowBulkRS((s) => !s)}
-          className={`btn ${showBulkRS ? "btn-primary" : "btn-ghost"} text-xs`} data-testid="toggle-bulk-rs">
-          <Satellite size={14} /> Uzaktan Algılama (Toplu Sorgu & Analiz)
-        </button>
+        <div className="relative">
+          <button onClick={() => setToolsOpen((s) => !s)}
+                  className={`btn ${toolsOpen || tool || showList || showBulkRS ? "btn-primary" : "btn-ghost"} text-xs`}
+                  data-testid="tools-menu-button">
+            <Wrench size={14} /> Araçlar
+            {activeToolCount > 0 && (
+              <span className="ml-1 px-1.5 rounded-full bg-black/25 text-[10px]">{activeToolCount}</span>
+            )}
+            <ChevronDown size={12} className={toolsOpen ? "rotate-180 transition-transform" : "transition-transform"} />
+          </button>
+          {toolsOpen && (
+            <>
+              <div className="fixed inset-0 z-[45]" onClick={() => setToolsOpen(false)} />
+              <div className="absolute left-0 mt-1 z-[46] card p-2 shadow-xl"
+                   style={{ minWidth: 280 }} data-testid="tools-menu">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--text-dim)] px-2 py-1">
+                  Paneller
+                </div>
+                <MenuItem icon={List} label="Liste & Filtre (Toplu Seç/Sil)" active={showList}
+                          testId="toggle-list-panel"
+                          onClick={() => { setShowList((s) => !s); setToolsOpen(false); }} />
+                <MenuItem icon={Satellite} label="Uzaktan Algılama (Toplu Sorgu)" active={showBulkRS}
+                          testId="toggle-bulk-rs"
+                          onClick={() => { setShowBulkRS((s) => !s); setToolsOpen(false); }} />
+
+                <div className="text-[10px] uppercase tracking-wider text-[var(--text-dim)] px-2 py-1 mt-2 border-t border-[var(--border)] pt-2">
+                  Harita Araçları
+                </div>
+                {TOOLS.map((t) => (
+                  <MenuItem key={t.key} icon={t.icon} label={t.label} active={tool === t.key}
+                            testId={`tool-${t.key}`}
+                            onClick={() => { tool === t.key ? resetTool() : activateTool(t.key); setToolsOpen(false); }} />
+                ))}
+                {tool && (
+                  <button onClick={() => { resetTool(); setToolsOpen(false); }}
+                          className="w-full text-left px-2 py-1.5 rounded text-xs text-red-400 hover:bg-[var(--surface-2)] flex items-center gap-2 mt-1">
+                    <X size={14} /> Aracı Kapat
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
         <AiAssistantBox module="parcels"
                         onResults={(items) => setAiIds(new Set(items.map((p) => p.id)))}
                         placeholder='Örn: "Çumra&apos;daki en riskli 20 parseli göster"'
                         testId="parcels-ai" />
+
+        {/* Aktif araç, menü kapalıyken de görünür kalmalı — kullanıcı hangi
+            modda olduğunu menüyü açmadan bilmeli. */}
+        {tool && (
+          <span className="badge badge-b flex items-center gap-1" data-testid="active-tool-badge">
+            {TOOLS.find((t) => t.key === tool)?.label}
+            <button onClick={resetTool} className="hover:text-red-400"><X size={11} /></button>
+          </span>
+        )}
       </div>
       {showList && (
         <div className="card p-5 mb-3">
@@ -573,54 +794,6 @@ export default function Parcels() {
           <BulkRemoteSensing />
         </div>
       )}
-
-      {/* HARİTA ARAÇLARI TOOLBAR */}
-      <div className="flex flex-wrap gap-2 mb-3">
-        {TOOLS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => (tool === t.key ? resetTool() : activateTool(t.key))}
-            className={`btn ${tool === t.key ? "btn-primary" : "btn-ghost"} text-xs`}
-            data-testid={`tool-${t.key}`}
-          >
-            <t.icon size={14}/> {t.label}
-          </button>
-        ))}
-        {tool && (
-          <button onClick={resetTool} className="btn btn-ghost text-xs text-red-400">
-            <X size={14}/> Aracı Kapat
-          </button>
-        )}
-        <button
-          onClick={() => setShowAdminAreas((s) => !s)}
-          className={`btn ${showAdminAreas ? "btn-primary" : "btn-ghost"} text-xs`}
-          data-testid="toggle-admin-areas-layer"
-        >
-          <Layers size={14}/> İdari Sınırlar
-        </button>
-        {/* 2026-08-19 — seviye kutucukları: hangi idari katmanın çizileceğini
-            kullanıcı seçer (eskiden hepsi birden yükleniyordu ve 50 binlik
-            mahalle verisinde harita kullanılamaz hale geliyordu). */}
-        {showAdminAreas && (
-          <div className="flex items-center gap-3 text-xs bg-[var(--surface-2)] rounded-lg px-3 py-1.5"
-               data-testid="admin-level-picker">
-            {[["il", "İl"], ["ilce", "İlçe"], ["mahalle", "Mahalle"]].map(([key, label]) => (
-              <label key={key} className="flex items-center gap-1 cursor-pointer">
-                <input type="checkbox" checked={!!adminLevels[key]}
-                       onChange={(e) => setAdminLevels((s) => ({ ...s, [key]: e.target.checked }))}
-                       data-testid={`admin-level-${key}`} />
-                {label}
-                {adminCounts?.[key] != null && (
-                  <span className="text-[var(--text-dim)]">({adminCounts[key].toLocaleString("tr-TR")})</span>
-                )}
-              </label>
-            ))}
-            <span className="text-[var(--text-dim)]">
-              {adminLoading ? "yükleniyor…" : `${adminAreas.length} sınır çizili`}
-            </span>
-          </div>
-        )}
-      </div>
       {toolMsg && (
         <div className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-3">
           {toolMsg}
@@ -673,9 +846,14 @@ export default function Parcels() {
         <div className="lg:col-span-3 card overflow-hidden relative" style={{ height: 640 }}>
           <MapContainer center={[39.0, 33.5]} zoom={7} style={{ height: "100%", width: "100%" }}>
             <TileLayer
-              attribution='&copy; OpenStreetMap'
-              url={getBasemapUrl()}
+              key={basemapKey}
+              attribution={(BASEMAPS[basemapKey] || BASEMAPS.hibrit).attribution}
+              url={(BASEMAPS[basemapKey] || BASEMAPS.hibrit).url}
             />
+            {/* Hibrit altlıkta yer adı/sınır etiketleri ikinci bir katman. */}
+            {(BASEMAPS[basemapKey] || {}).overlay && (
+              <TileLayer key={`${basemapKey}-ov`} url={BASEMAPS[basemapKey].overlay} />
+            )}
 
             {/* İdari Sınırlar katmanı — IT-13.6 Layer v1 (aç/kapa) */}
             {showAdminAreas && adminAreas.map((a) => {
@@ -718,8 +896,9 @@ export default function Parcels() {
             {/* Listeden seçilince haritayı seçili parsele uçur (SON HAL senkron) */}
             <MapFlyTo target={selected} />
 
-            {/* Mevcut parseller */}
-            {visibleParcels.map((p) => {
+            {/* Mevcut parseller — Katmanlar panelinden kapatılabilir
+                (idari sınırları tek başına incelemek için). */}
+            {showParcels && visibleParcels.map((p) => {
               if (!p.geometry) return null;
               const isMergeSelected = mergeIds.includes(p.id);
               const isEditOrSplitTarget = editTarget?.id === p.id || splitTarget?.id === p.id;
@@ -875,6 +1054,15 @@ export default function Parcels() {
             <CoordsClickHandler active={tool === "coords"} onPick={setPickedCoord} />
             {pickedCoord && <Marker position={[pickedCoord.lat, pickedCoord.lng]} />}
           </MapContainer>
+          <MapControls
+            basemapKey={basemapKey} setBasemapKey={setBasemapKey}
+            showParcels={showParcels} setShowParcels={setShowParcels}
+            showAdminAreas={showAdminAreas} setShowAdminAreas={setShowAdminAreas}
+            adminLevels={adminLevels} setAdminLevels={setAdminLevels}
+            adminCounts={adminCounts} adminLoading={adminLoading}
+            adminCount={adminAreas.length}
+          />
+          <MapLegend showAdminAreas={showAdminAreas} mergeActive={tool === "merge"} />
         </div>
 
         {/* SAĞ PANEL — aktif araca göre değişir */}

@@ -68,39 +68,65 @@ def build_schedule(rows: List[Dict[str, Any]], settings: Dict[str, Any],
     end = _parse_md(settings.get("kampanya_bitis") or DEFAULT_FACTORY["kampanya_bitis"], year)
 
     ranked = rank_parcels_for_harvest(rows)
-    current = start
-    used_today = 0.0
     plan: List[Dict[str, Any]] = []
     overflow: List[Dict[str, Any]] = []
 
+    # ================= GÜN BAZLI KAPASİTE DEFTERİ (2026-08-19 düzeltmesi) ======
+    # ÖNCEDEN tek bir `current` imleci vardı ve ASLA GERİ GİTMİYORDU. Parseller
+    # `rank_parcels_for_harvest` ile ÖNCELİĞE göre sıralı (tarihe göre değil),
+    # bu yüzden listede geç olgunlaşan bir parsel (23 Ekim) işlendikten sonra
+    # imleç oraya sabitleniyor ve ARDINDAN gelen ERKEN olgunlaşan parseller
+    # (20 Eylül) de 23 Ekim'e itiliyordu. Canlıda sonuç: 43. haftaya 117 parsel
+    # / 32.468 ton yığılması.
+    #
+    # Artık her gün için kullanılan tonaj ayrı tutuluyor; her parsel KENDİ
+    # olgunluk tarihinden itibaren kapasitesi müsait İLK günü buluyor. Böylece
+    # erken olgunlaşan parsel erken güne yerleşir, öncelik sırası yalnızca
+    # aynı güne yarışanlar arasında belirleyici olur.
+    used_by_day: Dict[date, float] = {}
+
     for r in ranked:
         tonnage = r.get("tahmini_ton") or 0
-        # Parselin kendi olgunluk tarihi kampanya başından sonraysa ondan başla
+
+        # Parselin kendi olgunluk tarihi kampanya başından sonraysa oradan başla
+        cursor = start
         ready = r.get("tahmini_olgunluk_tarihi")
         if ready:
             try:
                 ready_d = date.fromisoformat(ready)
-                if ready_d > current:
-                    current, used_today = max(current, ready_d), 0.0
+                if ready_d > cursor:
+                    cursor = ready_d
             except ValueError:
                 pass
-        while used_today + tonnage > capacity and current < end:
-            current += timedelta(days=1)
-            used_today = 0.0
-        if current > end:
+
+        # Kapasitesi yeten ilk günü ara
+        placed = False
+        while cursor <= end:
+            if used_by_day.get(cursor, 0.0) + tonnage <= capacity:
+                placed = True
+                break
+            cursor += timedelta(days=1)
+
+        if not placed:
             overflow.append({**r, "sebep": "Kampanya penceresi doldu"})
             continue
-        used_today += tonnage
+
+        used_by_day[cursor] = used_by_day.get(cursor, 0.0) + tonnage
         plan.append({
             "parcel_id": r.get("parcel_id"), "parsel": r.get("parsel"),
             "ciftci": r.get("ciftci"), "koy": r.get("koy"),
-            "planlanan_tarih": current.isoformat(),
+            "planlanan_tarih": cursor.isoformat(),
             "tahmini_ton": round(tonnage, 1),
             "beklenen_polar": r.get("beklenen_polar"),
             "olgunlasma_endeksi": r.get("olgunlasma_endeksi"),
             "oncelik_puani": r.get("oncelik_puani"),
-            "hafta": current.isocalendar()[1],
+            "hafta": cursor.isocalendar()[1],
         })
+
+    # Plan takvim sırasına alınır — çizelge bir ZAMAN çizelgesidir; öncelik
+    # sırası yerleştirmede zaten kullanıldı. (Söküm ekranı isterse polara göre
+    # yeniden sıralıyor, bkz. HasatLojistigi.jsx `sortedPlan`.)
+    plan.sort(key=lambda p: p["planlanan_tarih"])
 
     by_week: Dict[int, Dict[str, Any]] = {}
     for p in plan:
@@ -117,11 +143,19 @@ def build_schedule(rows: List[Dict[str, Any]], settings: Dict[str, Any],
         w["ortalama_polar"] = round(sum(polars) / len(polars), 2) if polars else None
         haftalik.append(w)
 
+    # Kapasite kullanım özeti — çizelgenin gerçekten kapasiteye uyduğunun
+    # görünür kanıtı (aşım varsa burada belli olur).
+    gunluk = [{"tarih": d.isoformat(), "ton": round(t, 1),
+               "doluluk_yuzde": round(t / max(capacity, 1) * 100, 1)}
+              for d, t in sorted(used_by_day.items())]
+
     return {
         "kampanya": {"baslangic": start.isoformat(), "bitis": end.isoformat(),
                      "gunluk_kapasite_ton": capacity},
         "plan": plan,
         "haftalik_ozet": haftalik,
+        "gunluk_doluluk": gunluk,
+        "kullanilan_gun_sayisi": len(gunluk),
         "kapsam_disi": overflow,
         "toplam_ton": round(sum(p["tahmini_ton"] for p in plan), 1),
     }

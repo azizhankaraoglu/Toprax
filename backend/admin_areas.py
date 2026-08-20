@@ -25,6 +25,7 @@ modülde SABİT tanımlıdır ama field_definitions (module="admin_areas")
 19 ek alanı gibi.
 """
 import math
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -290,6 +291,7 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
     async def list_admin_areas(
         area_type: Optional[str] = None, parent_id: Optional[str] = None,
         bbox: Optional[str] = None, limit: int = 1500,
+        q: Optional[str] = None, geometry: bool = True,
         user=Depends(require_permission("admin_areas:view")),
         _feat=Depends(require_feature("admin_areas")),
     ):
@@ -319,9 +321,25 @@ def register_admin_area_routes(api_router, db, current_user, require_permission,
                 "coordinates": [[[min_lon, min_lat], [max_lon, min_lat],
                                  [max_lon, max_lat], [min_lon, max_lat], [min_lon, min_lat]]],
             }}}
-        docs = await db.admin_areas.find(query, {"_id": 0}).limit(max(1, min(limit, 3000))).to_list(3000)
-        for d in docs:
-            d["geometry"] = _simplify_geometry(d.get("geometry"))
+        # `q` (2026-08-19) — ada göre arama. Bu koleksiyonda 51 binden fazla
+        # kayıt var; üst-alan seçici gibi ekranlar eskiden parametresiz
+        # `GET /admin-areas` çağırıp DOĞAL SIRADAKİ ilk 1500 kaydı alıyordu —
+        # yani listede "sadece birkaç il görünüyor" şikâyeti. Artık seçici
+        # hem seviyeye hem aramaya göre daraltılmış istek atıyor.
+        if q and len(q.strip()) >= 1:
+            query["name"] = {"$regex": re.escape(q.strip()), "$options": "i"}
+
+        # `geometry=false` — seçici/dropdown gibi SADECE ad-id isteyen
+        # tüketiciler sınır poligonlarını indirmemeli (bir il poligonu
+        # binlerce köşe taşıyabiliyor; 1500 kayıtta bu megabaytlar demek).
+        projection = {"_id": 0} if geometry else {"_id": 0, "geometry": 0}
+        cursor = db.admin_areas.find(query, projection)
+        if not bbox:
+            cursor = cursor.sort("name", 1)
+        docs = await cursor.limit(max(1, min(limit, 3000))).to_list(3000)
+        if geometry:
+            for d in docs:
+                d["geometry"] = _simplify_geometry(d.get("geometry"))
         return docs
 
     @api_router.get("/admin-areas/at")

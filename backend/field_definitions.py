@@ -923,6 +923,71 @@ def register_field_definition_routes(api_router, db, current_user, require_permi
                     "Yönetimi ekranından elle eklenebilir.",
         }
 
+    @api_router.post("/field-definitions/sync-il-ilce-from-admin-areas")
+    async def sync_il_ilce_from_admin_areas(
+        user=Depends(require_permission("settings:fields_manage")),
+    ):
+        """İl/İlçe lookup'ını `admin_areas` koleksiyonundan doldurur (2026-08-19).
+
+        **Neden ayrı bir uç:** `seed-il-ilce-lookup` kod içindeki `TR_IL_ILCE`
+        sözlüğünden besleniyor ve o sözlük yıllardır sadece Konya + Ankara
+        içeriyor — form dropdown'larında "sadece 2 il" görünmesinin sebebi bu.
+        Oysa gerçek idari veri (81 il / 971 ilçe, sınır geometrileriyle)
+        `admin_areas`'a ZATEN yüklenmiş durumda. 81 ili elle koda yazmak yerine
+        VAR OLAN tek kaynaktan türetiyoruz — CLAUDE.md'nin IT-13.6'daki "il/ilçe
+        isimleri TEK KAYNAK, tekrar yazılmaz" ilkesiyle AYNI yön.
+
+        `TR_IL_ILCE` ve `seed-il-ilce-lookup` KALDIRILMADI: `admin_areas` boş
+        olan yeni bir kurulumda hâlâ tek başına çalışan bir başlangıç verisi
+        sağlıyor. İki uç da idempotenttir ve birlikte çalışabilir.
+        """
+        il_id = await _ensure_lookup_group("il", "İl", 4)
+        ilce_id = await _ensure_lookup_group("ilce", "İlçe", 5)
+        await _upgrade_lookup_group("ilce", parent_group_id=il_id)
+
+        iller = await db.admin_areas.find(
+            {"area_type": "il", "is_active": {"$ne": False}},
+            {"_id": 0, "id": 1, "name": 1},
+        ).sort("name", 1).to_list(200)
+        if not iller:
+            raise HTTPException(
+                400,
+                "`admin_areas` koleksiyonunda il kaydı yok. Önce İdari Alanlar "
+                "ekranından il/ilçe sınırlarını içe aktarın veya "
+                "`seed-il-ilce-lookup` ucunu kullanın.",
+            )
+
+        created_il = created_ilce = 0
+        for il_order, il in enumerate(iller):
+            name = (il.get("name") or "").strip()
+            if not name:
+                continue
+            before = await db.lookup_values.count_documents(
+                {"group_id": il_id, "value": name, "parent_id": None})
+            il_value_id = await _ensure_lookup_value(il_id, name, name, il_order)
+            if before == 0:
+                created_il += 1
+
+            ilceler = await db.admin_areas.find(
+                {"area_type": "ilce", "parent_id": il["id"], "is_active": {"$ne": False}},
+                {"_id": 0, "name": 1},
+            ).sort("name", 1).to_list(1000)
+            for ilce_order, ilce in enumerate(ilceler):
+                iname = (ilce.get("name") or "").strip()
+                if not iname:
+                    continue
+                before = await db.lookup_values.count_documents(
+                    {"group_id": ilce_id, "value": iname, "parent_id": il_value_id})
+                await _ensure_lookup_value(ilce_id, iname, iname, ilce_order,
+                                           parent_id=il_value_id)
+                if before == 0:
+                    created_ilce += 1
+
+        return {
+            "status": "synced", "source": "admin_areas",
+            "il_total": len(iller), "new_il": created_il, "new_ilce": created_ilce,
+        }
+
     # -----------------------------------------------------------------
     # PİLOT SEED — Sözleşme modülü (IT-03)
     # -----------------------------------------------------------------

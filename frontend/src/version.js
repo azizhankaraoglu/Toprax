@@ -6,6 +6,6 @@
  * (ve gerektiğinde APP_VERSION artırılır). Login açılış sayfası ve
  * Ayarlar > Entegrasyonlar bu tek kaynaktan okur.
  */
-export const APP_VERSION = "1.1";
-export const APP_BUILD = "25072026-0431";
+export const APP_VERSION = "1.4";
+export const APP_BUILD = "20082026-1138";
 export const APP_VERSION_LABEL = `v${APP_VERSION} · Build ${APP_BUILD}`;

@@ -21,6 +21,10 @@ const TABS = [
   { id: "favoriler", label: "Favoriler", icon: Star },
 ];
 
+/** Liste uçları düz dizi VEYA {items:[...]} zarfı dönebiliyor — ikisini de
+ *  güvenli bir diziye indirger, beklenmeyen bir şekilde asla çökmez. */
+const asList = (d) => (Array.isArray(d) ? d : (d && Array.isArray(d.items) ? d.items : []));
+
 export default function WorkspaceDrawer() {
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
@@ -44,9 +48,13 @@ export default function WorkspaceDrawer() {
 
   useEffect(() => {
     if (!open) return;
-    if (tab === "bildirimler") api.get("/notifications").then((r) => setNotifs(r.data));
-    else if (tab === "duyurular") api.get("/announcements/active", { params: { unread_only: false } }).then((r) => setAnnouncements(r.data));
-    else if (tab === "favoriler") api.get("/favorites").then((r) => setFavorites(r.data));
+    // `GET /notifications` 2026-08-19'da düz diziden {items,total,unread}
+    // zarfına geçti; burası hâlâ dizi bekliyordu ve çekmece `.slice` ile
+    // çöküyordu. asList her iki şekli de kabul eder (Other.jsx ile AYNI
+    // geriye-uyum deseni) — başka bir uç da zarfa geçerse burası kırılmaz.
+    if (tab === "bildirimler") api.get("/notifications", { params: { limit: 30 } }).then((r) => setNotifs(asList(r.data)));
+    else if (tab === "duyurular") api.get("/announcements/active", { params: { unread_only: false } }).then((r) => setAnnouncements(asList(r.data)));
+    else if (tab === "favoriler") api.get("/favorites").then((r) => setFavorites(asList(r.data)));
     else if (tab === "son") setRecent(getRecentlyViewed());
   }, [open, tab]);
 

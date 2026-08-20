@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "@/api";
 import ParcelPicker from "@/components/ParcelPicker";
+import ParcelDecisionPanel from "@/components/ParcelDecisionPanel";
 import {
   CalendarClock, AlertTriangle, Clock, ListChecks, Info, CheckCircle2,
   Droplets, Sun, Leaf, Satellite, ShieldCheck, RefreshCw,
@@ -41,6 +42,10 @@ export default function SezonKararTakvimi() {
   const [msg, setMsg] = useState("");
   const [staff, setStaff] = useState([]);
   const [assignee, setAssignee] = useState("");
+  // Fenolojik şeritte İNCELENEN aşama. null = güncel aşama gösterilir.
+  // Şerit daha önce salt-okunur bir durum göstergesiydi; kullanıcı bunu
+  // "diğer butonlar pasif" olarak okuduğu için tıklanabilir hale getirildi.
+  const [stageKey, setStageKey] = useState(null);
 
   useEffect(() => {
     api.get("/field-ops/assignable-users").then((r) => setStaff(r.data || [])).catch(() => {});
@@ -50,6 +55,7 @@ export default function SezonKararTakvimi() {
     if (!pid) return;
     setBusy(true);
     setMsg("");
+    setStageKey(null);
     api.get(`/season-planner/parcels/${pid}`)
       .then((r) => setPlan(r.data))
       .catch((e) => setMsg(e.response?.data?.detail || "Takvim yüklenemedi."))
@@ -117,6 +123,15 @@ export default function SezonKararTakvimi() {
       {msg && <div className="card p-3 mb-4 text-sm text-[var(--primary)]">{msg}</div>}
       {busy && <div className="card p-6 text-center text-sm text-[var(--text-dim)]">Ölçümler toplanıyor…</div>}
 
+      {/* 2026-08-19 — Karar Paneli (hava + ekim penceresi + polar/söküm).
+          ParcelDetail ile AYNI bileşen; bu ekran zaten "sezon kararı" ekranı
+          olduğu için tahminlerin ikinci doğal yeri burası. */}
+      {parcelId && !busy && (
+        <div className="mb-4">
+          <ParcelDecisionPanel parcelId={parcelId} planting={plan?.ekim || null} />
+        </div>
+      )}
+
       {plan && !busy && (
         <>
           {/* Fenolojik aşama şeridi */}
@@ -141,17 +156,62 @@ export default function SezonKararTakvimi() {
               )}
             </div>
             <div className="flex gap-1 flex-wrap">
-              {(plan.asamalar || []).map((s) => (
-                <div key={s.key}
-                     className={`px-3 py-1.5 rounded-lg text-[11px] ${
-                       s.key === plan.asama?.key
-                         ? "bg-[var(--primary)] text-black font-medium"
-                         : "bg-[var(--surface-2)] text-[var(--text-dim)]"}`}
-                     title={s.aciklama}>
-                  {s.label}
-                </div>
-              ))}
+              {(plan.asamalar || []).map((s, i) => {
+                const curIdx = (plan.asamalar || []).findIndex((x) => x.key === plan.asama?.key);
+                const isCurrent = s.key === plan.asama?.key;
+                const isPast = curIdx >= 0 && i < curIdx;
+                const isSelected = stageKey === s.key;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setStageKey(isSelected ? null : s.key)}
+                    title={s.aciklama}
+                    data-testid={`asama-${s.key}`}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] transition-colors ${
+                      isCurrent
+                        ? "bg-[var(--primary)] text-black font-medium"
+                        : isPast
+                        ? "bg-[var(--surface-2)] text-[var(--text)]"
+                        : "bg-[var(--surface-2)] text-[var(--text-dim)]"
+                    } ${isSelected ? "ring-2 ring-[var(--primary)]" : "hover:opacity-80"}`}
+                  >
+                    {isPast && "✓ "}{s.label}
+                  </button>
+                );
+              })}
             </div>
+
+            {/* Şeritten seçilen aşamanın detayı — güncel aşamadan bağımsız
+                olarak sezonun herhangi bir dönemini inceleyebilmek için. */}
+            {stageKey && (() => {
+              const st = (plan.asamalar || []).find((x) => x.key === stageKey);
+              if (!st) return null;
+              const curIdx = (plan.asamalar || []).findIndex((x) => x.key === plan.asama?.key);
+              const stIdx = (plan.asamalar || []).findIndex((x) => x.key === stageKey);
+              const durum = stIdx < curIdx ? "Tamamlandı" : stIdx === curIdx ? "Güncel aşama" : "Henüz gelmedi";
+              const aralik =
+                st.gdd_min == null ? `< ${st.gdd_max} GDD`
+                : st.gdd_max == null ? `> ${st.gdd_min} GDD`
+                : `${st.gdd_min} – ${st.gdd_max} GDD`;
+              return (
+                <div className="mt-3 pt-3 border-t border-[var(--border)] flex flex-wrap gap-x-6 gap-y-2 items-start">
+                  <div>
+                    <div className="text-xs text-[var(--text-dim)] uppercase tracking-wider">Aşama</div>
+                    <div className="font-medium">{st.label}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-[var(--text-dim)] uppercase tracking-wider">Durum</div>
+                    <span className={`badge ${stIdx === curIdx ? "badge-a" : stIdx < curIdx ? "badge-neutral" : "badge-c"}`}>{durum}</span>
+                  </div>
+                  <div>
+                    <div className="text-xs text-[var(--text-dim)] uppercase tracking-wider">GDD aralığı</div>
+                    <div className="text-sm">{aralik}</div>
+                  </div>
+                  <div className="basis-full text-sm text-[var(--text-dim)]">{st.aciklama}</div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Veri güven rozeti detayı */}

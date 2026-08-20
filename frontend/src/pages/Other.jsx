@@ -313,6 +313,7 @@ export function Bildirimler() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [limit, setLimit] = useState(30);
   const [onlyUnread, setOnlyUnread] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [q, setQ] = useState("");
   const [channel, setChannel] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -326,15 +327,20 @@ export function Bildirimler() {
         limit, q: q || undefined, channel: channel || undefined,
         status: onlyUnread ? "okunmadi" : undefined,
         date_from: dateFrom || undefined,
+        include_archived: showArchived || undefined,
       },
     }).then((r) => {
       // Geriye uyum: eski sürüm düz dizi döndürüyordu.
       const d = r.data;
-      setNotifs(Array.isArray(d) ? d : (d.items || []));
+      let list = Array.isArray(d) ? d : (d.items || []);
+      // "Arşivlenenler" açıkken SADECE arşivi göster (backend include_archived
+      // hem arşivli hem arşivsizi karışık döndürür — bu ekran ayrım ister).
+      if (showArchived) list = list.filter((n) => n.archived);
+      setNotifs(list);
       setTotal(Array.isArray(d) ? d.length : (d.total || 0));
       setUnreadCount(Array.isArray(d) ? d.filter((n) => n.status !== "okundu").length : (d.unread || 0));
     }).finally(() => setBusy(false));
-  }, [limit, q, channel, onlyUnread, dateFrom]);
+  }, [limit, q, channel, onlyUnread, dateFrom, showArchived]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -346,6 +352,11 @@ export function Bildirimler() {
   }
   async function markAllRead() {
     await api.post("/notifications/mark-all-read");
+    load();
+  }
+  async function toggleArchive(e, n) {
+    e.stopPropagation();
+    await api.put(`/notifications/${n.id}/${n.archived ? "unarchive" : "archive"}`);
     load();
   }
 
@@ -366,6 +377,11 @@ export function Bildirimler() {
                   className={`btn ${onlyUnread ? "btn-primary" : "btn-ghost"} text-xs`}
                   data-testid="notif-unread-filter">
             Okunmamışlar ({unreadCount})
+          </button>
+          <button onClick={() => setShowArchived(!showArchived)}
+                  className={`btn ${showArchived ? "btn-primary" : "btn-ghost"} text-xs`}
+                  data-testid="notif-archived-filter">
+            Arşivlenenler
           </button>
           {unreadCount > 0 && (
             <button onClick={markAllRead} className="btn btn-ghost text-xs" data-testid="notif-mark-all">
@@ -432,6 +448,11 @@ export function Bildirimler() {
                   </div>
                 </div>
                 <span className={`badge ${n.status === "okundu" ? "badge-a" : "badge-c"} shrink-0`}>{n.status}</span>
+                <button onClick={(e) => toggleArchive(e, n)} className="btn btn-ghost text-[10px] shrink-0"
+                        data-testid={`notif-archive-${n.id}`}
+                        title={n.archived ? "Arşivden çıkar" : "Arşivle"}>
+                  {n.archived ? "Geri Al" : "Arşivle"}
+                </button>
               </div>
             ))}
           </div>

@@ -6,6 +6,8 @@ import * as turf from "@turf/turf";
 import FilterPanel from "@/components/FilterPanel";
 import WidgetCard from "@/components/WidgetCard";
 import { MapDrawTools } from "@/components/MapDrawTools";
+import MapClickAdminPopup from "@/components/MapClickAdminPopup";
+import AdminAreaPopupLinks from "@/components/AdminAreaPopupLinks";
 import { MAP_WIDGET_REGISTRY, DEFAULT_WIDGET_KEYS } from "@/lib/mapWidgets";
 import { moduleDetailPath } from "@/lib/moduleRoutes";
 import { directionsUrl } from "@/lib/directions";

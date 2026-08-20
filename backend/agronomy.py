@@ -898,10 +898,27 @@ def register_agronomy_routes(api_router, db, current_user, require_permission, l
                         alan=parcel.get("area_dekar") or "-", sezon=season,
                         cesit=body.variety or "-", skor=result["score"],
                         karar=result["decision_label"], sinyaller=sinyal_metni, bulgular=bulgu_metni)
-                    text = router.generate_text(
-                        prompt.get("system_prompt") or DEFAULT_PROMPT_TEMPLATE["system_prompt"].format(urun=crop_doc["label"]),
-                        user_text)
-                    if text and text.strip():
+                    # 2026-08-19 — üretim `ai_governance.governed_generate()`
+                    # üzerinden geçer: admin'in guardrail'leri ve RAG bilgi
+                    # bankası burada da uygulanır. Ürün-özel prompt kütüphanesi
+                    # (`agronomy_prompts`) KORUNUR — yönetişim promptunun
+                    # ARDINA `base_system_prompt` olarak eklenir, ezilmez.
+                    from ai_governance import governed_generate
+                    res = await governed_generate(
+                        db, "agronomy", user_text,
+                        base_system_prompt=(prompt.get("system_prompt")
+                                            or DEFAULT_PROMPT_TEMPLATE["system_prompt"].format(urun=crop_doc["label"])),
+                        use_rag=True, user=user,
+                    )
+                    text = res.get("answer") or ""
+                    if res.get("blocked"):
+                        # Guardrail engelledi — kural tabanlı anlatım korunur,
+                        # kullanıcı sebebi görür (modül felsefesi: AI kararı
+                        # DEĞİŞTİRMEZ, yokluğu da analizi çökertmez).
+                        ai_error = f"Guardrail: {res.get('blocked_by')}"
+                    elif res.get("error"):
+                        ai_error = str(res["error"])[:200]
+                    elif text.strip():
                         narrative = text.strip()
                         ai_powered = True
             except Exception as e:                                  # noqa: BLE001

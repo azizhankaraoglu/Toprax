@@ -150,9 +150,16 @@ class SoilBiologyCreate(BaseModel):
 # SAF HESAP — DB'siz, test edilebilir
 # =====================================================================
 
-def score_measurement(key: str, value: Optional[float]) -> Optional[float]:
-    """Tek ölçümün 0-100 puanı. Ölçülmemişse None (nötr 50 DEĞİL)."""
-    spec = MEASUREMENT_BY_KEY.get(key)
+def score_measurement(key: str, value: Optional[float],
+                      spec_map: Optional[Dict[str, Any]] = None) -> Optional[float]:
+    """Tek ölçümün 0-100 puanı. Ölçülmemişse None (nötr 50 DEĞİL).
+
+    `spec_map` (2026-08-19) — eşikler artık admin tarafından değiştirilebiliyor
+    (`catalog_registry.py`). Verilmezse kod varsayılanına düşer; fonksiyon
+    SAF kalır (DB'ye kendisi gitmez — entitlement.py'nin saf-fonksiyon
+    felsefesiyle AYNI).
+    """
+    spec = (spec_map or MEASUREMENT_BY_KEY).get(key)
     if spec is None or value is None:
         return None
     low, target = spec["dusuk"], spec["hedef"]
@@ -164,7 +171,9 @@ def score_measurement(key: str, value: Optional[float]) -> Optional[float]:
 
 
 def soil_health_score(measurements: Dict[str, Optional[float]],
-                      organisms: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+                      organisms: Optional[List[Dict[str, Any]]] = None,
+                      spec_list: Optional[List[Dict[str, Any]]] = None,
+                      org_map: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Ağırlıklı toprak sağlığı skoru + gerekçe.
 
     ÖLÇÜLMEYEN BİLEŞEN HESABA GİRMEZ; kalan ağırlıklar yeniden normalize
@@ -172,11 +181,17 @@ def soil_health_score(measurements: Dict[str, Optional[float]],
     bir örnek "eksik veri yüzünden düşük puan" almaz — ama `kapsam_yuzde`
     alanında kaç ağırlık biriminin gerçekten ölçüldüğü açıkça bildirilir.
     """
+    # 2026-08-19 — katalog admin tarafından düzenlenebilir; verilmezse kod
+    # varsayılanı kullanılır (geriye dönük uyumlu).
+    specs = spec_list if spec_list is not None else MEASUREMENT_SPEC
+    spec_map = {s["key"]: s for s in specs}
+    organism_map = org_map if org_map is not None else ORGANISM_BY_KEY
+
     parts, total_w, got_w = [], 0.0, 0.0
-    for spec in MEASUREMENT_SPEC:
+    for spec in specs:
         total_w += spec["agirlik"]
         val = measurements.get(spec["key"])
-        s = score_measurement(spec["key"], val)
+        s = score_measurement(spec["key"], val, spec_map)
         if s is None:
             continue
         got_w += spec["agirlik"]
@@ -188,7 +203,7 @@ def soil_health_score(measurements: Dict[str, Optional[float]],
     # Organizma etkisi: patojenler puanı düşürür, faydalılar yükseltir.
     org_delta, org_notes, blocking = 0.0, [], []
     for row in (organisms or []):
-        meta = ORGANISM_BY_KEY.get(row.get("organism_key"))
+        meta = organism_map.get(row.get("organism_key"))
         if not meta or not row.get("tespit_edildi"):
             continue
         yog = (row.get("yogunluk") or "orta").lower()
@@ -246,11 +261,28 @@ def register_soil_biology_routes(api_router, db, current_user, require_permissio
     def _now():
         return datetime.now(timezone.utc).isoformat()
 
+    # 2026-08-19 — organizma/ölçüm katalogları artık ADMIN TARAFINDAN
+    # yönetilebiliyor (`catalog_registry.py`). Kod sabitleri VARSAYILAN olarak
+    # kalır; aşağıdaki yardımcılar her istekte kod + DB override birleşimini
+    # döner, böylece admin'in eklediği bir organizma hem formda görünür hem
+    # skor hesabına girer.
+    async def _organisms():
+        from catalog_registry import get_catalog
+        return await get_catalog(db, "soil_organisms")
+
+    async def _organism_map():
+        from catalog_registry import get_catalog_map
+        return await get_catalog_map(db, "soil_organisms")
+
+    async def _measurements():
+        from catalog_registry import get_catalog
+        return await get_catalog(db, "soil_measurements")
+
     @api_router.get("/soil-biology/catalog")
     async def catalog(user=Depends(current_user)):
         """Organizma kataloğu + ölçüm alanları — form ekranı bunu tüketir,
         etiketleri/açıklamaları HARDCODE ETMEZ (tek kaynak ilkesi)."""
-        return {"organizmalar": ORGANISM_CATALOG, "olcumler": MEASUREMENT_SPEC}
+        return {"organizmalar": await _organisms(), "olcumler": await _measurements()}
 
     @api_router.get("/soil-biology")
     async def list_records(parcel_id: Optional[str] = None, limit: int = 100,
@@ -274,14 +306,16 @@ def register_soil_biology_routes(api_router, db, current_user, require_permissio
         parcel = await db.parcels.find_one({"id": body.parcel_id}, {"_id": 0, "id": 1, "farmer_id": 1})
         if not parcel:
             raise HTTPException(404, "Parsel bulunamadı")
-        unknown = [o.organism_key for o in body.organizmalar if o.organism_key not in ORGANISM_BY_KEY]
+        org_map = await _organism_map()
+        unknown = [o.organism_key for o in body.organizmalar if o.organism_key not in org_map]
         if unknown:
             raise HTTPException(400, f"Bilinmeyen organizma: {', '.join(unknown)}")
 
         doc = body.model_dump(by_alias=True)
         organisms = doc.pop("organizmalar", [])
-        measurements = {k: doc.get(k) for k in MEASUREMENT_BY_KEY}
-        score = soil_health_score(measurements, organisms)
+        specs = await _measurements()
+        measurements = {s["key"]: doc.get(s["key"]) for s in specs}
+        score = soil_health_score(measurements, organisms, spec_list=specs, org_map=org_map)
 
         doc.update({
             "id": str(uuid.uuid4()),
@@ -323,5 +357,8 @@ def register_soil_biology_routes(api_router, db, current_user, require_permissio
     async def score_preview(body: Dict[str, Any], user=Depends(require_permission("soil:view"))):
         """Kaydetmeden skor önizleme — form doldurulurken canlı gösterilir
         (reconciliation.py'nin 'simulation' zarfıyla AYNI felsefe: yazmaz)."""
-        measurements = {k: body.get(k) for k in MEASUREMENT_BY_KEY}
-        return {"preview": True, **soil_health_score(measurements, body.get("organizmalar") or [])}
+        specs = await _measurements()
+        measurements = {s["key"]: body.get(s["key"]) for s in specs}
+        return {"preview": True, **soil_health_score(
+            measurements, body.get("organizmalar") or [],
+            spec_list=specs, org_map=await _organism_map())}

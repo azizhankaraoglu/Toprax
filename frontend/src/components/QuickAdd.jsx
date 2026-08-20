@@ -32,6 +32,13 @@ export function QuickAddPanel({ title, fields, onSubmit, submitLabel = "Ekle", t
 
   function setField(name, value) {
     setValues((v) => ({ ...v, [name]: value }));
+    // 2026-08-19 — alan tanımı opsiyonel bir `onChange(value)` taşıyabilir.
+    // Çağıran, bir alanın değerine göre BAŞKA bir alanın seçeneklerini
+    // yenilemek istediğinde kullanır (ör. İdari Alanlar'da "Tip" seçimi
+    // "Üst Alan" listesini il/ilçe olarak daraltır). Prop verilmeyen
+    // alanlarda davranış TAMAMEN eskisi gibidir.
+    const f = fields.find((x) => x.name === name);
+    if (f && typeof f.onChange === "function") f.onChange(value);
   }
 
   async function handleSubmit(e) {

@@ -8,7 +8,7 @@ import {
   Satellite, Brain, Smartphone, Receipt, FileSpreadsheet, Scale, Activity, Sparkles,
   UserCog, ShieldCheck, LayoutList, Landmark, Compass, LineChart, Kanban, Zap, MessagesSquare, Megaphone, ShieldOff, GraduationCap, Cable, ClipboardCheck,
   Workflow, CheckSquare, Inbox, Radio, FileBarChart2, Layers,
-  CalendarClock, Bug, Factory
+  CalendarClock, Bug, Factory, BrainCircuit, Leaf
 } from "lucide-react";
 import WorkspaceDrawer from "@/components/WorkspaceDrawer";
 import AnnouncementPopup from "@/components/AnnouncementPopup";
@@ -35,27 +35,45 @@ const navGroups = [
       { to: "/sozlesmeler", icon: FileText, label: "Sözleşmeler", featureFlag: "contracts" },
     ]
   },
+  // 2026-08-19 — KARAR DESTEK grubu. Kullanıcı isteği: "katma değeri yüksek
+  // alanları ön planda tut (ne zaman ekmeliyim / ne zaman sökmeliyim, polar
+  // iyileştirme, karbon ayak izi gibi)". Bu ekranlar önceden ÜRETİM grubunun
+  // içinde, veri girişi ağırlıklı CRUD ekranlarının (Toprak Analizleri,
+  // Operasyon...) arasında kayboluyordu. Platformun asıl farkı bunlar olduğu
+  // için ANA ALAN'ın hemen ardına, kendi başlığı altına alındılar.
+  {
+    title: "KARAR DESTEK",
+    items: [
+      { to: "/ekim?view=karar-motoru", icon: Sprout, label: "Ne Ekmeliyim? (Karar Motoru)", featureFlag: "planting" },
+      { to: "/sezon-karar-takvimi", icon: CalendarClock, label: "Sezon Karar Takvimi" },
+      { to: "/hasat-lojistigi", icon: Factory, label: "Ne Zaman Sökmeliyim? (Hasat)" },
+      { to: "/urun-tanima", icon: Sprout, label: "Ürün Tanıma (Uydu)", featureFlag: "remote_sensing" },
+      { to: "/karbon-ayak-izi", icon: Leaf, label: "Karbon Ayak İzi" },
+      { to: "/uzaktan-algilama", icon: Satellite, label: "Uzaktan Algılama", featureFlag: "remote_sensing" },
+    ]
+  },
   {
     title: "ÜRETİM",
     items: [
       { to: "/ekim", icon: Sprout, label: "Ekim Planlama", featureFlag: "planting" },
-      // Karar destek katmanı (2026-08-19) — ekim planlamadan hasada kadar.
-      { to: "/sezon-karar-takvimi", icon: CalendarClock, label: "Sezon Karar Takvimi" },
       { to: "/sulama", icon: Droplets, label: "Sulama & Kaynak", featureFlag: "irrigation" },
       { to: "/operasyon", icon: Settings2, label: "Operasyon", featureFlag: "operations" },
       { to: "/toprak", icon: FlaskConical, label: "Toprak Analizleri", featureFlag: "soil" },
       { to: "/toprak-biyolojisi", icon: Bug, label: "Toprak Biyolojisi" },
-      { to: "/hasat-lojistigi", icon: Factory, label: "Hasat & Kampanya" },
     ]
   },
   {
     title: "ANALİZ & AI",
     items: [
       { to: "/uydu", icon: Satellite, label: "Uydu / NDVI", featureFlag: "remote_sensing" },
-      { to: "/uzaktan-algilama", icon: Satellite, label: "Uzaktan Algılama", featureFlag: "remote_sensing" },
       { to: "/copilot", icon: Sparkles, label: "AI Copilot", featureFlag: "ai" },
       { to: "/hastalik", icon: Brain, label: "AI Hastalık", featureFlag: "ai" },
       { to: "/ai-bilgi-kutuphanesi", icon: Brain, label: "AI Bilgi Kütüphanesi", featureFlag: "ai" },
+      // 2026-08-19 — TÜM AI çıktısının prompt/guardrail/RAG otoritesi.
+      // Kullanıcı isteği gereği SADECE admin katmanı görür; backend ayrıca
+      // ai_governance:view/manage izinlerini zorunlu kılar (menüden gizlemek
+      // tek başına güvenlik önlemi değildir).
+      { to: "/ai-yonetimi", icon: BrainCircuit, label: "AI Yönetişimi", adminTierOnly: true, featureFlag: "ai" },
     ]
   },
   {
@@ -68,6 +86,11 @@ const navGroups = [
       { to: "/saha", icon: Smartphone, label: "Saha Mobil" },
       { to: "/formlar", icon: FileSpreadsheet, label: "Formlar & Anket", featureFlag: "forms" },
       { to: "/lojistik", icon: Truck, label: "Lojistik & Randevu", featureFlag: "logistics" },
+      // 2026-08-19 — Hasat ekranından AYRILAN kampanya lojistiği (fabrika
+      // kapasitesi/kantar/haftalık yük). Aynı sayfanın ?view=lojistik
+      // sekmesi — IT-41'in "Saha Raporları" girdisiyle AYNI kalıp (pahalı
+      // çizelge hesabı iki route'ta iki kez çalışmasın diye).
+      { to: "/hasat-lojistigi?view=lojistik", icon: Factory, label: "Kampanya Lojistiği" },
       { to: "/kantar", icon: Scale, label: "Kantar", featureFlag: "factory" },
     ]
   },

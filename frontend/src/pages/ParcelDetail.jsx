@@ -30,6 +30,7 @@ import VisitHistory from "@/components/VisitHistory";
 import FarmerSelect from "@/components/FarmerSelect";
 import RemoteSensingPanel from "@/components/RemoteSensingPanel";
 import ParcelInsightCards from "@/components/ParcelInsightCards";
+import ParcelDecisionPanel from "@/components/ParcelDecisionPanel";
 
 const RISK_COLORS = { yesil: "#4ade80", sari: "#fbbf24", turuncu: "#fb923c", kirmizi: "#ef4444" };
 const SOIL_TYPES = ["Killi", "Kumlu", "Tınlı", "Kireçli", "Killi-Tınlı"];
@@ -532,6 +533,20 @@ export default function ParcelDetail() {
           kök sayısı, karbon ve toprak biyolojisi. Tavsiyeleri Sezon Karar
           Takvimi üretir; bu kartlar ölçümü gösterir. */}
       <ParcelInsightCards parcelId={id} />
+
+      {/* KARAR PANELİ (2026-08-19) — Open-Meteo hava verisi + ekim penceresi +
+          polar/söküm tahmini. Bu üç backend modülü (weather.py, polar_engine.py)
+          zaten vardı ama HİÇBİR ekranda tüketilmiyordu; kullanıcı "tahminleri
+          nereden test edeceğim / polar'ı göremedim / Open-Meteo UI'a eklenmemiş"
+          diye bildirdi. En güncel ekim kaydı "hangi ürün ekili" bilgisi için
+          panele geçirilir. */}
+      <div className="mb-4">
+        <ParcelDecisionPanel
+          parcelId={id}
+          crop={(plantings && plantings[0]?.crop) || "pancar"}
+          planting={(plantings && plantings[0]) || null}
+        />
+      </div>
 
       {/* GENEL BİLGİLER — IT-02 dinamik alanlar (Form Yönetimi'nden) + IT-04 düzenleme modu.
           NOT: fieldDefs boş olsa bile kart her zaman render edilir — aksi halde

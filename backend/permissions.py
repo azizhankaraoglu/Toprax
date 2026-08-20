@@ -295,6 +295,17 @@ PERMISSION_CATALOG = {
             {"key": "platform_core:manage", "label": "Feature Flag Aç-Kapa + Lisans Ekle/Düzenle/Sil"},
         ],
     },
+    # 2026-08-19 — AI Yönetişimi. TÜM AI çıktısının prompt/guardrail/RAG
+    # kaynağı burada belirlendiği için BİLİNÇLİ OLARAK sadece üst katman
+    # rollere verilir (communications:policies_manage emsaliyle AYNI mantık —
+    # kurumun sesini belirleyen ayar, operasyonel bir yetki değil).
+    "ai_governance": {
+        "label": "AI Yönetişimi (Sistem Promptları / Guardrail / RAG Bilgi Bankası)",
+        "permissions": [
+            {"key": "ai_governance:view", "label": "Prompt/Guardrail/Bilgi Bankası Görüntüle"},
+            {"key": "ai_governance:manage", "label": "Prompt/Guardrail Düzenle + Belge Ekle/Sil + Test Konsolu"},
+        ],
+    },
     "integration_hub": {
         "label": "Integration Hub (Webhook Engine + Entegrasyon Envanteri)",
         "permissions": [

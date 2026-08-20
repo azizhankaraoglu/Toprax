@@ -524,6 +524,23 @@ register_integration_hub_routes(api_router, db, current_user, require_permission
 from platform_core import register_platform_core_routes
 register_platform_core_routes(api_router, db, current_user, require_permission, log_audit)
 
+# AI Yönetişimi — Sistem Promptları + Guardrail'ler + RAG Bilgi Bankası
+# (2026-08-19). ai_router.py'nin ÖNÜNE geçen yönetişim katmanı; tüm AI
+# çıktısının prompt/kural/kaynak otoritesi burasıdır.
+from ai_governance import register_ai_governance_routes
+register_ai_governance_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+
+# Yönetilebilir Sabit Katalogları (2026-08-19) — kod-seviyesi registry'lerin
+# (ör. soil_biology.ORGANISM_CATALOG) admin tarafından eklenip/düzenlenip
+# silinebilmesi. Kod sabiti VARSAYILAN kalır, DB katmanı üzerine biner.
+from catalog_registry import register_catalog_routes
+register_catalog_routes(api_router, db, current_user, require_permission, log_audit)
+
+# Uydu ile Ürün Tanıma (2026-08-19) — fenolojik NDVI imzasıyla "hangi parselde
+# ne ekili" + kayıtsız alanlarda tarama + manuel etiketleme/kalibrasyon.
+from crop_classification import register_crop_classification_routes
+register_crop_classification_routes(api_router, db, current_user, require_permission, log_audit, require_feature)
+
 # Experience Profile Modeli (IT-34 / FAZ 12 — Mobil başlangıç).
 from experience_profile import register_experience_profile_routes
 register_experience_profile_routes(api_router, db, current_user, require_permission, log_audit, require_feature)

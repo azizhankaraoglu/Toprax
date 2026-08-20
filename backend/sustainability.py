@@ -197,6 +197,78 @@ def register_sustainability_routes(api_router, db, current_user, require_permiss
             raise HTTPException(404, "Parsel bulunamadı")
         return await parcel_carbon(db, parcel, season)
 
+    @api_router.get("/sustainability/summary")
+    async def sustainability_summary(season: Optional[int] = None, limit: int = 200,
+                                     user=Depends(require_permission("parcels:view"))):
+        """İŞLETME GENELİ karbon özeti (2026-08-19).
+
+        `sustainability.py` bugüne kadar SADECE parsel-bazlı iki uç sunuyordu ve
+        yalnızca ParcelInsightCards içindeki tek bir kartla tüketiliyordu — yani
+        "kooperatifin toplam ayak izi ne?" sorusunun cevabı hiçbir yerde yoktu.
+        Bu uç mevcut `parcel_carbon()` fonksiyonunu YENİDEN KULLANIR (yeni
+        hesaplama mantığı yazılmadı), parsel parsel çağırıp toplar.
+
+        **Kapsam sınırı dürüstçe bildirilir:** her parsel için ayrı sözleşme/
+        toprak/sulama sorgusu çalıştığından `limit` ile sınırlıdır ve aşımda
+        `truncated: true` döner (harvest_logistics.py'nin AYNI deseni).
+        """
+        season = season or date.today().year
+        total_parcels = await db.parcels.count_documents({"is_active": {"$ne": False}})
+        parcels = await db.parcels.find(
+            {"is_active": {"$ne": False}}, {"_id": 0}).limit(max(1, min(limit, 1000))).to_list(1000)
+
+        toplam_co2 = 0.0
+        toplam_alan = 0.0
+        kalem_toplam: Dict[str, float] = {}
+        oneri_sayaci: Dict[str, Dict[str, Any]] = {}
+        en_yuksek: List[Dict[str, Any]] = []
+
+        for p in parcels:
+            try:
+                res = await parcel_carbon(db, p, season)
+            except Exception:                                   # noqa: BLE001
+                continue                                        # tek parsel hatası özeti çökertmez
+            fp = res["ayak_izi"]
+            co2 = fp.get("toplam_kg_co2e") or 0
+            toplam_co2 += co2
+            toplam_alan += p.get("area_dekar") or 0
+            for k in fp.get("kalemler", []):
+                kalem_toplam[k["kalem"]] = kalem_toplam.get(k["kalem"], 0.0) + (k.get("kg_co2e") or 0)
+            for o in res.get("oneriler", []):
+                key = o.get("baslik") or o.get("kaynak") or "oneri"
+                slot = oneri_sayaci.setdefault(key, {"baslik": key, "parsel_sayisi": 0,
+                                                     "toplam_kazanc_kg_co2e": 0.0,
+                                                     "aciklama": o.get("aciklama")})
+                slot["parsel_sayisi"] += 1
+                slot["toplam_kazanc_kg_co2e"] += (o.get("kazanc_kg_co2e") or 0)
+            en_yuksek.append({"parcel_id": p["id"], "parsel": p.get("name"),
+                              "alan_dekar": p.get("area_dekar"),
+                              "kg_co2e": round(co2, 1),
+                              "dekar_basina": fp.get("dekar_basina_kg_co2e")})
+
+        en_yuksek.sort(key=lambda x: x["kg_co2e"], reverse=True)
+        oneriler = sorted(oneri_sayaci.values(),
+                          key=lambda x: x["toplam_kazanc_kg_co2e"], reverse=True)
+        for o in oneriler:
+            o["toplam_kazanc_kg_co2e"] = round(o["toplam_kazanc_kg_co2e"], 1)
+
+        return {
+            "season": season,
+            "kapsam": {"islenen_parsel": len(parcels), "toplam_parsel": total_parcels,
+                       "truncated": len(parcels) < total_parcels},
+            "toplam_kg_co2e": round(toplam_co2, 1),
+            "toplam_ton_co2e": round(toplam_co2 / 1000, 2),
+            "toplam_alan_dekar": round(toplam_alan, 1),
+            "dekar_basina_kg_co2e": round(toplam_co2 / toplam_alan, 1) if toplam_alan else None,
+            "kalemler": sorted(
+                [{"kalem": k, "kg_co2e": round(v, 1),
+                  "yuzde": round(v / toplam_co2 * 100, 1) if toplam_co2 else 0}
+                 for k, v in kalem_toplam.items()],
+                key=lambda x: x["kg_co2e"], reverse=True),
+            "en_yuksek_parseller": en_yuksek[:20],
+            "iyilestirme_firsatlari": oneriler,
+        }
+
     @api_router.get("/sustainability/parcels/{parcel_id}/benefit-report")
     async def benefit_report(parcel_id: str, onceki_sezon: int, sonraki_sezon: int,
                              user=Depends(require_permission("parcels:view"))):

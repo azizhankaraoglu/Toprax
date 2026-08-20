@@ -398,7 +398,21 @@ export default function AdminAreaManagement() {
   const [creating, setCreating] = useState(false);
   const [parents, setParents] = useState([]);
 
-  useEffect(() => { api.get("/admin-areas").then((r) => setParents(r.data)); }, [gridKey]);
+  // 2026-08-19 — üst-alan seçici artık SEVİYEYE göre daraltılmış istek atıyor.
+  // Önceden parametresiz `GET /admin-areas` çağrılıyordu: 51 binden fazla
+  // kaydın DOĞAL SIRADAKİ ilk 1500'ü geliyor, listede sadece birkaç il
+  // görünüyordu ("idari sınırlarda sadece Konya geliyor" şikâyeti).
+  // İl seçilince üst alan İSTENMEZ; ilçe için iller, mahalle için ilçeler
+  // gelir (geometry=false — seçicinin sınır poligonuna ihtiyacı yok).
+  const [newAreaType, setNewAreaType] = useState("il");
+  const parentLevel = newAreaType === "mahalle" ? "ilce" : newAreaType === "ilce" ? "il" : null;
+
+  useEffect(() => {
+    if (!parentLevel) { setParents([]); return; }
+    api.get("/admin-areas", { params: { area_type: parentLevel, geometry: false, limit: 3000 } })
+       .then((r) => setParents(r.data || []))
+       .catch(() => setParents([]));
+  }, [parentLevel, gridKey]);
 
   function refresh() { setGridKey((k) => k + 1); }
 
@@ -418,9 +432,14 @@ export default function AdminAreaManagement() {
         fields={[
           { name: "name", label: "Ad", required: true },
           { name: "area_type", label: "Tip", type: "select", required: true,
+            onChange: (v) => setNewAreaType(v),
             options: [{ value: "il", label: "İl" }, { value: "ilce", label: "İlçe" }, { value: "mahalle", label: "Mahalle" }] },
-          { name: "parent_id", label: "Üst Alan (opsiyonel)", type: "select",
-            options: parents.map((p) => ({ value: p.id, label: `${p.name} (${p.area_type})` })) },
+          ...(parentLevel ? [{
+            name: "parent_id",
+            label: parentLevel === "il" ? `Bağlı Olduğu İl (${parents.length} il)` : `Bağlı Olduğu İlçe (${parents.length} ilçe)`,
+            type: "select",
+            options: parents.map((p) => ({ value: p.id, label: p.name })),
+          }] : []),
         ]}
         onSubmit={async (v) => {
           await api.post("/admin-areas", { ...v, parent_id: v.parent_id || null });

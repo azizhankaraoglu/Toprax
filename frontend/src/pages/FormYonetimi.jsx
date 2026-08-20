@@ -4,8 +4,9 @@ import { QuickAddPanel } from "@/components/QuickAdd";
 import { DestekKatalogu } from "@/pages/SupportCatalog";
 import {
   Layers, Plus, X, Check, Pencil, EyeOff, Eye, ArrowUp, ArrowDown,
-  ListTree, ChevronRight, Trash2, LayoutList, Wallet, ClipboardCheck,
+  ListTree, ChevronRight, Trash2, LayoutList, Wallet, ClipboardCheck, Database,
 } from "lucide-react";
+import CatalogManager from "@/components/CatalogManager";
 
 // backend/field_ops.py'deki CHECKLIST_CATALOG ile BİREBİR AYNI (kod
 // seviyesinde sabit — yeni bir kalem eklemek istenirse iki tarafta da
@@ -733,6 +734,11 @@ const HUB_TABS = [
   { key: "lookup", label: "Lookup Yönetimi", icon: ListTree },
   { key: "gorev-tipleri", label: "Görev Tipleri", icon: ClipboardCheck },
   { key: "destek", label: "Destek Kataloğu", icon: Wallet },
+  // 2026-08-19 — koda gömülü motor sabitlerinin (organizmalar, ölçüm eşikleri)
+  // admin yönetimi. Lookup Yönetimi'nden AYRI: orası form dropdown'ları için
+  // value/label tutar, burası skor ağırlığı/eşik gibi DAVRANIŞ belirleyen
+  // alanları yönetir (bkz. backend/catalog_registry.py docstring'i).
+  { key: "kataloglar", label: "Sabit Katalogları", icon: Database },
 ];
 
 export function FormYonetimiHub() {
@@ -759,6 +765,7 @@ export function FormYonetimiHub() {
       {tab === "lookup" && <LookupYonetimi />}
       {tab === "gorev-tipleri" && <GorevTipleri />}
       {tab === "destek" && <DestekKatalogu />}
+      {tab === "kataloglar" && <CatalogManager />}
     </div>
   );
 }

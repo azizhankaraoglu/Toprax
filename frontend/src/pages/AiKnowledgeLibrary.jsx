@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from "react";
 import api from "@/api";
-import { Brain, Database, CheckSquare, Boxes, Activity, Play, RefreshCw } from "lucide-react";
+import { Brain, Database, CheckSquare, Boxes, Activity, Play, RefreshCw, Pencil, Trash2 } from "lucide-react";
 import DatasetEditor from "@/components/DatasetEditor";
 
 // SON HAL #4 — "Eğit" tıklanınca patlıyor şikayeti: /ai/models/{id}/train
@@ -90,6 +90,8 @@ function LibraryTab() {
   const [busy, setBusy] = useState(false);
   // Satıra tıklanınca açılan dataset içerik editörü (RAG besleme).
   const [openDataset, setOpenDataset] = useState(null);
+  const [dsEditId, setDsEditId] = useState(null);   // satır içi düzenlenen dataset
+  const [dsEdit, setDsEdit] = useState({});
 
   const load = () => {
     api.get("/ai/datasets").then((r) => setDatasets(r.data.items || [])).catch(() => {});
@@ -107,6 +109,25 @@ function LibraryTab() {
     if (!newDs.name) return;
     try { await api.post("/ai/datasets", newDs); setNewDs({ name: "", source_type: "mobil" }); load(); }
     catch (e) { setMsg(errText(e, "Dataset oluşturulamadı (yetki?)")); }
+  }
+  // 2026-08-19 — dataset satır düzenleme/silme. Backend'de PUT/DELETE
+  // /ai/datasets/{id} ZATEN VARDI (ai_engine.py), sadece UI eksikti; ikisi de
+  // `ai_knowledge:manage` ister (oluşturma `:create` ile yeterliydi — bu
+  // bilinçli bir yetki farkı, silme/yeniden adlandırma daha üst yetki).
+  async function saveDataset(id) {
+    if (!dsEdit.name?.trim()) return setMsg("Dataset adı boş olamaz.");
+    try {
+      await api.put(`/ai/datasets/${id}`, { name: dsEdit.name, source_type: dsEdit.source_type, status: dsEdit.status });
+      setDsEditId(null); setMsg("Dataset güncellendi."); load();
+    } catch (e) { setMsg(errText(e, "Dataset güncellenemedi (ai_knowledge:manage gerekir)")); }
+  }
+  async function deleteDataset(d) {
+    if (!window.confirm(`"${d.name}" datasetini silmek istiyor musunuz? (pasife alınır, kayıtları korunur)`)) return;
+    try {
+      await api.delete(`/ai/datasets/${d.id}`);
+      if (openDataset?.id === d.id) setOpenDataset(null);
+      setMsg("Dataset pasife alındı."); load();
+    } catch (e) { setMsg(errText(e, "Dataset silinemedi (ai_knowledge:manage gerekir)")); }
   }
   async function runPredict(rec) {
     try { const r = await api.post("/ai/predict", { record_id: rec.id }); setMsg(`Tahmin: ${r.data.decision} (güven ${r.data.confidence})`); }
@@ -145,9 +166,34 @@ function LibraryTab() {
         {datasets.length === 0 ? <div className="p-6 text-center text-[var(--text-dim)]">Henüz dataset yok</div> :
           <table className="w-full text-sm">
             <thead><tr className="text-left text-[11px] text-[var(--text-dim)] uppercase tracking-wider border-b border-[var(--border)]">
-              <th className="p-3">Ad</th><th className="p-3">Kaynak</th><th className="p-3">Kayıt</th><th className="p-3">Durum</th>
+              <th className="p-3">Ad</th><th className="p-3">Kaynak</th><th className="p-3">Kayıt</th><th className="p-3">Durum</th><th className="p-3" />
             </tr></thead>
             <tbody>{datasets.map((d) => (
+              dsEditId === d.id ? (
+                <tr key={d.id} className="border-b border-[var(--border)] bg-[var(--surface-2)]">
+                  <td className="p-3">
+                    <input className="w-full text-sm" value={dsEdit.name || ""}
+                           onChange={(e) => setDsEdit({ ...dsEdit, name: e.target.value })} />
+                  </td>
+                  <td className="p-3">
+                    <select className="text-sm" value={dsEdit.source_type || "mobil"}
+                            onChange={(e) => setDsEdit({ ...dsEdit, source_type: e.target.value })}>
+                      {["uydu", "drone", "mobil", "lab", "sensor"].map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </td>
+                  <td className="p-3">{d.record_count || 0}</td>
+                  <td className="p-3">
+                    <select className="text-sm" value={dsEdit.status || "draft"}
+                            onChange={(e) => setDsEdit({ ...dsEdit, status: e.target.value })}>
+                      {["draft", "review", "approved", "archived"].map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </td>
+                  <td className="p-3 text-right whitespace-nowrap">
+                    <button className="btn btn-primary text-xs" onClick={() => saveDataset(d.id)}>Kaydet</button>
+                    <button className="btn btn-ghost text-xs" onClick={() => setDsEditId(null)}>Vazgeç</button>
+                  </td>
+                </tr>
+              ) : (
               <tr key={d.id}
                   className={`border-b border-[var(--border)] hover:bg-[var(--surface-2)] cursor-pointer ${
                     openDataset?.id === d.id ? "bg-[var(--surface-2)]" : ""}`}
@@ -156,7 +202,18 @@ function LibraryTab() {
                   title="İçeriğini düzenlemek için tıklayın">
                 <td className="p-3">{d.name}</td><td className="p-3">{d.source_type}</td>
                 <td className="p-3">{d.record_count || 0}</td><td className="p-3"><Badge value={d.status} /></td>
-              </tr>))}</tbody>
+                <td className="p-3 text-right whitespace-nowrap">
+                  <button className="btn btn-ghost text-xs" title="Adını/kaynağını/durumunu düzenle"
+                          onClick={(e) => { e.stopPropagation(); setDsEditId(d.id);
+                                            setDsEdit({ name: d.name, source_type: d.source_type, status: d.status }); }}>
+                    <Pencil size={12} />
+                  </button>
+                  <button className="btn btn-ghost text-xs text-red-400" title="Sil (pasife al)"
+                          onClick={(e) => { e.stopPropagation(); deleteDataset(d); }}>
+                    <Trash2 size={12} />
+                  </button>
+                </td>
+              </tr>)))}</tbody>
           </table>}
       </div>
 

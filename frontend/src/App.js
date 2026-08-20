@@ -44,6 +44,9 @@ import IntegrationHub from "@/pages/IntegrationHub";
 import DeveloperPortal from "@/pages/DeveloperPortal";
 import PlatformCore from "@/pages/PlatformCore";
 import AiKnowledgeLibrary from "@/pages/AiKnowledgeLibrary";
+import AiGovernance from "@/pages/AiGovernance";
+import Sustainability from "@/pages/Sustainability";
+import CropDetection from "@/pages/CropDetection";
 import { ExperienceProfileYonetimi } from "@/pages/ExperienceProfiles";
 import MobilDashboard from "@/pages/MobilDashboard";
 import OrganizationChart from "@/pages/OrganizationChart";
@@ -151,6 +154,9 @@ function App() {
             <Route path="/gelistirici-portali" element={<DeveloperPortal />} />
             <Route path="/platform-core" element={<PlatformCore />} />
             <Route path="/ai-bilgi-kutuphanesi" element={<AiKnowledgeLibrary />} />
+            <Route path="/ai-yonetimi" element={<AiGovernance />} />
+            <Route path="/karbon-ayak-izi" element={<Sustainability />} />
+            <Route path="/urun-tanima" element={<CropDetection />} />
             <Route path="/experience-profiles" element={<ExperienceProfileYonetimi />} />
             <Route path="/ufyd-dashboard" element={<UfydDashboard />} />
             <Route path="/saha-operasyonlari" element={<SahaOperasyonlari />} />

@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Denetim Faz 4 — Yerel LLM (Ollama) opsiyonel eklentisi.
 # Ana docker-compose.yml'yi DEĞİŞTİRMEZ, ayrı bir dosyadır — istenirse
 # uygulama üstüne eklenir:

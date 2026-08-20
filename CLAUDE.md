@@ -2491,6 +2491,105 @@ ileride bu ortamda bir buton testi "çalışmıyor" gibi görünürse ÖNCE
   50 pytest yeşil, `craco build` hatasız, TÜM yeni arayüz parçaları gerçek
   tarayıcıda canlı test edildi (konsol hatası yok) — bkz. CHANGELOG.md.
 
+- ✅ **2026-08-19 (v1.3 · Build 19082026-1700) — Kullanıcı geri bildirim turu
+  (12 madde) + tarayıcıda bulunan 4 dashboard kusuru + 2 yeni modül.**
+  **Tam detay, kök neden analizleri ve kalan işler için bkz.
+  `OTURUM-DEVAM-19082026.md`** (bu tur fiilen devir dokümanı işlevi görüyor).
+
+  **Kullanıcının 12 maddesi:** parsel harita lejantı (`Parcels.jsx` `MapLegend`);
+  Sezon Karar Takvimi aşama şeridi tıklanabilir yapıldı (salt-okunur `<div>`'lerdi,
+  "pasif buton" sanılmış); **Ollama 404 kök nedeni** — URL doğruydu,
+  `ollama_vision_model` boş olduğu için kod `llava:7b` varsayılanına düşüyordu ve
+  o model çekilmemişti; **Ollama yüklü OLMAYAN model için 404 döner**,
+  `raise_for_status()` bunu "endpoint yok" gibi gösteriyordu (`ai_router.py`:
+  `available_models()` + metin modeline fallback + Türkçe hata + timeout 60→300 sn);
+  ekim/söküm/polar/Open-Meteo tahminleri yeni `components/ParcelDecisionPanel.jsx`
+  ile UI'a bağlandı (üç backend modülü VARDI ama hiçbir ekranda tüketilmiyordu);
+  Hasat ekranı "Hasat" olarak yeniden adlandırılıp Söküm(Polar)/Kampanya Lojistiği
+  sekmelerine bölündü; **yeni `catalog_registry.py`** — kod-seviyesi motor
+  sabitlerinin (ör. `soil_biology.ORGANISM_CATALOG`) admin tarafından
+  eklenebilir/düzenlenebilir/silinebilir olması: kod varsayılanı VARSAYILAN kalır,
+  DB katmanı ÜZERİNE biner, "Varsayılana Döndür" her an mümkün (canlı testte ölçüm
+  eşiği değişince skor 52,0→70,0 GERÇEKTEN değişti); AI Bilgi Kütüphanesi
+  dataset düzenle/sil UI'ı; Parseller "Araçlar" menüsü + harita üzeri Katmanlar/
+  Altlık kontrolü (`lib/basemaps.js` HaritaPaneli'nden ortak modüle çıkarıldı).
+
+  **`l is not a function` (madde 10):** 33 rota tarandı, tekrar ÜRETİLEMEDİ.
+  Bulunan GERÇEK iki çökme: `/harita-paneli`'nde `MapClickAdminPopup` ve
+  `AdminAreaPopupLinks` JSX'te kullanılıp import EDİLMEMİŞ; `WorkspaceDrawer.jsx`
+  `d.slice is not a function` — `GET /notifications` 2026-08-19'da düz diziden
+  `{items,total,unread}` zarfına geçmiş ama çekmece hâlâ dizi bekliyordu.
+
+  **İdari sınırlar (madde 3):** veri SAĞLIKLIYDI (81 il/971 ilçe/50.130 mahalle,
+  hepsi doğru parent'lı). İki gerçek hata vardı: harita bbox'ı PARSELLERDEN
+  türetiliyordu (tüm parseller Konya'da → başka il hiç istenmiyordu; il seviyesi
+  artık bbox'sız çekiliyor) ve üst-alan seçici `/admin-areas`'i filtresiz
+  çağırıyordu (51.000 kaydın doğal sıradaki 1500'ü). `/admin-areas`'a `q` arama +
+  `geometry=false` + alfabetik sıralama eklendi. Ayrıca **yeni
+  `POST /field-definitions/sync-il-ilce-from-admin-areas`** — form dropdown'ları
+  gerçekten 2 ildi (`TR_IL_ILCE` kod sabiti); 81 ili koda yazmak yerine zaten
+  yüklü `admin_areas`'tan türetiyor (idempotent; canlıda 81 il / 973 ilçe).
+
+  **Tarayıcı testlerinde bulunan 4 dashboard kusuru (`dashboard_routes.py`):**
+  (A1) KPI'lar sezon filtresi uygulamıyordu — `actual_ton` 5 sezonun toplamı,
+  `expected_ton` tek sezonluk hedefti → **%817,5 gerçekleşme**; artık `season`
+  parametreli ve hedef `contracts.kota_ton`'dan okunuyor (sözleşme 23.808→4.779,
+  gerçekleşme %0 — 2026 henüz hasat edilmedi). (A2) Bölge tablosu tamamen boştu —
+  toplama zaten `region_id` ileydi, sorun parsel bağlanmamış il-adı kayıtlarının da
+  0 ile listelenmesiydi (8 boş satır→5 dolu bölge). (A3) `avg_ndvi:0` —
+  `parcels.ndvi_latest` HİÇBİR parselde dolu değil (0/5053); artık
+  `remote_sensing_statistics`'ten okunuyor + `ndvi_coverage_parcels` ile kaç
+  kayıttan hesaplandığı dürüstçe bildiriliyor. (A4) Alan muhasebesinde **55.308
+  dekar açık** vardı (ekili olmayan parsellerin alanı hiçbir kalemde yoktu +
+  toplam `area_dekar` iken kalemler `ekilebilir_alan` topluyordu) → açık 0.
+
+  **Yeni `ai_governance.py` (AI Yönetişimi, `/ai-yonetimi`, admin-only):** sistem
+  promptları (versiyonlu) + guardrail'ler + RAG bilgi bankası + test konsolu +
+  denetim izi. `governed_generate()` TEK kapı: prompt → RAG → girdi kuralı →
+  model → çıktı kuralı → zorunlu uyarı → log. Embedding **Ollama + Mongo**
+  (kullanıcı kararı, yeni servis YOK); `nomic-embed-text` çekildi, embedding
+  yoksa anahtar kelimeye düşüp `rag_mode` ile DÜRÜSTÇE bildirir.
+  **KRİTİK:** copilot JSON döndürdüğü için `structured=True` modu eklendi — bu
+  modda yönetişim promptu ve sona eklenen uyarı EKLENMEZ (JSON'u bozardı), ama
+  **girdi/çıktı engelleme ve log ÇALIŞMAYA DEVAM EDER**. Dört çağrı noktası
+  (`extras.py` copilot+disease, `agronomy.py`, `remote_sensing/services.py`)
+  buraya taşındı — önceden guardrail'ler ÜRETİMDE ETKİSİZDİ. Yan bulgu:
+  `services.py` `get_ai_provider`'ı DOĞRUDAN çağırıyordu, yani yerel Ollama ile
+  hiç AI yorumu üretmiyordu (düzeltildi).
+
+  **Yeni `crop_classification.py` + `CropDetection.jsx` (`/urun-tanima`):**
+  fenolojik NDVI imza eşleştirmesiyle "hangi parselde ne ekili" + kayıtsız
+  alanlarda ızgara taraması + manuel etiketleme/kalibrasyon/doğruluk ölçümü.
+  İmza kataloğu `catalog_registry`'ye kayıtlı (admin düzenleyebilir, kalibrasyon
+  override yazar, geri alınabilir). SAF `classify_series()` sentetik veriyle
+  **7/7 doğru**, gürültülü seride %96, benzer imzalarda (buğday/arpa) güven
+  DÜŞÜK (istenen dürüstlük). **Kural tabanlıdır, ML modeli DEĞİLDİR** ve UI
+  bunu yazar. **Dürüst sınır:** 5.053 parselin ~12'sinde uydu serisi olduğu
+  için gerçek veriyle güven düşük (%29-42); alan taraması sağlayıcılar mock
+  modda olduğu için sonuç bulamıyor (sebep artık `uyari` alanında dönüyor);
+  Copernicus CLMS katmanı bilinçli iskelet (boş döner, uydurmaz).
+
+  **Yeni `Sustainability.jsx` (`/karbon-ayak-izi`) + `/sustainability/summary`:**
+  `sustainability.py` iki parsel-bazlı uç sunuyordu ama sadece bir kartta
+  tüketiliyordu; işletme geneli özet yoktu. Canlıda 200 parselde 897,92 ton
+  CO₂e, en büyük kalem azotlu gübre (%33,7).
+
+  **`harvest_logistics.py` çizelge kusuru:** `current` tarih imleci monoton
+  artıyordu ve parseller ÖNCELİĞE göre sıralı olduğu için geç olgunlaşan bir
+  parselden sonra gelen ERKEN parseller de o tarihe itiliyordu (canlıda 43.
+  haftaya 117 parsel/32.468 ton, kapasite 12.000 t). Gün bazlı kapasite
+  defterine geçildi → kapasite aşımı 0 gün, 1 gün→6 güne yayıldı.
+
+  **Diğer:** 5 eski test ilçe lookup kaydı silindi (978→973); `pypdf` +
+  `python-docx` eklendi (RAG artık PDF/DOCX okuyor); `docker-compose.yml` ve
+  `docker-compose.ollama.yml`'den obsolete `version: "3.9"` kaldırıldı.
+
+  **Doğrulama:** imajlar kaynaktan derlendi (`COMPOSE_BAKE=false` ZORUNLU —
+  bake bu makinede `0xc0000005` ile çöküyor; `--remove-orphans` KULLANILMAMALI,
+  ollama'yı siler), 20 rota tarayıcıda çökme taramasından geçti, tüm backend
+  uçları geçici bir super_admin ile gerçek HTTP çağrısıyla test edildi ve o
+  kullanıcı SİLİNDİ.
+
 ## 7. Çalıştırma
 
 ```bash
