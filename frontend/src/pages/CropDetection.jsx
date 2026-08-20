@@ -20,7 +20,7 @@ import api from "@/api";
 import { MapDrawTools } from "@/components/MapDrawTools";
 import { BASEMAPS, getStoredBasemap, storeBasemap } from "@/lib/basemaps";
 import {
-  Sprout, Search, MapIcon, GraduationCap, Loader2, AlertTriangle, Info,
+  Sprout, Search, MapIcon, GraduationCap, Loader2, AlertTriangle,
   Trash2, RefreshCw, Target, CheckCircle2, Wand2,
 } from "lucide-react";
 
@@ -88,14 +88,6 @@ export default function CropDetection() {
       {tab === "bolge" && <BolgeTab meta={meta} flash={flash} />}
       {tab === "alan" && <AlanTab meta={meta} flash={flash} />}
       {tab === "egitim" && <EgitimTab meta={meta} flash={flash} />}
-
-      <div className="text-[11px] text-[var(--text-dim)] mt-4 flex items-start gap-1.5">
-        <Info size={12} className="mt-px shrink-0" />
-        Bu bir <b className="mx-1">kural tabanlı imza eşleştirmesidir</b>, eğitilmiş bir
-        ML modeli değildir. Güven düşükse alternatif ürünler gösterilir — kararı
-        siz verirsiniz. İmzalar bölgeye göre kayar; "Eğitim &amp; Doğruluk" sekmesinden
-        kendi verinizle kalibre edebilirsiniz.
-      </div>
     </div>
   );
 }

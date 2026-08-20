@@ -159,6 +159,81 @@ oturumun İLK işi şu olmalı:
 - **Sözleşme onaylama (çiftçi self-servis)** — önceki oturumda (19082026)
   kullanıcı kararıyla ertelenmişti, bu oturumda da gündeme gelmedi.
 
+## ⚠️ YENİ — bir sonraki oturumda değerlendirilecek (bu oturumda sadece
+NOT EDİLDİ, kod DOKUNULMADI — kullanıcı "not olarak al" dedi)
+
+Kullanıcı bu oturumun sonunda `pages/CropDetection.jsx` (Ürün Tanıma,
+`/urun-tanima`) modülünü canlıda denerken 3 sorun bildirdi. Kullanıcı
+kararıyla **Harita Stüdyosu ile BİRLİKTE bir sonraki oturuma** bırakıldı:
+
+1. **"Alanı Tara" (tıkla-tespit) aracı çalışmıyor** — kullanıcı haritaya
+   TIKLIYOR (tasarım gereği: tıklanan noktanın etrafına küçük bir tampon
+   poligon otomatik kuruluyor, bkz. CLAUDE.md'nin 2026-08-19 notu "Ürün
+   Tanıma tıkla-tespit... tıklanan noktanın etrafına küçük tampon poligon
+   kurup mevcut `/crop-classification/area` ucunu çağıran bir mod
+   eklendi") ama ekranda **"Çizilen alan çok küçük — hiç hücre üretilmedi.
+   Daha büyük bir alan çizin veya hücre boyutunu küçültün."** uyarısı
+   çıkıyor — hem mesajın "çizin" demesi (kullanıcı ÇİZMİYOR, TIKLIYOR)
+   hem de aracın gerçekten hücre üretememesi iki ayrı sorunu işaret
+   ediyor. **Ayrıca kullanıcı, alan ÇİZMEK için bir aracın EKRANDA HİÇ
+   OLMADIĞINI da bildirdi** — `AlanTab`'ın sadece tıkla-tespit modu
+   olabilir, gerçek bir çizim aracı (MapDrawTools benzeri) hiç
+   bağlanmamış/görünmüyor olabilir. **Kök neden bir sonraki oturumda
+   `CropDetection.jsx`'in `AlanTab` bileşeni + `backend/crop_
+   classification.py`'nin hücre/tampon-poligon mantığı okunarak
+   bulunmalı** (bu oturumda SADECE bildirildi, kod incelenmedi).
+2. **"Modeli Eğit" (Eğitim & Doğruluk) sekmesinde de parseller gelmiyor**
+   — muhtemelen bu sayfanın kendi `/parcels` çağrısı da (bu oturumda
+   Parcels.jsx/HaritaPaneli.jsx/vb. 7 sayfada düzeltilen) eski/düşük bir
+   `limit` sabitiyle sınırlı VEYA hiç parsel çekmiyor. `CropDetection.jsx`
+   bu oturumda "kural tabanlı imza eşleştirmesidir..." uyarı metni
+   dışında incelenmedi — bir sonraki oturumda `EgitimTab` bileşeninin
+   parsel yükleme mantığı kontrol edilmeli (aynı `limit:8000` deseni
+   muhtemelen burada da gerekiyor).
+3. ✅ **ÇÖZÜLDÜ (bu oturumda):** kullanıcı "Bu bir kural tabanlı imza
+   eşleştirmesidir, eğitilmiş bir ML modeli değildir..." uzun disclaimer
+   metninin gereksiz olduğunu belirtti — `CropDetection.jsx`'ten
+   kaldırıldı (kullanılmayan `Info` importu da temizlendi). Kod
+   içindeki (kullanıcıya görünmeyen) JSDoc yorumu bilinçli olarak
+   BIRAKILDI (geliştirici dokümantasyonu, UI metni değil). Benzer
+   "SİMÜLEDİR"/disclaimer metinleri için proje genelinde arandı —
+   başka bir kullanıcı-görünür örnek BULUNAMADI (HaritaPaneli.jsx'in
+   Zaman Makinesi'ndeki benzer metin bu oturumun ERKEN bir adımında
+   zaten kaldırılmıştı, yukarıya bakın).
+
+**Kullanıcının istediği 3 YENİ özellik (henüz hiç kod yazılmadı, sadece
+not edildi):**
+
+4. **Tüm haritalara adres arama (geocode)** — arama çubuğuna bir adres/
+   yer adı yazılınca harita o konuma gitsin ("tüm haritalara ekleyelim"
+   — Parcels.jsx, HaritaPaneli.jsx, CropDetection.jsx'in Alanı Tara
+   haritası, Harita Stüdyosu, muhtemelen AdminAreaManagement.jsx da
+   dahil olmak üzere PROJEDEKİ TÜM Leaflet haritaları). **Mimari not:**
+   anahtarsız/ücretsiz bir geocoding servisi gerekir (ör. Nominatim/
+   OpenStreetMap — mevcut projedeki "anahtarsız genel XYZ servisleri"
+   felsefesiyle tutarlı, bkz. `BASEMAPS` sabiti) — kullanım koşulları/
+   rate-limit'i (Nominatim'in 1 istek/sn kuralı) kontrol edilmeli. Ortak
+   bir `components/GeocodeSearch.jsx` (veya `lib/geocode.js`) yazılıp
+   HER haritaya AYNI bileşenle bağlanmalı — kod tekrarını önlemek için.
+5. **Görüntü tarihi/çoklu tarihli görüntü** — "birde görüntü zamanını
+   ekleyelim mevcutta var ise başka tarihli 10 görüntüyüde ekleyelim."
+   Muhtemelen `remote_sensing` (uzaktan algılama) ekranlarındaki bir
+   görüntüye (Sentinel/EOSDA/GEE) referans — GERÇEK Sentinel Hub/GEE
+   entegrasyonu artık var (2026-07-25) ve bu sağlayıcılar tarih aralığı
+   sorgulayabiliyor olabilir; kullanıcının tam olarak HANGİ ekranı
+   kastettiği (RemoteSensingPanel.jsx? ParcelDetail'in uydu kartı?
+   HaritaPaneli'nin Zaman Makinesi — o zaten 10 sabit demo tarihi
+   kullanıyordu, gerçek görüntü tarihleriyle DEĞİŞTİRİLMESİ mi
+   isteniyor?) **bir sonraki oturumda kullanıcıyla NETLEŞTİRİLMELİ** —
+   bu not tek başına yeterince spesifik değil, doğrudan koda dökülmeden
+   önce hangi ekran(lar) olduğu sorulmalı.
+
+**Öncelik sırası önerisi (bir sonraki oturum için):** önce madde 1-2
+(gerçek bug'lar, kısa sürede bulunabilir) → sonra Harita Stüdyosu elden
+geçirme (zaten kullanıcı kararıyla bekliyor, madde 4'ün geocode isteği
+muhtemelen Harita Stüdyosu'nu da kapsayacağından ikisini BİRLİKTE ele
+almak mantıklı) → madde 5 için kullanıcıyla netleştirme sorusu.
+
 ## Ortam (bu oturumda doğrulandı)
 - Docker Desktop + doğru daemon (`toprax_final_12072026_00_mongo_data`
   volume'ü, ~28 volume listede).
