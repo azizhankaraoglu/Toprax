@@ -40,12 +40,30 @@ komutlarıyla birlikte gerçek durumu gösteriyor.
 
 | 10 | **Demo Senaryo Oynatıcı TAMAMLANDI.** Yeni `backend/demo_scenario.py` — `GET /demo-scenario/steps` gerçek ekranlara giden 10 adımlık sunum turu, sistemdeki en dolu çiftçi/parsel/sezon zincirini bulup adımlara yerleştirir (sahte veri YOK, örnek yoksa adım dürüstçe atlanır) — gerçek üretim verisiyle uçtan uca test edildi (10/10 adım doğru çözüldü). Yeni `pages/DemoScenario.jsx` (`/senaryo-oynatici`, Sistem grubu, admin-tier). Yeni `scripts/demo_scenario.py` (repo kökü) — opsiyonel, elle çalıştırılan, idempotent "DEMO —" önekli örnek veri zinciri kurar (canlıya OTOMATİK yazmaz). Build v1.7/20082026-1322, GitHub'a push edildi (commit 40e520b). **OTURUM-DEVAM'ın 12 maddesinin TAMAMI bitti** (12 ve 14 kullanıcı kararıyla bilinçli ertelendi). | ✅ |
 
+## ✅ Madde 14 — çözüldü (2/3), 1/3 kullanıcı kararıyla ertelendi
+
+Kullanıcıya Karar Protokolü gereği 2 soru soruldu (`AskUserQuestion`):
+- **Randevu alma:** zaten madde 8'de (Fabrika Randevusu, `/farmer/appointment*`) çözülmüştü.
+- **Sözleşme onaylama:** kullanıcı kararı — **şimdilik ertelensin.**
+- **Ekim planlama (self-servis):** kullanıcı kararı — **"Önce beklemede, personel onaylayınca resmileşsin."**
+
+Bu karara göre uygulandı: `farmer_routes.py` `POST/GET /farmer/planting*` — çiftçinin
+girdiği ekim kaydı `review_status="beklemede"` + `is_active=False` ile açılır,
+`data_entry.py`'nin yeni `GET /plantings/pending-review` + `PUT /plantings/{id}/review`
+(onayla/reddet) uçlarıyla personel onaylayana kadar **hiçbir resmi listede
+görünmez** (`GET /plantings`, Query Engine, crop_classification.py eğitim verisi,
+ParcelDetail/ProductionCycle embedded listeleri — üçü de eksik olan `is_active`
+filtresiyle bu turda düzeltildi). Gerçek DB ile uçtan uca doğrulandı (pending
+kayıt önce gizli, onay sonrası resmi listede göründü). `MobilDashboard.jsx`'e
+"Ekim Kaydı Ekle" paneli, `EkimKaydi.jsx`'e personel "Bekleyen Onaylar" paneli
+eklendi. Build v1.8/20082026-1511, GitHub'a push edildi (commit 7700a9e).
+
 ## ⏸️ Kullanıcı kararıyla ertelenen (bu tur kapsamında değil)
 
 | # | Konu | Durum |
 |---|---|---|
 | 12 | **Harita Stüdyosu elden geçirme** | Kullanıcı bilinçli erteledi ("en son onu beraber elden geçirelim") |
-| 14 | **Çiftçi self-servis 3 akışı** — sözleşme onaylama, ekim planlama, randevu alma | Ertelendi; üçü de veri modeli kararı gerektiriyor (Karar Protokolü) |
+| 14 (1/3) | **Sözleşme onaylama** (çiftçi self-servis) | Kullanıcı kararıyla ertelendi (2026-08-20) |
 | 16 | **Devir dokümanı** | Yazılmadı. **Not:** BU dosya fiilen devir dokümanı işlevi görüyor (ortam, kök nedenler, kalan işler); ayrı/resmî bir belge isteniyorsa kapsamı netleştirilmeli |
 | 17 | **`CLAUDE.md` "Mevcut Durum" güncellemesi** | Bu turun işleriyle güncellendi — bkz. CLAUDE.md sonundaki 2026-08-19 girdisi |
 
