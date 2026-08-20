@@ -36,11 +36,12 @@ komutlarıyla birlikte gerçek durumu gösteriyor.
 
 | 8 | **Mobil derinleştirme TAMAMLANDI.** Kendi verisini girme zaten vardı (sulama/toprak/formlar). Fabrika randevusu: `data_entry.py`'nin ZATEN VAR OLAN `appointments` modeli `POST/GET /farmer/appointment*` ile çiftçiye self-servis açıldı — yeni bir veri modeli İCAT EDİLMEDİ. Uzmanla iletişim + kooperatifle çift yönlü yazışma: `case_management.py`'nin (IT-28 "Bize Ulaşın") `/portal/cases*` uçları ZATEN tam bidirectional mesajlaşma sağlıyordu (kategori seç → talep aç → personel/çiftçi karşılıklı mesaj) ama hiç mobil UI'sı yoktu — `MobilDashboard.jsx`'e eklendi. `case_categories` koleksiyonu boştu, 14 varsayılan kategoriyle seed edildi. Build v1.5/20082026-1243, GitHub'a push edildi (commit c1e838b). | ✅ |
 
+| 9 | **VRA (Değişken Oranlı Uygulama) TAMAMLANDI.** Yeni `backend/vra.py` — parsel bazlı zon haritası (NDVI/N/P/K sinyali, eşit-aralık ile düşük/orta/yüksek sınıflandırma, veri eksikliğinde uydurma oran YOK). Shapefile (.shp/.shx/.dbf zip) ve ISOXML (TASKDATA.XML) dışa aktarım — ikisi de gerçek parsel geometrisiyle uçtan uca test edildi (shapefile readback + ISOXML reparse doğrulandı, 10 gerçek parselle N sinyali sınıflandırması doğru sonuç verdi). Yeni `pages/Vra.jsx` (`/vra`, "KARAR DESTEK" grubu). **Bilinçli sınır:** zon = parsel granülerliği (sub-field raster veri sistemde yok — `crop_classification.py`'nin dürüstlük ilkesiyle aynı). Build v1.6/20082026-1257, GitHub'a push edildi (commit eec9036). | ✅ |
+
 ## ❌ HİÇ YAPILMADI / ERTELENDİ — sıradaki iş
 
 | # | Konu | Durum |
 |---|---|---|
-| 9 | **VRA (değişken oranlı uygulama)** — zon haritası → shapefile/ISOXML dışa aktarma | Kod yazılmadı |
 | 10 | **Demo senaryo oynatıcı** — `scripts/demo_scenario.py` + "Senaryoyu Oynat" ekranı | Kod yazılmadı |
 | 12 | **Harita Stüdyosu elden geçirme** | Kullanıcı bilinçli erteledi ("en son onu beraber elden geçirelim") |
 | 14 | **Çiftçi self-servis 3 akışı** — sözleşme onaylama, ekim planlama, randevu alma | Ertelendi; üçü de veri modeli kararı gerektiriyor (Karar Protokolü) |
